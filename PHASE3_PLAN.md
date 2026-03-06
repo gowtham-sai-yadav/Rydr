@@ -345,3 +345,49 @@ Not a promise — a rough ordering of what comes after, so we know where today's
 - Phase 1 PRD: `/file final.pdf` (2026-02-02)
 - Phase 2 design + PoC: `/phase2.pdf` (2026-02-16)
 - Both kept as historical context. Phase 3 follows this document.
+
+---
+
+## Appendix B — Code quality debt: issue → milestone mapping
+
+This table captures every concern raised during the initial codebase audit and where it gets resolved. Most dissolve in the schema rewrite (M1) or are replaced by real implementations (M4, M5). The remainder is caught in the dedicated quality pass (M9). Nothing is silently dropped.
+
+| # | Issue flagged in audit | Resolved in | How it gets fixed |
+|---|---|---|---|
+| 1 | No `Route` entity — PRD's core differentiator missing | **M1** | Schema rewrite introduces `Destination` as primary (stronger than Route — it reflects the actual product). Route becomes optional, curated path to a Destination. |
+| 2 | "Ride" conflates plan and log | **M1** | Split into `RidePlan` (intent, captain, participants, status) and `RideLog` (execution: media, feedback, rating, GPS trace). |
+| 3 | Chat is theatre — `MOCK_MESSAGES` hardcoded in `chat.py` | **M5** | Real `ChatMessage` model + send/list endpoints replace the mock. Async (no websocket in M5). |
+| 4 | `ride_date`, `start_time` stored as `String` | **M1** | New schema uses `Date` / `Time` / `DateTime` columns from day one. String dates never carry over. |
+| 5 | No timezone handling anywhere | **M1 + M9** | Timezone-aware timestamps in M1. UI-side localization + server `TIMESTAMPTZ` in M9. |
+| 6 | `ride_to_out` hand-rolled serializer — brittle, inconsistent with Pydantic `response_model` | **M1–M3** | New routers use Pydantic `response_model` uniformly. Hand-rolled serializer disappears with the rewrite. |
+| 7 | Frontend API client returns `unknown` everywhere; callers cast with `as { rides: Ride[] }` | **M9** | Proper TypeScript generics on API client. Type-safe end-to-end from backend schemas to frontend consumers. |
+| 8 | Zero tests in the repo | **M9** | pytest for every API router (happy path + at least one error case each). Frontend gets a minimal Vitest/Playwright stub and one smoke test for the signup flow. |
+| 9 | JWT stored in `localStorage` — XSS-stealable | **M9** | Move to httpOnly cookies OR add refresh-token pattern with short-lived access tokens. Decision made during M9. |
+| 10 | No rate limiting, no password complexity | **M9** | `slowapi` (or equivalent) on auth endpoints. Password rules enforced in the signup validator. |
+| 11 | CORS hardcoded to `localhost:3000` | **M9** | Read allowed origins from env var. Document production config. |
+| 12 | Seed data is LA-centric (Palomar, Joshua Tree, Mulholland) | **M0 prereq** | Seed destination research task compiles 10–15 real destinations spread across Indian regions. |
+| 13 | `requirements.txt` instead of `pyproject.toml`, no Ruff / Black / pre-commit | **M9** | Migrate to `pyproject.toml`. Ruff + pre-commit hooks for Python. Prettier + ESLint for frontend. |
+| 14 | No migration strategy documented | **M1** | Single clean Alembic revision. Drop prototype tables. Reseed against new schema. Documented in M1 PR. |
+| 15 | Auth uses SHA / bcrypt but no password policy | **M9** | Add minimum-length + basic strength check at signup. Don't go overboard (not a banking app). |
+
+### Why we don't fix these *before* M1
+
+Fixing them before the rewrite is work we throw away:
+- Polishing `ride_to_out` now → the `Ride` model is deleted in M1 entirely.
+- Adding tests against current routers now → most routers get rewritten in M1–M3.
+- Migrating date columns now → still have to run the M1 migration, so we'd pay the cost twice.
+
+**Discipline: rewrite eats the small bugs; M9 catches what's left.** This is why M9 is a full week, not a 2-day afterthought.
+
+### What M9 concretely delivers
+
+Not a vague "cleanup" milestone — a real week of focused work with these deliverables:
+
+- [ ] TypeScript API client with proper generics (no more `unknown` / `as` casts)
+- [ ] pytest backend test suite — one happy-path + one error case per router
+- [ ] Auth hardening — httpOnly cookies or refresh-token pattern, rate limiting on auth endpoints, password policy
+- [ ] Timezone-aware dates end-to-end (if any gap remains after M1)
+- [ ] Tooling — `pyproject.toml`, Ruff, pre-commit hooks, Prettier, ESLint configs
+- [ ] CORS + all secrets moved to env vars
+- [ ] Input validation audit — confirm no raw SQL, no direct string interpolation in queries
+- [ ] README + SETUP.md for the final repo state
