@@ -3,6 +3,8 @@ backend/venv/
 __pycache__/
 *.pyc
 .env
+.env.local
+.env.*.local
 
 # Node
 frontend/node_modules/
@@ -22,3 +24,6 @@ venv/
 
 # Added by code-review-graph
 .code-review-graph/
+
+# Dev server logs from run.sh --dev
+.logs/

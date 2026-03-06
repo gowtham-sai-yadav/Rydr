@@ -391,3 +391,63 @@ Not a vague "cleanup" milestone — a real week of focused work with these deliv
 - [ ] CORS + all secrets moved to env vars
 - [ ] Input validation audit — confirm no raw SQL, no direct string interpolation in queries
 - [ ] README + SETUP.md for the final repo state
+
+---
+
+## Appendix C — Database choice rationale
+
+**Decision (2026-04-18):** Single database, **PostgreSQL**. No NoSQL. No secondary datastore for Phase 3. Redis evaluated for Phase 4+ only if a concrete pain point surfaces.
+
+### Why one database
+
+1. **Operational simplicity.** A 3-person team without dedicated DevOps can run one DB well; running two poorly is worse than running one well.
+2. **Transactional integrity.** Phase 3 workflows span multiple entities per action (ride completion → update RideLog + Destination.avg_rating + award badge + notify followers). A single DB lets these happen atomically in one transaction. Cross-DB consistency is a distributed-systems problem we don't need.
+3. **Postgres is multi-paradigm.** It covers every workload class Rydr has:
+   - Relational → native
+   - Document / flexible-schema → `jsonb` columns
+   - Geospatial (radius queries from user's home location to destinations) → Haversine SQL formula (MVP) or PostGIS extension (if we want it cleaner)
+   - Full-text search (destinations, discussions) → `tsvector` + GIN index
+   - Time-series (GPS trace samples in M11 stretch) → partitioned table OR TimescaleDB extension
+   - Graph-like (follow relationships) → many-to-many with indexes in both directions
+4. **Academic defensibility.** "One database, one source of truth" is a stronger defense than "we used MongoDB for chat because it scales" at a scale where nothing needs to scale.
+5. **Reversibility.** If Phase 4+ grows a specific workload that genuinely outgrows Postgres, we can migrate that workload out. Premature separation is wasted work.
+
+### Datastores we are NOT adding
+
+| Datastore | Would solve | Why we don't add it |
+|---|---|---|
+| MongoDB | Flexible-schema documents | `jsonb` columns cover this without ops burden |
+| Elasticsearch | Full-text search | `tsvector` + GIN index scales to millions of rows fine for Phase 3 |
+| Cassandra / DynamoDB / ScyllaDB | Massive-scale writes | Scale we don't have; ops burden we can't afford |
+| InfluxDB | Time-series (GPS) | Postgres partitioning or TimescaleDB extension is sufficient |
+| Neo4j | Graph relationships | Follow graph is a 2-table many-to-many, not a graph problem |
+| Redis (now) | Cache / session / rate-limit | Not justified yet; revisit at M9 auth hardening |
+
+### "Other stores" we DO use (not databases)
+
+These aren't databases in the operational sense — they're managed SaaS that store blobs we shouldn't keep in Postgres:
+
+- **Cloudinary** — large media (photos, videos) from rides (M4)
+- **ImageKit** — thumbnails and avatars with transform pipeline (M4)
+- **Mapbox** — map tiles, rendered client-side only (M2)
+
+Postgres holds only references (URLs, IDs) to content stored in these services. No consistency issue because the URLs are just strings.
+
+### Triggers for revisiting this decision
+
+We add a second datastore only when ALL of these are true:
+
+1. A specific query or workload is demonstrably slow under Postgres at Phase 3 scale (measured, not hypothetical)
+2. Postgres-native solutions (indexing, caching layer, materialized views) have been tried and found insufficient
+3. The operational cost of the new datastore is less than the engineering cost of keeping the workload on Postgres
+
+Redis is the most likely first addition — session store if we move JWT to httpOnly cookies (M9), or cache for hot destination-feed queries (M9 or later). Both are "small additions with clear upside"; neither is needed pre-M9.
+
+### Geospatial implementation choice (open)
+
+For radius queries ("destinations within 50km of me"), two options:
+
+- **Plain Haversine SQL formula** — no extension needed, portable. Adequate for Phase 3 scale. **Recommended for MVP.**
+- **PostGIS extension** — richer (GiST indexes, polygons, projections), slightly more setup. Worth it only if we later want drawn-region queries or route-along-a-line.
+
+**Decision:** Haversine for M2. Revisit if M11 GPS stretch makes PostGIS worth it.
