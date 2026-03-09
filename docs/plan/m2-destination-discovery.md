@@ -1,69 +1,178 @@
 # M2 — Destination discovery
 
-**Status:** Stub. Detailed plan TBD — written before M1 completes.
+**Status:** Finalized 2026-05-23. Backend-first; frontend deferred per `feedback_ui_ux_separate_track`.
 **Class:** Core.
 **Effort estimate:** ~1.5 weeks.
-**Task ID:** #10 (pending).
+**Task ID:** #10.
 
 ---
 
 ## Goal
 
-Deliver the core discovery loop: user filters destinations by vibe, radius, vehicle fit, budget → sees ranked list → opens detail with map, photos, cost, tips, recent ride activity.
+Deliver the core discovery loop on the backend: a user can filter destinations by vibe tag, vehicle fit, radius from a home/origin point, and budget, see a ranked list, and pull a detail view with tags, media, rating aggregates, recent rider activity, and a per-user cost estimate. Frontend integration ships in a later UX-track increment.
 
-See `PHASE3_PLAN.md §4.1` item 2-3 and `§6 M2` for exit criteria.
+See `PHASE3_PLAN.md §4.1` items 2-3 and `§6 M2` for exit criteria:
+
+> User can filter by tag + radius + vehicle + budget and see a ranked list.
 
 ## Depends on
 
-- **M1** — `destinations`, `tags`, `destination_tags`, `destination_media`, `ratings` tables exist.
-- **Task #2** — Mapbox public token in `frontend/.env.local`.
-- **Task #6** — Real destination research (10–15 entries with photos) replacing the 5 placeholders from M1.
+- **M1** — `destinations`, `tags`, `destination_tags`, `destination_media`, `ratings`, `users.home_*`, `bikes.mileage_kmpl` exist. ✅ Shipped (commit `b329170`).
+- **Task #6** (real destination research, 10–15 entries) — *not blocking*: M1 seeded 5 demo destinations, which is enough to validate filters/sort/cost. Real research can backfill via the `POST /api/destinations` endpoint shipped in this milestone.
 
-## External dependencies (to be approved)
+## External dependencies
 
-- **Mapbox GL JS** (frontend npm package) — map rendering on destination detail. Free tier: 50k loads/mo.
-- **No new backend packages** — Haversine distance is plain SQL.
+**None.** Mapbox is a frontend concern and waits for the UX track. Haversine is plain SQL. No new Python packages.
 
-## Scope — backend-first
+## Decisions resolved (was open in stub)
 
-### Backend (safe to build without UX discussion)
+| Question | Decision | Rationale |
+|---|---|---|
+| Cost-calc formula | `fuel = (2 × distance_km / mileage_kmpl) × FUEL_PRICE_INR_PER_L`; `total = fuel + food + entry`; range = ±20% | Round-trip default matches PRD discovery intent. ±20% buffer surfaces uncertainty without false precision. |
+| Fuel price source | Single env constant `FUEL_PRICE_INR_PER_L`, default ₹105.0 | Avoids a third-party price feed dep. Easy to bump. |
+| Sort algorithm | Three modes: `rating` (default), `distance`, `popularity`. No weighted score yet. | Simpler to reason about; weighted score can land in M9 if PMs ask. |
+| "Riders who went recently" | `recent_rider_count` (distinct riders w/ RideLog in last 90 days) + up to 3 most recent `UserBrief`. Public — no privacy gate. | Phase 3 has no follow/privacy model yet; everything is public. M6 (follow) can layer scoping later. |
+| New-destination submission | Auto-publish; record `submitted_by_user_id`. No moderation flag. | Academic scope, no admin tooling; submitters are trusted authenticated users. Can add `is_pending_review` in M9 if needed. |
+| Image hosting on submit | URL-only (string in `gallery_urls`); Cloudinary upload lands in M4. | Avoids adding the Cloudinary SDK before M4. |
+| Tests | Skip pytest for M2; verify by curl + manual run. | M9 is explicitly the testing milestone; adding pytest now would pre-empt that scope and pull in a new dep. |
 
-- `GET /api/destinations` — list with filters:
-  - `tags[]` — filter by vibe tag slugs
-  - `vehicle_fit[]` — filter by vehicle-fit tag slugs
-  - `radius_km` + user's home lat/lng (from token) — Haversine
-  - `max_budget` — INR band filter on combined food + entry
-  - `q` — simple text search on name + region (tsvector if warranted)
-  - sort: rating / distance / popularity
-- `GET /api/destinations/{id}` — detail with embedded tags, media, avg rating, review count, recent ride_logs count
-- `GET /api/destinations/{id}/media` — paginated media
-- `POST /api/destinations` — submit new destination (auth required)
-- Cost-calc service — fuel cost from bike mileage × distance × fuel price constant; food + entry from destination
+## Scope — backend
 
-### Frontend — DEFERRED pending UX discussion
+### 1. New router: `backend/app/routers/destinations.py`
 
-Per `feedback_ui_ux_separate_track`: discovery page UI, filter UX, detail page layout, map integration, and destination submission flow all wait for a separate design session. Scaffolding for the API client + types can land alongside backend work.
+Mounted at `/api/destinations` in `main.py`.
 
-## Data model changes
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET | `/api/destinations` | optional | Filtered, sorted, paginated list |
+| GET | `/api/destinations/{id}` | optional | Detail with tags, media, rating aggregates, recents |
+| GET | `/api/destinations/{id}/media` | optional | Paginated media |
+| POST | `/api/destinations` | **required** | Submit new destination |
+| GET | `/api/destinations/{id}/ratings` | optional | Paginated ratings list |
+| POST | `/api/destinations/{id}/ratings` | **required** | Create / upsert rating (one per user per destination); recomputes `avg_rating` + `rating_count` |
+| GET | `/api/destinations/{id}/cost-estimate` | optional | Per-user cost estimate (uses auth'd user's bike + home if available) |
+| GET | `/api/tags` | optional | List tags grouped by category (for filter UX) |
 
-None beyond M1. All tables already exist.
+#### `GET /api/destinations` query params
 
-## Key decisions to make in detailed plan
+| Param | Type | Notes |
+|---|---|---|
+| `tags` | `list[str]` (slugs, vibe) | Any-of match by default |
+| `vehicle_fit` | `list[str]` (slugs, vehicle_fit) | Any-of match |
+| `radius_km` | float | Requires `from_lat`+`from_lng` OR authenticated user with `home_latitude`/`home_longitude` |
+| `from_lat`, `from_lng` | float | Override origin; if omitted, fall back to current user's home |
+| `max_budget` | int (INR) | Filter on `estimated_food_cost + estimated_entry_cost ≤ max_budget` |
+| `q` | str | ILIKE on `name` and `region` |
+| `sort` | enum: `rating` (default), `distance`, `popularity` | `distance` requires origin |
+| `page` | int ≥ 1, default 1 | |
+| `limit` | int 1..50, default 20 | |
 
-- **Cost calculator formula** — fuel price constant (₹100/L default?), use bike's mileage_kmpl × 2 × distance_km for round-trip, add food/entry from destination, output range (±20%)
-- **Sort algorithm** — fixed weighted score (rating × 0.5 + popularity × 0.3 + recency × 0.2) or user-toggleable?
-- **"Riders who went recently"** — how many, what time window, privacy model (show names or anonymous counts)
-- **New-destination submission** — moderation gate? Auto-publish with "pending review" flag? Phase 3 has no admin tool
-- **Image hosting** — M2 media on submission uses Cloudinary (pre-M4) or URL-only?
+Haversine implemented in SQL with `func.acos(...)` rather than PostGIS — keeps the M2 dep surface flat. See `PHASE3_PLAN.md §11` Haversine decision.
 
-## Open questions before detailed plan
+### 2. New service: `backend/app/services/cost_calculator.py`
 
-1. Is Task #6 (real destination research) ready when M2 starts?
-2. Is Mapbox token (Task #2) set up?
-3. UX discussion scheduled — when?
+```
+def estimate_cost(
+    destination: Destination,
+    distance_km: float,
+    bike_mileage_kmpl: float | None,
+    fuel_price_inr_per_l: float | None = None,
+) -> CostEstimate:
+    fuel_price = fuel_price_inr_per_l or settings.FUEL_PRICE_INR_PER_L
+    fuel_inr = round((2 * distance_km / mileage) * fuel_price) if mileage else None
+    food = destination.estimated_food_cost or 0
+    entry = destination.estimated_entry_cost or 0
+    total_mid = (fuel_inr or 0) + food + entry
+    return CostEstimate(
+        distance_km=round(distance_km, 1),
+        fuel_inr=fuel_inr, food_inr=food, entry_inr=entry,
+        total_inr_low=round(total_mid * 0.8),
+        total_inr_high=round(total_mid * 1.2),
+        currency=destination.currency,
+        assumptions={...}
+    )
+```
+
+If `bike_mileage_kmpl` is missing (no bike record or no auth), return totals with `fuel_inr=None` and a note in `assumptions`.
+
+### 3. New helper: `backend/app/services/geo.py`
+
+`haversine_km(lat1, lng1, lat2, lng2) -> float` for in-Python distance use (cost estimate). The SQL version lives inline in the destinations router.
+
+### 4. Config addition
+
+`backend/app/config.py` gains `FUEL_PRICE_INR_PER_L: float = 105.0`.
+
+### 5. Schema additions in `backend/app/schemas/destination.py`
+
+- `DestinationListResponse` — `{ destinations: [DestinationSummary], total: int, page: int, limit: int }`
+- `CostEstimate` — fuel/food/entry/total_low/total_high/currency/distance_km/assumptions
+- `RatingListResponse` — `{ ratings: [RatingOut], total, page, limit }`
+- `TagListResponse` — `{ vibe: [TagOut], vehicle_fit: [TagOut] }`
+- Extend `DestinationOut` with: `recent_rider_count: int`, `recent_riders: list[UserBrief]` (reuse `schemas/ride.py::UserBrief`)
+- Extend `DestinationCreate` with `gallery_urls: list[str] = []`
+- New: `DestinationSubmissionResponse` mirrors `DestinationOut`
+
+### 6. Frontend api client stub
+
+Add typed methods to `frontend/src/lib/api.ts` (`listDestinations`, `getDestination`, `getDestinationMedia`, `submitDestination`, `listRatings`, `submitRating`, `getCostEstimate`, `listTags`). Type signatures only — no UI. Lets M3/M4 frontend hook in without re-touching the client. Per the UX track: no pages, no components.
+
+### 7. Wire in `main.py`
+
+`app.include_router(destinations.router, prefix="/api/destinations", tags=["Destinations"])` and add tags as a separate `/api/tags` mount (or expose under `destinations.router` — keeping it under destinations is fine).
+
+## Out of scope (deferred)
+
+- Map rendering (frontend UX track + Mapbox).
+- Cloudinary media upload (M4).
+- Destination discussion threads (M7).
+- Moderation queue / admin (post-M9 if at all).
+- Test suite (M9).
+- Weighted ranking score (M9 if requested).
+
+## Verification plan (no pytest in M2)
+
+After implementation:
+
+1. `./run.sh` boots DB + applies migrations + seeds.
+2. Curl spot-checks:
+   - `GET /api/destinations` → 5 destinations from seed
+   - `GET /api/destinations?tags=mountain` → filtered subset
+   - `GET /api/destinations?sort=rating` → ordered
+   - `GET /api/destinations?from_lat=12.97&from_lng=77.59&radius_km=100&sort=distance` → Nandi Hills first
+   - `GET /api/destinations?max_budget=400` → only cheap entries
+   - `GET /api/destinations/{id}` → tags + media + recents (recents=0 until M3 logs exist)
+   - `POST /api/destinations/{id}/ratings` (auth) → 200, repeat → upsert, avg + count update
+   - `GET /api/destinations/{id}/cost-estimate` (auth, with bike) → numbers populated
+   - `POST /api/destinations` (auth) with tag slugs → 201, listed in subsequent GET
+   - `GET /api/tags` → grouped categories
+
+## Files touched
+
+**New:**
+- `backend/app/routers/destinations.py`
+- `backend/app/services/cost_calculator.py`
+- `backend/app/services/geo.py`
+
+**Modified:**
+- `backend/app/main.py` (include router)
+- `backend/app/config.py` (FUEL_PRICE_INR_PER_L)
+- `backend/app/schemas/destination.py` (response wrappers + recents fields + gallery_urls)
+- `frontend/src/lib/api.ts` (typed client methods only)
+
+**Not modified:** Models (no schema migration needed — all tables exist from M1).
 
 ## Exit criteria (from PHASE3_PLAN.md)
 
-User can filter destinations by tag + radius + vehicle + budget, see a ranked list, and open a detail page with a map.
+> User can filter destinations by tag + radius + vehicle + budget, see a ranked list, and open a detail page with a map.
 
-Detailed plan to be written when M1 ships.
+The "with a map" portion ships when the frontend UX track lands. Backend completes the data side: list + filters + ranked sort + detail w/ tags/media/rating/recents + cost estimate + submission + rating.
+
+## Frontend debt opened by M2
+
+- Destination discovery UI (list page, filter UX, detail layout, map) — deferred to UX session.
+- `home_latitude`/`home_longitude` capture in signup/profile is partially there from M1; the cost-estimate endpoint needs them to be populated for the default-origin case to work. Profile page already needs M2 updates per `project_m1_frontend_debt`.
+
+## Frontend debt closed by M2
+
+None — M2 doesn't ship any UI. Profile-page M1 debt still open.

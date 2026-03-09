@@ -1,13 +1,18 @@
-"""Pydantic schemas for Destination + Tag + DestinationMedia + Rating."""
+"""Pydantic schemas for Destination + Tag + DestinationMedia + Rating.
+
+Extended in M2 with: list / rating-list / cost-estimate / tag-grouped response
+wrappers, recent-rider fields on the detail, and ``gallery_urls`` on submission.
+"""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
 from app.models.destination import TagCategory, TerrainDifficulty
+from app.schemas.ride import UserBrief
 
 
 class TagOut(BaseModel):
@@ -18,6 +23,11 @@ class TagOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class TagListResponse(BaseModel):
+    vibe: List[TagOut] = []
+    vehicle_fit: List[TagOut] = []
 
 
 class DestinationMediaOut(BaseModel):
@@ -31,6 +41,13 @@ class DestinationMediaOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class DestinationMediaListResponse(BaseModel):
+    media: List[DestinationMediaOut] = []
+    total: int
+    page: int
+    limit: int
 
 
 class DestinationSummary(BaseModel):
@@ -47,9 +64,19 @@ class DestinationSummary(BaseModel):
     hero_media_url: Optional[str] = None
     avg_rating: float
     rating_count: int
+    # Optional — populated when the list query has an origin (sort=distance
+    # or radius_km filter) so the UI can render "X km away".
+    distance_km: Optional[float] = None
 
     class Config:
         from_attributes = True
+
+
+class DestinationListResponse(BaseModel):
+    destinations: List[DestinationSummary] = []
+    total: int
+    page: int
+    limit: int
 
 
 class DestinationOut(BaseModel):
@@ -74,6 +101,9 @@ class DestinationOut(BaseModel):
     updated_at: datetime
     tags: List[TagOut] = []
     media: List[DestinationMediaOut] = []
+    # M2 — community signal: distinct riders w/ RideLog in the last 90 days.
+    recent_rider_count: int = 0
+    recent_riders: List[UserBrief] = []
 
     class Config:
         from_attributes = True
@@ -94,6 +124,7 @@ class DestinationCreate(BaseModel):
     best_time_of_day: Optional[str] = None
     hero_media_url: Optional[str] = None
     tag_slugs: List[str] = []
+    gallery_urls: List[str] = []
 
 
 class RatingOut(BaseModel):
@@ -105,12 +136,31 @@ class RatingOut(BaseModel):
     ride_log_id: Optional[UUID] = None
     created_at: datetime
     updated_at: datetime
+    user: Optional[UserBrief] = None
 
     class Config:
         from_attributes = True
+
+
+class RatingListResponse(BaseModel):
+    ratings: List[RatingOut] = []
+    total: int
+    page: int
+    limit: int
 
 
 class RatingCreate(BaseModel):
     stars: int = Field(ge=1, le=5)
     review: Optional[str] = None
     ride_log_id: Optional[UUID] = None
+
+
+class CostEstimate(BaseModel):
+    distance_km: float
+    fuel_inr: Optional[int] = None
+    food_inr: int
+    entry_inr: int
+    total_inr_low: int
+    total_inr_high: int
+    currency: str
+    assumptions: Dict[str, Any] = {}
