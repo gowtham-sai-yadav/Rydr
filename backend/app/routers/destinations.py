@@ -6,16 +6,27 @@ Endpoints:
   GET    /{id}                   — detail w/ tags, media, rating aggregates, recent riders
   GET    /{id}/media             — paginated media
   GET    /{id}/ratings           — paginated ratings
-  POST   /{id}/ratings           — create or upsert (1 per user); recomputes avg + count (auth)
+  POST   /{id}/ratings           — atomic upsert (1 per user); recomputes avg + count (auth)
   GET    /{id}/cost-estimate     — per-user cost estimate (uses auth'd user's bike + home if available)
 
 Notes:
   - Auth is *optional* on GETs so personalization (home location, mileage) layers
     in for logged-in users without blocking public browsing.
-  - Distance filter / distance sort uses an inline Haversine in SQL — Postgres
-    `acos / cos / sin / radians`, clamped via `least(1, greatest(-1, ...))` to
-    survive float overshoot. PostGIS deferred to the M11 GPS stretch (see
-    PHASE3_PLAN.md §11).
+  - Multi-tag filters use OR semantics ("any of the supplied slugs") per the
+    finalized M2 plan; unknown slugs 400 so frontend bugs surface loudly.
+  - Currency is enforced to INR at submit time until multi-currency lands
+    (cost calculator assumes INR fuel pricing).
+  - Pagination uses a stable ``Destination.id`` tiebreaker on every list query
+    so ties don't shuffle across pages.
+  - Rating upsert uses Postgres ``ON CONFLICT`` to be safe under concurrent
+    double-submits; aggregate recompute runs as a single ``UPDATE`` in the
+    same transaction so ``avg_rating`` / ``rating_count`` never drift.
+
+Note for M9: ``_build_detail_response`` enumerates ``DestinationOut`` fields
+by hand because ``destination.tags`` returns ``DestinationTag`` association
+objects, not ``Tag`` rows — so ``DestinationOut.model_validate(destination)``
+does not work without restructuring the relationships. New columns on
+``Destination`` must be added here too until that refactor.
 """
 from __future__ import annotations
 
@@ -24,7 +35,8 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Float, and_, cast, distinct, exists, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import get_current_user, get_db, get_optional_user
@@ -52,36 +64,21 @@ from app.schemas.destination import (
     RatingOut,
     TagOut,
 )
-from app.schemas.ride import UserBrief
+from app.schemas.user import UserBrief
 from app.services.cost_calculator import estimate_cost
-from app.services.geo import haversine_km
+from app.services.geo import haversine_km, haversine_sql_expression
 
 router = APIRouter()
 
 
-EARTH_RADIUS_KM = 6371.0088
 RECENT_WINDOW_DAYS = 90
 RECENT_RIDER_PREVIEW = 3
+SUPPORTED_CURRENCIES = {"INR"}  # cost calculator is INR-only until multi-currency lands
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _haversine_sql(origin_lat: float, origin_lng: float):
-    """Inline Haversine distance (km) expression for use in WHERE / ORDER BY."""
-    lat1 = func.radians(cast(origin_lat, Float))
-    lng1 = func.radians(cast(origin_lng, Float))
-    lat2 = func.radians(Destination.latitude)
-    lng2 = func.radians(Destination.longitude)
-    inner = (
-        func.cos(lat1) * func.cos(lat2) * func.cos(lng2 - lng1)
-        + func.sin(lat1) * func.sin(lat2)
-    )
-    # Clamp to [-1, 1] so acos() never explodes on rounding error.
-    clamped = func.least(1.0, func.greatest(-1.0, inner))
-    return EARTH_RADIUS_KM * func.acos(clamped)
-
-
 def _resolve_origin(
     from_lat: Optional[float],
     from_lng: Optional[float],
@@ -95,18 +92,41 @@ def _resolve_origin(
     return None
 
 
+def _validate_slugs_exist(
+    db: Session, slugs: List[str], category: Optional[TagCategory] = None
+) -> None:
+    """Raise 400 if any slug doesn't match an existing Tag (optionally
+    in the given category). Used for filter inputs so a typo doesn't
+    silently return the unfiltered set."""
+    if not slugs:
+        return
+    q = db.query(Tag.slug).filter(Tag.slug.in_(slugs))
+    if category is not None:
+        q = q.filter(Tag.category == category)
+    found = {row[0] for row in q.all()}
+    missing = sorted(set(slugs) - found)
+    if missing:
+        cat_label = f" in category {category.value}" if category else ""
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown tag slugs{cat_label}: {missing}",
+        )
+
+
 def _recent_riders(
     db: Session, destination_id: UUID
 ) -> tuple[int, List[UserBrief]]:
-    """Distinct rider count + up to N most recent UserBriefs for a destination.
+    """Distinct rider count + N most recent UserBriefs for a destination.
 
     A ride is "at" a destination when its RidePlan targets that destination AND
-    a RideLog exists with actual_end_ts in the recent window.
+    a RideLog exists with actual_end_ts in the recent window. The preview is
+    deduped per ``rider_id`` so a power-user with multiple completed rides
+    appears only once.
     """
     since = datetime.now(timezone.utc) - timedelta(days=RECENT_WINDOW_DAYS)
 
     count = (
-        db.query(func.count(distinct(RideLog.rider_id)))
+        db.query(func.count(func.distinct(RideLog.rider_id)))
         .join(RidePlan, RidePlan.id == RideLog.ride_plan_id)
         .filter(
             RidePlan.destination_id == destination_id,
@@ -117,39 +137,37 @@ def _recent_riders(
         or 0
     )
 
-    preview_rows = (
-        db.query(User)
-        .join(RideLog, RideLog.rider_id == User.id)
+    # One row per rider — the most-recent end timestamp — ordered by recency.
+    latest_per_rider = (
+        db.query(
+            RideLog.rider_id.label("rider_id"),
+            func.max(RideLog.actual_end_ts).label("latest_end"),
+        )
         .join(RidePlan, RidePlan.id == RideLog.ride_plan_id)
         .filter(
             RidePlan.destination_id == destination_id,
             RideLog.actual_end_ts.isnot(None),
             RideLog.actual_end_ts >= since,
         )
-        .order_by(RideLog.actual_end_ts.desc())
+        .group_by(RideLog.rider_id)
+        .order_by(func.max(RideLog.actual_end_ts).desc())
         .limit(RECENT_RIDER_PREVIEW)
+        .subquery()
+    )
+
+    preview_rows = (
+        db.query(User)
+        .join(latest_per_rider, User.id == latest_per_rider.c.rider_id)
+        .order_by(latest_per_rider.c.latest_end.desc())
         .all()
     )
     return count, [UserBrief.model_validate(u) for u in preview_rows]
 
 
-def _recompute_rating_aggregates(db: Session, destination: Destination) -> None:
-    agg = (
-        db.query(func.avg(Rating.stars), func.count(Rating.id))
-        .filter(Rating.destination_id == destination.id)
-        .one()
-    )
-    avg, count = agg
-    destination.avg_rating = float(avg) if avg is not None else 0.0
-    destination.rating_count = int(count or 0)
-
-
-def _serialize_detail(
+def _build_detail_response(
     db: Session, destination: Destination
 ) -> DestinationOut:
-    """Build DestinationOut directly — `destination.tags` is an association
-    table (DestinationTag), so we project through `.tag` instead of relying
-    on Pydantic's ``from_attributes`` walk."""
+    """See module-level note re: manual field enumeration and tag association."""
     recent_count, recent_users = _recent_riders(db, destination.id)
     return DestinationOut(
         id=destination.id,
@@ -176,6 +194,21 @@ def _serialize_detail(
         recent_rider_count=recent_count,
         recent_riders=recent_users,
     )
+
+
+def _load_destination_or_404(db: Session, destination_id: UUID) -> Destination:
+    dest = (
+        db.query(Destination)
+        .options(
+            selectinload(Destination.tags).selectinload(DestinationTag.tag),
+            selectinload(Destination.media),
+        )
+        .filter(Destination.id == destination_id)
+        .first()
+    )
+    if not dest:
+        raise HTTPException(status_code=404, detail="Destination not found")
+    return dest
 
 
 # ---------------------------------------------------------------------------
@@ -208,6 +241,10 @@ def list_destinations(
             status_code=400,
             detail="radius_km requires from_lat+from_lng or an authenticated user with home location",
         )
+
+    # Surface bad slugs loudly — easier to debug than silently empty filters.
+    _validate_slugs_exist(db, tags or [], TagCategory.vibe)
+    _validate_slugs_exist(db, vehicle_fit or [], TagCategory.vehicle_fit)
 
     query = db.query(Destination)
 
@@ -249,7 +286,9 @@ def list_destinations(
 
     distance_expr = None
     if origin is not None:
-        distance_expr = _haversine_sql(origin[0], origin[1])
+        distance_expr = haversine_sql_expression(
+            origin[0], origin[1], Destination.latitude, Destination.longitude
+        )
         if radius_km is not None:
             query = query.filter(distance_expr <= radius_km)
 
@@ -257,14 +296,18 @@ def list_destinations(
 
     if sort == "rating":
         query = query.order_by(
-            Destination.avg_rating.desc(), Destination.rating_count.desc()
+            Destination.avg_rating.desc(),
+            Destination.rating_count.desc(),
+            Destination.id.asc(),
         )
     elif sort == "popularity":
         query = query.order_by(
-            Destination.rating_count.desc(), Destination.avg_rating.desc()
+            Destination.rating_count.desc(),
+            Destination.avg_rating.desc(),
+            Destination.id.asc(),
         )
     elif sort == "distance":
-        query = query.order_by(distance_expr.asc())
+        query = query.order_by(distance_expr.asc(), Destination.id.asc())
 
     rows = query.offset((page - 1) * limit).limit(limit).all()
 
@@ -291,6 +334,28 @@ def create_destination(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> DestinationOut:
+    if payload.currency not in SUPPORTED_CURRENCIES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"currency={payload.currency} not supported yet — only "
+                f"{sorted(SUPPORTED_CURRENCIES)} (M2 cost calculator is INR-only)."
+            ),
+        )
+
+    # Resolve + validate tags BEFORE any write so a bad payload doesn't
+    # flush a Destination row that then has to roll back.
+    if payload.tag_slugs:
+        tag_rows = db.query(Tag).filter(Tag.slug.in_(payload.tag_slugs)).all()
+        found = {t.slug for t in tag_rows}
+        missing = sorted(set(payload.tag_slugs) - found)
+        if missing:
+            raise HTTPException(
+                status_code=400, detail=f"Unknown tag slugs: {missing}"
+            )
+    else:
+        tag_rows = []
+
     dest = Destination(
         name=payload.name,
         description=payload.description,
@@ -310,43 +375,26 @@ def create_destination(
     db.add(dest)
     db.flush()
 
-    if payload.tag_slugs:
-        tag_rows = db.query(Tag).filter(Tag.slug.in_(payload.tag_slugs)).all()
-        found = {t.slug for t in tag_rows}
-        missing = set(payload.tag_slugs) - found
-        if missing:
-            raise HTTPException(
-                status_code=400, detail=f"Unknown tag slugs: {sorted(missing)}"
-            )
-        for tag in tag_rows:
-            db.add(DestinationTag(destination_id=dest.id, tag_id=tag.id))
+    for tag in tag_rows:
+        db.add(DestinationTag(destination_id=dest.id, tag_id=tag.id))
 
     for url in payload.gallery_urls:
-        db.add(DestinationMedia(destination_id=dest.id, url=url, uploaded_by_user_id=user.id))
+        db.add(
+            DestinationMedia(
+                destination_id=dest.id, url=url, uploaded_by_user_id=user.id
+            )
+        )
 
     db.commit()
-    db.refresh(dest)
-    return _serialize_detail(db, dest)
+    # Re-fetch with eager loaders so _build_detail_response doesn't lazy-walk
+    # tags + media (was N+1 under db.refresh which discards loader options).
+    fresh = _load_destination_or_404(db, dest.id)
+    return _build_detail_response(db, fresh)
 
 
 # ---------------------------------------------------------------------------
 # Detail
 # ---------------------------------------------------------------------------
-def _load_destination_or_404(db: Session, destination_id: UUID) -> Destination:
-    dest = (
-        db.query(Destination)
-        .options(
-            selectinload(Destination.tags).selectinload(DestinationTag.tag),
-            selectinload(Destination.media),
-        )
-        .filter(Destination.id == destination_id)
-        .first()
-    )
-    if not dest:
-        raise HTTPException(status_code=404, detail="Destination not found")
-    return dest
-
-
 @router.get("/{destination_id}", response_model=DestinationOut)
 def get_destination(
     destination_id: UUID,
@@ -354,7 +402,7 @@ def get_destination(
     _user: Optional[User] = Depends(get_optional_user),
 ) -> DestinationOut:
     dest = _load_destination_or_404(db, destination_id)
-    return _serialize_detail(db, dest)
+    return _build_detail_response(db, dest)
 
 
 # ---------------------------------------------------------------------------
@@ -375,7 +423,9 @@ def list_destination_media(
     )
     total = base.with_entities(func.count(DestinationMedia.id)).scalar() or 0
     rows = (
-        base.order_by(DestinationMedia.created_at.desc())
+        base.order_by(
+            DestinationMedia.created_at.desc(), DestinationMedia.id.asc()
+        )
         .offset((page - 1) * limit)
         .limit(limit)
         .all()
@@ -405,7 +455,7 @@ def list_ratings(
     total = base.with_entities(func.count(Rating.id)).scalar() or 0
     rows = (
         base.options(selectinload(Rating.user))
-        .order_by(Rating.created_at.desc())
+        .order_by(Rating.created_at.desc(), Rating.id.asc())
         .offset((page - 1) * limit)
         .limit(limit)
         .all()
@@ -425,39 +475,60 @@ def create_or_update_rating(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> RatingOut:
-    dest = (
-        db.query(Destination).filter(Destination.id == destination_id).first()
-    )
-    if not dest:
+    if not db.query(Destination.id).filter(Destination.id == destination_id).first():
         raise HTTPException(status_code=404, detail="Destination not found")
 
-    rating = (
-        db.query(Rating)
-        .filter(
-            Rating.destination_id == destination_id,
-            Rating.user_id == user.id,
-        )
-        .first()
-    )
-    if rating:
-        rating.stars = payload.stars
-        rating.review = payload.review
-        if payload.ride_log_id is not None:
-            rating.ride_log_id = payload.ride_log_id
-    else:
-        rating = Rating(
+    # Atomic upsert keyed on uq_rating_destination_user — two concurrent
+    # POSTs from the same user no longer race into IntegrityError.
+    insert_stmt = (
+        pg_insert(Rating)
+        .values(
             destination_id=destination_id,
             user_id=user.id,
             stars=payload.stars,
             review=payload.review,
             ride_log_id=payload.ride_log_id,
         )
-        db.add(rating)
+        .on_conflict_do_update(
+            constraint="uq_rating_destination_user",
+            set_=dict(
+                stars=payload.stars,
+                review=payload.review,
+                ride_log_id=payload.ride_log_id,
+                updated_at=func.now(),
+            ),
+        )
+        .returning(Rating.id)
+    )
+    rating_id = db.execute(insert_stmt).scalar_one()
 
-    db.flush()
-    _recompute_rating_aggregates(db, dest)
+    # Recompute aggregates in the same transaction via a single UPDATE
+    # whose subqueries read the post-upsert state — eliminates the
+    # check-then-write window the audit flagged.
+    avg_subq = (
+        select(func.coalesce(func.avg(Rating.stars), 0.0))
+        .where(Rating.destination_id == destination_id)
+        .scalar_subquery()
+    )
+    count_subq = (
+        select(func.count(Rating.id))
+        .where(Rating.destination_id == destination_id)
+        .scalar_subquery()
+    )
+    db.execute(
+        update(Destination)
+        .where(Destination.id == destination_id)
+        .values(avg_rating=avg_subq, rating_count=count_subq)
+    )
     db.commit()
-    db.refresh(rating)
+
+    # Re-fetch with user eager-loaded so the response build doesn't lazy-load.
+    rating = (
+        db.query(Rating)
+        .options(selectinload(Rating.user))
+        .filter(Rating.id == rating_id)
+        .one()
+    )
     return RatingOut.model_validate(rating)
 
 
