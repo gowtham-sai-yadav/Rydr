@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -61,6 +62,10 @@ class RideLog(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint("ride_plan_id", "rider_id", name="uq_ride_log_ride_rider"),
     )
 
     ride_plan = relationship("RidePlan", back_populates="ride_logs")

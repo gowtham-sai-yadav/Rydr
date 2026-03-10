@@ -43,6 +43,7 @@ from app.models.ride import (
     RidePlanStatus,
     RidePlanVisibility,
 )
+from app.models.ride_log import RideLog
 from app.models.user import User
 from app.schemas.destination import DestinationSummary
 from app.schemas.ride import (
@@ -57,6 +58,7 @@ from app.schemas.ride import (
     RidePlanSummary,
     RidePlanUpdate,
 )
+from app.schemas.ride_log import RideLogListResponse, RideLogOut
 from app.schemas.user import UserBrief
 
 router = APIRouter()
@@ -426,6 +428,91 @@ def cancel_ride(
 
     fresh = _load_ride_or_404(db, ride.id)
     return _build_detail_response(db, fresh)
+
+
+# ---------------------------------------------------------------------------
+# Start / Complete (captain only) — M4 status transitions
+# ---------------------------------------------------------------------------
+@router.post("/{ride_id}/start", response_model=RidePlanOut)
+def start_ride(
+    ride_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> RidePlanOut:
+    ride = _load_ride_or_404(db, ride_id)
+    if ride.captain_id != user.id:
+        raise HTTPException(status_code=403, detail="Only the captain can start this ride")
+    if ride.status == RidePlanStatus.cancelled:
+        raise HTTPException(status_code=409, detail="Cannot start a cancelled ride")
+    if ride.status == RidePlanStatus.completed:
+        raise HTTPException(status_code=409, detail="Cannot start an already-completed ride")
+
+    if ride.status != RidePlanStatus.in_progress:
+        ride.status = RidePlanStatus.in_progress
+        # TODO M6: notify approved participants that the ride has started.
+        db.commit()
+
+    fresh = _load_ride_or_404(db, ride.id)
+    return _build_detail_response(db, fresh)
+
+
+@router.post("/{ride_id}/complete", response_model=RidePlanOut)
+def complete_ride(
+    ride_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> RidePlanOut:
+    ride = _load_ride_or_404(db, ride_id)
+    if ride.captain_id != user.id:
+        raise HTTPException(
+            status_code=403, detail="Only the captain can complete this ride"
+        )
+    if ride.status == RidePlanStatus.cancelled:
+        raise HTTPException(status_code=409, detail="Cannot complete a cancelled ride")
+
+    if ride.status != RidePlanStatus.completed:
+        ride.status = RidePlanStatus.completed
+        # TODO M6: notify approved participants that the ride is complete.
+        # Riders can still create / update their RideLog after this.
+        db.commit()
+
+    fresh = _load_ride_or_404(db, ride.id)
+    return _build_detail_response(db, fresh)
+
+
+# ---------------------------------------------------------------------------
+# Logs for a ride (M4) — public list, paginated, eager-loaded
+# ---------------------------------------------------------------------------
+@router.get("/{ride_id}/logs", response_model=RideLogListResponse)
+def list_ride_logs(
+    ride_id: UUID,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=20, ge=1, le=50),
+    db: Session = Depends(get_db),
+    _user: Optional[User] = Depends(get_optional_user),
+) -> RideLogListResponse:
+    if not db.query(RidePlan.id).filter(RidePlan.id == ride_id).first():
+        raise HTTPException(status_code=404, detail="Ride not found")
+
+    base = db.query(RideLog).filter(RideLog.ride_plan_id == ride_id)
+    total = base.with_entities(func.count(RideLog.id)).scalar() or 0
+    rows = (
+        base.options(
+            selectinload(RideLog.media),
+            selectinload(RideLog.rider),
+            selectinload(RideLog.rating),
+        )
+        .order_by(RideLog.created_at.asc(), RideLog.id.asc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .all()
+    )
+    return RideLogListResponse(
+        logs=[RideLogOut.model_validate(r) for r in rows],
+        total=total,
+        page=page,
+        limit=limit,
+    )
 
 
 # ---------------------------------------------------------------------------
