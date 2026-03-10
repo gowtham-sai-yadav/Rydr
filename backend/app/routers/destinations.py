@@ -74,6 +74,31 @@ router = APIRouter()
 RECENT_WINDOW_DAYS = 90
 RECENT_RIDER_PREVIEW = 3
 SUPPORTED_CURRENCIES = {"INR"}  # cost calculator is INR-only until multi-currency lands
+MIN_SEARCH_LEN = 2
+LIKE_ESCAPE_CHAR = "\\"
+
+
+def _escape_like(s: str) -> str:
+    """Escape ILIKE wildcards so user input cannot match arbitrary patterns.
+
+    Without this, ``q="%"`` becomes ILIKE ``%%%`` and matches every row, and
+    ``q="A_B"`` matches ``AaB`` / ``AbB`` etc. instead of literal ``A_B``.
+    """
+    return (
+        s.replace(LIKE_ESCAPE_CHAR, LIKE_ESCAPE_CHAR * 2)
+        .replace("%", LIKE_ESCAPE_CHAR + "%")
+        .replace("_", LIKE_ESCAPE_CHAR + "_")
+    )
+
+
+def _clean_slug_list(slugs: Optional[List[str]]) -> List[str]:
+    """FastAPI parses ``?tags=`` (empty value) as ``[""]``; strip those out
+    along with whitespace-only entries so a malformed query is treated as
+    "no filter" instead of "match the empty slug" (which always returns 0
+    rows)."""
+    if not slugs:
+        return []
+    return [s.strip() for s in slugs if s and s.strip()]
 
 
 # ---------------------------------------------------------------------------
@@ -242,9 +267,14 @@ def list_destinations(
             detail="radius_km requires from_lat+from_lng or an authenticated user with home location",
         )
 
+    # Drop empty-string entries that FastAPI parses from ``?tags=`` and trim
+    # whitespace before slug validation.
+    tags = _clean_slug_list(tags)
+    vehicle_fit = _clean_slug_list(vehicle_fit)
+
     # Surface bad slugs loudly — easier to debug than silently empty filters.
-    _validate_slugs_exist(db, tags or [], TagCategory.vibe)
-    _validate_slugs_exist(db, vehicle_fit or [], TagCategory.vehicle_fit)
+    _validate_slugs_exist(db, tags, TagCategory.vibe)
+    _validate_slugs_exist(db, vehicle_fit, TagCategory.vehicle_fit)
 
     query = db.query(Destination)
 
@@ -279,10 +309,18 @@ def list_destinations(
         query = query.filter(budget_expr <= max_budget)
 
     if q:
-        like = f"%{q}%"
-        query = query.filter(
-            or_(Destination.name.ilike(like), Destination.region.ilike(like))
-        )
+        q_stripped = q.strip()
+        # Treat blank / too-short / pure-wildcard inputs as "no search" rather
+        # than scanning the whole table for an empty pattern.
+        if len(q_stripped) >= MIN_SEARCH_LEN:
+            escaped = _escape_like(q_stripped)
+            like = f"%{escaped}%"
+            query = query.filter(
+                or_(
+                    Destination.name.ilike(like, escape=LIKE_ESCAPE_CHAR),
+                    Destination.region.ilike(like, escape=LIKE_ESCAPE_CHAR),
+                )
+            )
 
     distance_expr = None
     if origin is not None:

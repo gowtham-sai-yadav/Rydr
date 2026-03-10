@@ -467,12 +467,28 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Reverse the M1 schema — drops everything introduced in upgrade().
+    """Refuse — this downgrade would wipe every M1 table (users, bikes,
+    destinations, ride_plans, …) with no path back to the prior PoC data.
 
-    The prior PoC schema is NOT recreated. In practice, downgrade is unused
-    because `./run.sh reset` is the standard recovery path and the PoC schema
-    has no production data.
+    Per audit #30 (`docs/review/phase3-m2-destination-discovery-audit.md`),
+    accidental `alembic downgrade -1` in staging could destroy live data. The
+    intended recovery path is `./run.sh reset`, which rebuilds the schema
+    from scratch and reseeds explicitly.
+
+    To re-enable the destructive downgrade temporarily, set the env var
+    ``ALLOW_DESTRUCTIVE_DOWNGRADE=1`` and edit this function to drop the
+    guard. Do not silently remove the guard.
     """
+    import os
+
+    if os.environ.get("ALLOW_DESTRUCTIVE_DOWNGRADE") != "1":
+        raise NotImplementedError(
+            "M1 downgrade is destructive — it drops users, bikes, destinations, "
+            "and all dependent tables with no rollback to the PoC schema. Use "
+            "`./run.sh reset` instead. To bypass this guard intentionally, set "
+            "ALLOW_DESTRUCTIVE_DOWNGRADE=1 in the environment."
+        )
+
     bind = op.get_bind()
 
     op.drop_index("idx_chat_messages_group_time", table_name="chat_messages")
