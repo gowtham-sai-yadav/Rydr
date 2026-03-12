@@ -43,6 +43,13 @@ class ApiClient {
       const body = await res.json().catch(() => ({}));
       throw new Error(formatErrorDetail(body?.detail, res.status));
     }
+    // 204 No Content and any other empty-body success → resolve without
+    // calling res.json() (which would throw "Unexpected end of JSON input"
+    // on an empty body). DELETE endpoints hit this; future endpoints might
+    // too. Pattern: trust the Content-Length header AND the status code.
+    if (res.status === 204 || res.headers.get("Content-Length") === "0") {
+      return undefined as T;
+    }
     return res.json();
   }
 
@@ -297,7 +304,8 @@ class ApiClient {
   }
 
   deleteRideMedia(rideLogId: string, mediaId: string) {
-    return this.request<unknown>(`/api/ride-logs/${rideLogId}/media/${mediaId}`, {
+    // Server returns 204 No Content; request<T> short-circuits body parse.
+    return this.request<void>(`/api/ride-logs/${rideLogId}/media/${mediaId}`, {
       method: "DELETE",
       headers: this.headers(),
     });
@@ -321,10 +329,14 @@ class ApiClient {
 
   getChatMessages(
     groupId: string,
-    params: { since?: string; limit?: number } = {},
+    params: { after_id?: string; before_id?: string; limit?: number } = {},
   ) {
+    // Audit #3/#4: keyset cursors via message ids — `after_id` polls forward,
+    // `before_id` pages backward. Pass neither for the initial load (returns
+    // the newest `limit` messages chronologically).
     const qs = new URLSearchParams();
-    if (params.since) qs.set("since", params.since);
+    if (params.after_id) qs.set("after_id", params.after_id);
+    if (params.before_id) qs.set("before_id", params.before_id);
     if (params.limit) qs.set("limit", String(params.limit));
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return this.request<unknown>(`/api/chat/groups/${groupId}/messages${suffix}`, {
@@ -341,7 +353,9 @@ class ApiClient {
   }
 
   deleteChatMessage(messageId: string) {
-    return this.request<unknown>(`/api/chat/messages/${messageId}`, {
+    // Server returns 204 No Content; request<T> short-circuits the body parse
+    // so this resolves to undefined rather than throwing.
+    return this.request<void>(`/api/chat/messages/${messageId}`, {
       method: "DELETE",
       headers: this.headers(),
     });

@@ -60,6 +60,7 @@ from app.schemas.ride import (
 )
 from app.schemas.ride_log import RideLogListResponse, RideLogOut
 from app.schemas.user import UserBrief
+from app.services.ride_helpers import approved_counts_for as _approved_counts_for
 
 router = APIRouter()
 
@@ -152,27 +153,6 @@ def _build_summary(ride: RidePlan, approved_count: int) -> RidePlanSummary:
         max_riders=ride.max_riders,
         participant_count=approved_count,
     )
-
-
-def _approved_counts_for(
-    db: Session, ride_ids: List[UUID]
-) -> dict[UUID, int]:
-    """One round trip for the approved-participant counts across a page."""
-    if not ride_ids:
-        return {}
-    rows = (
-        db.query(
-            RidePlanParticipant.ride_plan_id,
-            func.count(RidePlanParticipant.id),
-        )
-        .filter(
-            RidePlanParticipant.ride_plan_id.in_(ride_ids),
-            RidePlanParticipant.status == ParticipantStatus.approved,
-        )
-        .group_by(RidePlanParticipant.ride_plan_id)
-        .all()
-    )
-    return {rid: cnt for rid, cnt in rows}
 
 
 # ---------------------------------------------------------------------------
