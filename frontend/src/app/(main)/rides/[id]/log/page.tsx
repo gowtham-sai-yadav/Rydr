@@ -287,7 +287,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
         <button
           onClick={saveFeedback}
           disabled={savingPatch}
-          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink font-medium py-2.5 rounded-lg"
+          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 font-medium py-2.5 rounded-lg"
         >
           {savingPatch ? "Saving…" : "Save feedback"}
         </button>
@@ -388,7 +388,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
         <button
           onClick={saveRating}
           disabled={savingRating || stars < 1}
-          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink font-medium py-2.5 rounded-lg"
+          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 font-medium py-2.5 rounded-lg"
         >
           {savingRating
             ? "Submitting…"

@@ -51,7 +51,7 @@ export default function FollowersListPage({ params }: { params: Promise<{ id: st
               href={`/users/${e.user.id}`}
               className="flex items-center gap-3 bg-surface-card hover:bg-surface-elevated rounded-xl p-4 transition-colors"
             >
-              <div className="w-10 h-10 rounded-full bg-ink text-canvas flex items-center justify-center font-bold text-ink">
+              <div className="w-10 h-10 rounded-full bg-ink text-canvas flex items-center justify-center font-bold">
                 {e.user.avatar_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
