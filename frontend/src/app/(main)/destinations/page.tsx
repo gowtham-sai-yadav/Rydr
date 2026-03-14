@@ -82,13 +82,13 @@ export default function DestinationsPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-12">
+    <div className="max-w-5xl mx-auto space-y-6 pb-12 glow-orange">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-white">Destinations</h1>
+        <h1 className="text-2xl font-bold text-ink">Destinations</h1>
         {user && (
           <Link
             href="/destinations/new"
-            className="bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium px-4 py-2 rounded-lg"
+            className="bg-ink text-canvas hover:bg-surface-light text-sm font-medium px-4 py-2 rounded-lg"
           >
             Add destination
           </Link>
@@ -96,16 +96,16 @@ export default function DestinationsPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-gray-800 rounded-xl p-4 space-y-4">
+      <div className="bg-surface-card rounded-xl p-4 space-y-4">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search by name or region…"
-          className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500"
+          className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink placeholder:text-stone focus:outline-none focus:ring-2 focus:ring-ink/30"
         />
 
         <div>
-          <p className="text-xs text-gray-400 uppercase mb-2">Vibe</p>
+          <p className="text-xs text-mute uppercase mb-2">Vibe</p>
           <div className="flex flex-wrap gap-2">
             {tags.vibe.map((t) => (
               <button
@@ -113,8 +113,8 @@ export default function DestinationsPage() {
                 onClick={() => toggleTag(t.slug)}
                 className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
                   selectedTags.has(t.slug)
-                    ? "bg-orange-600 text-white"
-                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    ? "bg-ink text-canvas"
+                    : "bg-surface-elevated text-body hover:bg-surface-elevated"
                 }`}
               >
                 {t.label}
@@ -124,7 +124,7 @@ export default function DestinationsPage() {
         </div>
 
         <div>
-          <p className="text-xs text-gray-400 uppercase mb-2">Vehicle fit</p>
+          <p className="text-xs text-mute uppercase mb-2">Vehicle fit</p>
           <div className="flex flex-wrap gap-2">
             {tags.vehicle_fit.map((t) => (
               <button
@@ -132,8 +132,8 @@ export default function DestinationsPage() {
                 onClick={() => toggleVehicleFit(t.slug)}
                 className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
                   selectedVehicleFit.has(t.slug)
-                    ? "bg-orange-600 text-white"
-                    : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    ? "bg-ink text-canvas"
+                    : "bg-surface-elevated text-body hover:bg-surface-elevated"
                 }`}
               >
                 {t.label}
@@ -143,12 +143,12 @@ export default function DestinationsPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 text-sm text-gray-300">
+          <label className="flex items-center gap-2 text-sm text-body">
             Sort by
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortMode)}
-              className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-1 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="bg-surface-elevated border border-hairline-strong rounded-lg px-3 py-1 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
             >
               <option value="rating">Top rated</option>
               <option value="popularity">Most rated</option>
@@ -158,12 +158,12 @@ export default function DestinationsPage() {
             </select>
           </label>
           {canUseDistance && sort !== "distance" && (
-            <label className="flex items-center gap-2 text-sm text-gray-300">
+            <label className="flex items-center gap-2 text-sm text-body">
               <input
                 type="checkbox"
                 checked={useHomeOrigin}
                 onChange={(e) => setUseHomeOrigin(e.target.checked)}
-                className="rounded border-gray-600 text-orange-500 focus:ring-orange-500"
+                className="rounded border-hairline-strong text-accent-blue focus:ring-ink/30"
               />
               Show distance from home
             </label>
@@ -175,7 +175,7 @@ export default function DestinationsPage() {
                 setSelectedVehicleFit(new Set());
                 setQuery("");
               }}
-              className="text-sm text-orange-500 hover:text-orange-400 ml-auto"
+              className="text-sm text-accent-blue hover:text-accent-blue ml-auto"
             >
               Clear all
             </button>
@@ -184,7 +184,7 @@ export default function DestinationsPage() {
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg text-sm">
+        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg text-sm">
           {error}
         </div>
       )}
@@ -192,12 +192,12 @@ export default function DestinationsPage() {
       {/* Results */}
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-orange-500" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
         </div>
       ) : destinations.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-mute">
           No destinations match. Try clearing filters or{" "}
-          <Link href="/destinations/new" className="text-orange-500 hover:text-orange-400">
+          <Link href="/destinations/new" className="text-accent-blue hover:text-accent-blue">
             adding a new one
           </Link>
           .
@@ -208,9 +208,9 @@ export default function DestinationsPage() {
             <Link
               key={d.id}
               href={`/destinations/${d.id}`}
-              className="bg-gray-800 rounded-xl overflow-hidden hover:ring-1 hover:ring-orange-500/30 transition-all"
+              className="bg-surface-card rounded-xl overflow-hidden hover:ring-1 hover:ring-hairline-strong transition-all"
             >
-              <div className="aspect-video bg-gray-700 relative">
+              <div className="aspect-video bg-surface-elevated relative">
                 {d.hero_media_url && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -220,20 +220,20 @@ export default function DestinationsPage() {
                   />
                 )}
                 {d.distance_km != null && (
-                  <span className="absolute top-2 right-2 bg-gray-900/80 text-white text-xs px-2 py-1 rounded-full font-medium">
+                  <span className="absolute top-2 right-2 bg-canvas/80 text-ink text-xs px-2 py-1 rounded-full font-medium">
                     {d.distance_km} km
                   </span>
                 )}
               </div>
               <div className="p-4">
-                <h3 className="text-white font-semibold">{d.name}</h3>
-                {d.region && <p className="text-gray-400 text-sm">{d.region}</p>}
+                <h3 className="text-ink font-semibold">{d.name}</h3>
+                {d.region && <p className="text-mute text-sm">{d.region}</p>}
                 <div className="flex items-center gap-3 mt-2 text-xs">
-                  <span className="text-yellow-500">
+                  <span className="text-accent-yellow">
                     ★ {d.avg_rating.toFixed(1)}
                   </span>
-                  <span className="text-gray-500">({d.rating_count})</span>
-                  <span className="text-gray-500 capitalize ml-auto">
+                  <span className="text-stone">({d.rating_count})</span>
+                  <span className="text-stone capitalize ml-auto">
                     {d.terrain_difficulty}
                   </span>
                 </div>

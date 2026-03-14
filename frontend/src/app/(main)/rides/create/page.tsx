@@ -33,7 +33,7 @@ function CreateRideForm() {
 
   useEffect(() => {
     api
-      .listDestinations({ limit: 100 })
+      .listDestinations({ limit: 50 })
       .then((res) => setDestinations(res.destinations))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load destinations"))
       .finally(() => setDestinationsLoading(false));
@@ -74,28 +74,28 @@ function CreateRideForm() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-white mb-6">Plan a Ride</h1>
+      <h1 className="text-2xl font-bold text-ink mb-6">Plan a Ride</h1>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
+        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg mb-4 text-sm">
           {error}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Destination */}
-        <div className="bg-gray-800 rounded-xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-white">Destination</h2>
+        <div className="bg-surface-card rounded-xl p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-ink">Destination</h2>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Where to? *</label>
+            <label className="block text-sm text-mute mb-1">Where to? *</label>
             {destinationsLoading ? (
-              <p className="text-gray-500 text-sm">Loading destinations…</p>
+              <p className="text-stone text-sm">Loading destinations…</p>
             ) : (
               <select
                 value={destinationId}
                 onChange={(e) => setDestinationId(e.target.value)}
                 required
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
               >
                 <option value="">— pick a destination —</option>
                 {destinations.map((d) => (
@@ -106,9 +106,9 @@ function CreateRideForm() {
                 ))}
               </select>
             )}
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-stone mt-1">
               Don&apos;t see your spot?{" "}
-              <a href="/destinations/new" className="text-orange-500 hover:text-orange-400">
+              <a href="/destinations/new" className="text-accent-blue hover:text-accent-blue">
                 Add a destination
               </a>
               .
@@ -117,97 +117,97 @@ function CreateRideForm() {
         </div>
 
         {/* Basic info */}
-        <div className="bg-gray-800 rounded-xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-white">Ride Details</h2>
+        <div className="bg-surface-card rounded-xl p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-ink">Ride Details</h2>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Title *</label>
+            <label className="block text-sm text-mute mb-1">Title *</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
               maxLength={200}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
               placeholder="e.g. Sunday sunrise to Nandi"
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Description</label>
+            <label className="block text-sm text-mute mb-1">Description</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
               placeholder="Pace, meet point, what to bring…"
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Thumbnail URL</label>
+            <label className="block text-sm text-mute mb-1">Thumbnail URL</label>
             <input
               value={thumbnailUrl}
               onChange={(e) => setThumbnailUrl(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
               placeholder="https://..."
             />
           </div>
         </div>
 
         {/* Schedule */}
-        <div className="bg-gray-800 rounded-xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-white">Schedule</h2>
+        <div className="bg-surface-card rounded-xl p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-ink">Schedule</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Date *</label>
+              <label className="block text-sm text-mute mb-1">Date *</label>
               <input
                 type="date"
                 value={plannedDate}
                 onChange={(e) => setPlannedDate(e.target.value)}
                 required
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Start *</label>
+              <label className="block text-sm text-mute mb-1">Start *</label>
               <input
                 type="time"
                 value={plannedStartTime}
                 onChange={(e) => setPlannedStartTime(e.target.value)}
                 required
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">End (est.)</label>
+              <label className="block text-sm text-mute mb-1">End (est.)</label>
               <input
                 type="time"
                 value={estimatedEndTime}
                 onChange={(e) => setEstimatedEndTime(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
               />
             </div>
           </div>
         </div>
 
         {/* Configuration */}
-        <div className="bg-gray-800 rounded-xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-white">Configuration</h2>
+        <div className="bg-surface-card rounded-xl p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-ink">Configuration</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Visibility</label>
+              <label className="block text-sm text-mute mb-1">Visibility</label>
               <select
                 value={visibility}
                 onChange={(e) => setVisibility(e.target.value as "group" | "solo")}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
               >
                 <option value="group">Group ride (others can join)</option>
                 <option value="solo">Solo (just me)</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Difficulty</label>
+              <label className="block text-sm text-mute mb-1">Difficulty</label>
               <select
                 value={difficulty}
                 onChange={(e) => setDifficulty(e.target.value as typeof difficulty)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
               >
                 <option value="easy">Easy</option>
                 <option value="moderate">Moderate</option>
@@ -216,7 +216,7 @@ function CreateRideForm() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Max riders</label>
+              <label className="block text-sm text-mute mb-1">Max riders</label>
               <input
                 type="number"
                 value={maxRiders}
@@ -224,26 +224,26 @@ function CreateRideForm() {
                 min={1}
                 max={50}
                 disabled={visibility === "solo"}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-ink/30"
               />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Recommended bike type</label>
+              <label className="block text-sm text-mute mb-1">Recommended bike type</label>
               <input
                 value={recommendedBikeType}
                 onChange={(e) => setRecommendedBikeType(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
                 placeholder="e.g. Adventure, 150cc+"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Break schedule</label>
+              <label className="block text-sm text-mute mb-1">Break schedule</label>
               <input
                 value={breakSchedule}
                 onChange={(e) => setBreakSchedule(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
                 placeholder="e.g. Tea at km 30"
               />
             </div>
@@ -253,7 +253,7 @@ function CreateRideForm() {
         <button
           type="submit"
           disabled={loading || destinationsLoading}
-          className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
+          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink font-semibold py-3 rounded-lg transition-colors"
         >
           {loading ? "Creating ride…" : "Create Ride"}
         </button>
@@ -266,7 +266,7 @@ function CreateRideForm() {
 export default function CreateRidePage() {
   // useSearchParams must be inside a Suspense boundary in app router.
   return (
-    <Suspense fallback={<div className="text-gray-400 text-center py-8">Loading…</div>}>
+    <Suspense fallback={<div className="text-mute text-center py-8">Loading…</div>}>
       <CreateRideForm />
     </Suspense>
   );

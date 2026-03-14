@@ -25,58 +25,60 @@ export default function LoginPage() {
 
   return (
     <div className="w-full max-w-md">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-orange-500 mb-2">Ryder</h1>
-        <p className="text-gray-400">Scenic routes, together.</p>
+      <div className="text-center mb-10">
+        <h1 className="display-xl mb-3">Rydr</h1>
+        <p className="text-charcoal body-md">
+          Destinations and rides, for people who ride.
+        </p>
       </div>
 
-      <div className="bg-gray-800 rounded-xl p-8 shadow-lg">
-        <h2 className="text-2xl font-semibold text-white mb-6">Welcome back</h2>
+      <div className="card-bordered p-8">
+        <h2 className="heading-md text-ink mb-6">Welcome back</h2>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
+          <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-md mb-4 text-sm">
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+            <label className="label-eyebrow block mb-2">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+              className="input"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Password</label>
+            <label className="label-eyebrow block mb-2">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-              placeholder="Enter your password"
+              className="input"
+              placeholder="••••••••"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
+            className="btn btn-primary w-full h-11"
           >
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
 
-        <p className="text-center text-gray-400 mt-6 text-sm">
-          Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-orange-500 hover:text-orange-400 font-medium">
-            Sign up
+        <p className="text-center text-charcoal mt-6 text-sm">
+          New here?{" "}
+          <Link href="/signup" className="link font-medium">
+            Create an account
           </Link>
         </p>
       </div>
