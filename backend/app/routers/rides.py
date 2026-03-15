@@ -61,6 +61,7 @@ from app.schemas.ride import (
 )
 from app.schemas.ride_log import RideLogListResponse, RideLogOut
 from app.schemas.user import UserBrief
+from app.services.badge_engine import safe_evaluate as _evaluate_badges
 from app.services.ride_helpers import approved_counts_for as _approved_counts_for
 
 router = APIRouter()
@@ -211,6 +212,14 @@ def create_ride(
         db.add(ChatGroup(ride_plan_id=ride.id, name=ride.title))
 
     db.commit()
+
+    # M8 side effect: a fresh RidePlan moves the captain's
+    # rides_captained count up by one, which may unlock the
+    # ``captain-bronze`` or ``captain-silver`` badge. Wrapped in
+    # safe_evaluate so a badge-engine failure can't fail the ride
+    # create itself.
+    _evaluate_badges(db, user.id)
+
     fresh = _load_ride_or_404(db, ride.id)
     return _build_detail_response(db, fresh)
 
@@ -710,5 +719,12 @@ def update_participant_status(
         # TODO M6: notify the participant of approval / rejection.
         db.commit()
         db.refresh(participant)
+
+        # M8 side effect: a fresh ``approved`` increases the
+        # participant's rides_joined count (the engine excludes their
+        # own captained rides, so captain-self-rows don't count). May
+        # unlock ``joiner-bronze``. Rejection has no badge consequence.
+        if payload.status == ParticipantStatus.approved:
+            _evaluate_badges(db, participant.user_id)
 
     return RidePlanParticipantOut.model_validate(participant)

@@ -65,6 +65,7 @@ from app.schemas.destination import (
     TagOut,
 )
 from app.schemas.user import UserBrief
+from app.services.badge_engine import safe_evaluate as _evaluate_badges
 from app.services.cost_calculator import estimate_cost
 from app.services.geo import haversine_km, haversine_sql_expression
 
@@ -559,6 +560,15 @@ def create_or_update_rating(
         .values(avg_rating=avg_subq, rating_count=count_subq)
     )
     db.commit()
+
+    # M8 side effect: only a 5-star rating moves the star-rider
+    # predicate (rides_completed >= 3 AND has_5_star). Skip the engine
+    # call for 1–4 star ratings — pure noise, the predicate set won't
+    # change. Upserts that *update* an existing rating from 4★ to 5★
+    # also need to evaluate, so we trigger on the value, not the
+    # insert/update branch.
+    if payload.stars == 5:
+        _evaluate_badges(db, user.id)
 
     # Re-fetch with user eager-loaded so the response build doesn't lazy-load.
     rating = (

@@ -2,11 +2,16 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import type { BikeType, UserStatsOut } from "@/lib/api.types";
+import type { BadgeOut, BikeType, UserBadgeOut, UserStatsOut } from "@/lib/api.types";
+import { BadgeShelf } from "@/components/badges/BadgeShelf";
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
   const [stats, setStats] = useState<UserStatsOut | null>(null);
+  // Earned awards + the full catalog so the shelf can render locked tiles.
+  // Loaded in parallel — neither blocks first paint of the rest of the page.
+  const [badges, setBadges] = useState<UserBadgeOut[]>([]);
+  const [badgeCatalog, setBadgeCatalog] = useState<BadgeOut[]>([]);
   const [editing, setEditing] = useState(false);
   const [editBike, setEditBike] = useState(false);
 
@@ -31,6 +36,8 @@ export default function ProfilePage() {
 
   useEffect(() => {
     api.getMyStats().then(setStats).catch(() => {});
+    api.listMyBadges().then(setBadges).catch(() => {});
+    api.listBadgeCatalog().then(setBadgeCatalog).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -341,6 +348,17 @@ export default function ProfilePage() {
             </button>
           </div>
         )}
+      </div>
+
+      {/* Badges — M8. Show locked tiles on /profile so the user can see
+          what they're working toward; /users/[id] hides locked. */}
+      <div className="bg-surface-card rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-ink mb-4">Badges</h3>
+        <BadgeShelf
+          earned={badges}
+          catalog={badgeCatalog}
+          showLocked
+        />
       </div>
 
       {/* Stats */}

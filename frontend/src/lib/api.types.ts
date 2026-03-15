@@ -389,6 +389,29 @@ export interface FollowListResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Badges (M8)
+// ---------------------------------------------------------------------------
+// Catalog entry — shared between the catalog endpoint and the nested
+// ``badge`` field on an earned award.
+export interface BadgeOut {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  icon_url: string | null;
+}
+
+// One earned award. ``badge`` is eager-loaded by the backend so the
+// frontend doesn't have to cross-reference catalog separately.
+export interface UserBadgeOut {
+  id: string;
+  user_id: string;
+  badge_id: string;
+  earned_at: string;
+  badge: BadgeOut | null;
+}
+
+// ---------------------------------------------------------------------------
 // Generic API error shape
 // ---------------------------------------------------------------------------
 export interface FastApiValidationError {
