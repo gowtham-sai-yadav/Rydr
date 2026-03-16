@@ -1,13 +1,17 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, users, rides, chat
+from app.config import settings
+from app.routers import auth, badges, chat, destinations, ride_logs, rides, tags, users
 
 app = FastAPI(title="Ryder API", version="1.0.0")
 
+# M9 audit fix (M2 #14): read CORS origins from settings instead of
+# hardcoding localhost:3000. Production deploys set ALLOWED_ORIGINS to
+# their real frontend host(s); local dev keeps the default.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=settings.allowed_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -15,8 +19,12 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
+app.include_router(destinations.router, prefix="/api/destinations", tags=["Destinations"])
+app.include_router(tags.router, prefix="/api/tags", tags=["Tags"])
 app.include_router(rides.router, prefix="/api/rides", tags=["Rides"])
+app.include_router(ride_logs.router, prefix="/api/ride-logs", tags=["RideLogs"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(badges.router, prefix="/api/badges", tags=["Badges"])
 
 
 @app.get("/api/health")
