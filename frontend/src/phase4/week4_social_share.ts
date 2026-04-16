@@ -1,0 +1,1 @@
+export type FeedCardView = {\n  postId: number;\n  authorName: string;\n  body: string;\n  likeCount: number;\n  commentCount: number;\n};\n\nexport type ShareCardPreview = {\n  title: string;\n  statLine: string;\n  imageUrl?: string;\n};\n
