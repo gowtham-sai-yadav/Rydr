@@ -17,3 +17,8 @@ frontend/next-env.d.ts
 
 # Docker
 pgdata/
+
+venv/
+
+# Added by code-review-graph
+.code-review-graph/
