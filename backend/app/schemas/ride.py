@@ -1,59 +1,22 @@
+"""Pydantic schemas for RidePlan + RidePlanParticipant.
+
+Renamed from Ride* in M1 — uses proper date/time types and references a Destination.
+Used by M3 when the rides router is rewritten. Live here so the types exist for seed + tests.
+"""
 from __future__ import annotations
 
-from typing import Optional, List
-from pydantic import BaseModel
+from datetime import date, datetime, time
+from typing import List, Optional
 from uuid import UUID
 
+from pydantic import BaseModel, Field
 
-class RideStopCreate(BaseModel):
-    name: str
-    description: Optional[str] = None
-    stop_order: int
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    is_break_stop: bool = False
-
-
-class RideStopOut(BaseModel):
-    id: UUID
-    ride_id: UUID
-    name: str
-    description: Optional[str] = None
-    stop_order: int
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    is_break_stop: bool
-
-    class Config:
-        from_attributes = True
-
-
-class RideCreate(BaseModel):
-    title: str
-    description: Optional[str] = None
-    thumbnail_url: Optional[str] = None
-    ride_date: str
-    start_time: str
-    estimated_end_time: Optional[str] = None
-    difficulty_level: str = "moderate"
-    recommended_bike_type: Optional[str] = None
-    break_schedule: Optional[str] = None
-    max_riders: int = 10
-    stops: List[RideStopCreate] = []
-
-
-class RideUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    thumbnail_url: Optional[str] = None
-    ride_date: Optional[str] = None
-    start_time: Optional[str] = None
-    estimated_end_time: Optional[str] = None
-    difficulty_level: Optional[str] = None
-    recommended_bike_type: Optional[str] = None
-    break_schedule: Optional[str] = None
-    status: Optional[str] = None
-    max_riders: Optional[int] = None
+from app.models.ride import (
+    DifficultyLevel,
+    ParticipantStatus,
+    RidePlanStatus,
+    RidePlanVisibility,
+)
 
 
 class UserBrief(BaseModel):
@@ -65,34 +28,68 @@ class UserBrief(BaseModel):
         from_attributes = True
 
 
-class ParticipantOut(BaseModel):
+class RidePlanParticipantOut(BaseModel):
     id: UUID
-    ride_id: UUID
+    ride_plan_id: UUID
     user_id: UUID
-    status: str
+    status: ParticipantStatus
     user: Optional[UserBrief] = None
 
     class Config:
         from_attributes = True
 
 
-class RideOut(BaseModel):
+class RidePlanCreate(BaseModel):
+    destination_id: UUID
+    route_id: Optional[UUID] = None
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    planned_date: date
+    planned_start_time: time
+    estimated_end_time: Optional[time] = None
+    visibility: RidePlanVisibility = RidePlanVisibility.group
+    difficulty_level: DifficultyLevel = DifficultyLevel.moderate
+    recommended_bike_type: Optional[str] = None
+    break_schedule: Optional[str] = None
+    max_riders: int = 10
+
+
+class RidePlanUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    planned_date: Optional[date] = None
+    planned_start_time: Optional[time] = None
+    estimated_end_time: Optional[time] = None
+    difficulty_level: Optional[DifficultyLevel] = None
+    recommended_bike_type: Optional[str] = None
+    break_schedule: Optional[str] = None
+    status: Optional[RidePlanStatus] = None
+    max_riders: Optional[int] = None
+
+
+class RidePlanOut(BaseModel):
     id: UUID
+    destination_id: UUID
+    route_id: Optional[UUID] = None
     captain_id: UUID
     title: str
     description: Optional[str] = None
     thumbnail_url: Optional[str] = None
-    ride_date: str
-    start_time: str
-    estimated_end_time: Optional[str] = None
-    difficulty_level: str
+    planned_date: date
+    planned_start_time: time
+    estimated_end_time: Optional[time] = None
+    visibility: RidePlanVisibility
+    difficulty_level: DifficultyLevel
     recommended_bike_type: Optional[str] = None
     break_schedule: Optional[str] = None
-    status: str
     max_riders: int
+    status: RidePlanStatus
+    created_at: datetime
+    updated_at: datetime
     captain: Optional[UserBrief] = None
-    stops: List[RideStopOut] = []
-    participants: List[ParticipantOut] = []
+    participants: List[RidePlanParticipantOut] = []
     participant_count: int = 0
 
     class Config:
@@ -100,4 +97,4 @@ class RideOut(BaseModel):
 
 
 class ParticipantStatusUpdate(BaseModel):
-    status: str
+    status: ParticipantStatus

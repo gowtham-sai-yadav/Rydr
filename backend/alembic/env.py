@@ -1,16 +1,15 @@
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool
+
 from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Import all models so Alembic can detect them
-from app.database import Base
-from app.models.user import User  # noqa
-from app.models.ride import Bike, Ride, RideStop, RideParticipant  # noqa
-from app.models.chat import ChatGroup  # noqa
+# Import the models package so every ORM class is registered with Base.metadata.
+from app.database import Base  # noqa: E402
+import app.models  # noqa: E402,F401
 
 target_metadata = Base.metadata
 
