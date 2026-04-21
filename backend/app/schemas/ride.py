@@ -18,14 +18,8 @@ from app.models.ride import (
     RidePlanVisibility,
 )
 
-
-class UserBrief(BaseModel):
-    id: UUID
-    name: str
-    avatar_url: Optional[str] = None
-
-    class Config:
-        from_attributes = True
+# UserBrief lives in schemas/user — re-exported here for back-compat.
+from app.schemas.user import UserBrief  # noqa: F401
 
 
 class RidePlanParticipantOut(BaseModel):

@@ -1,5 +1,27 @@
 import { API_BASE_URL, TOKEN_KEY } from "./constants";
 
+type FastApiValidationError = { loc?: unknown[]; msg?: string; type?: string };
+
+function formatErrorDetail(detail: unknown, status: number): string {
+  // FastAPI returns 422 validation errors as an array of {loc, msg, type}.
+  // Coercing the array via String(detail) yields "[object Object],..." which
+  // is what users were seeing — normalize to a readable string instead.
+  if (typeof detail === "string" && detail) return detail;
+  if (Array.isArray(detail)) {
+    const parts = (detail as FastApiValidationError[])
+      .map((d) => {
+        const loc = Array.isArray(d?.loc)
+          ? d.loc.filter((p) => p !== "body").join(".")
+          : "";
+        const msg = d?.msg ?? "";
+        return loc ? `${loc}: ${msg}` : msg;
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join("; ");
+  }
+  return `Request failed: ${status}`;
+}
+
 class ApiClient {
   private getToken(): string | null {
     if (typeof window === "undefined") return null;
@@ -19,7 +41,7 @@ class ApiClient {
     const res = await fetch(`${API_BASE_URL}${path}`, options);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail || `Request failed: ${res.status}`);
+      throw new Error(formatErrorDetail(body?.detail, res.status));
     }
     return res.json();
   }
