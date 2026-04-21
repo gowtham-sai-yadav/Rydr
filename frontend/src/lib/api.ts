@@ -134,6 +134,87 @@ class ApiClient {
   getChatMessages(groupId: string) {
     return this.request<unknown>(`/api/chat/groups/${groupId}/messages`, { headers: this.headers() });
   }
+
+  // Destinations (M2)
+  listDestinations(params: {
+    tags?: string[];
+    vehicle_fit?: string[];
+    radius_km?: number;
+    from_lat?: number;
+    from_lng?: number;
+    max_budget?: number;
+    q?: string;
+    sort?: "rating" | "distance" | "popularity";
+    page?: number;
+    limit?: number;
+  } = {}) {
+    const qs = new URLSearchParams();
+    for (const slug of params.tags ?? []) qs.append("tags", slug);
+    for (const slug of params.vehicle_fit ?? []) qs.append("vehicle_fit", slug);
+    if (params.radius_km != null) qs.set("radius_km", String(params.radius_km));
+    if (params.from_lat != null) qs.set("from_lat", String(params.from_lat));
+    if (params.from_lng != null) qs.set("from_lng", String(params.from_lng));
+    if (params.max_budget != null) qs.set("max_budget", String(params.max_budget));
+    if (params.q) qs.set("q", params.q);
+    if (params.sort) qs.set("sort", params.sort);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<unknown>(`/api/destinations${suffix}`, { headers: this.headers() });
+  }
+
+  getDestination(id: string) {
+    return this.request<unknown>(`/api/destinations/${id}`, { headers: this.headers() });
+  }
+
+  getDestinationMedia(id: string, page = 1, limit = 20) {
+    return this.request<unknown>(
+      `/api/destinations/${id}/media?page=${page}&limit=${limit}`,
+      { headers: this.headers() },
+    );
+  }
+
+  submitDestination(data: Record<string, unknown>) {
+    return this.request<unknown>("/api/destinations", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  listRatings(destinationId: string, page = 1, limit = 20) {
+    return this.request<unknown>(
+      `/api/destinations/${destinationId}/ratings?page=${page}&limit=${limit}`,
+      { headers: this.headers() },
+    );
+  }
+
+  submitRating(destinationId: string, data: { stars: number; review?: string; ride_log_id?: string }) {
+    return this.request<unknown>(`/api/destinations/${destinationId}/ratings`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  getCostEstimate(
+    destinationId: string,
+    params: { from_lat?: number; from_lng?: number; bike_mileage_kmpl?: number; fuel_price?: number } = {},
+  ) {
+    const qs = new URLSearchParams();
+    if (params.from_lat != null) qs.set("from_lat", String(params.from_lat));
+    if (params.from_lng != null) qs.set("from_lng", String(params.from_lng));
+    if (params.bike_mileage_kmpl != null) qs.set("bike_mileage_kmpl", String(params.bike_mileage_kmpl));
+    if (params.fuel_price != null) qs.set("fuel_price", String(params.fuel_price));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<unknown>(`/api/destinations/${destinationId}/cost-estimate${suffix}`, {
+      headers: this.headers(),
+    });
+  }
+
+  listTags() {
+    return this.request<unknown>("/api/tags", { headers: this.headers() });
+  }
 }
 
 export const api = new ApiClient();
