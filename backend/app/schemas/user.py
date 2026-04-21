@@ -1,4 +1,10 @@
-"""Pydantic schemas for User + Bike + UserStats — extended in M1 with home_location + bike mileage/type."""
+"""Pydantic schemas for User + Bike + UserStats — extended in M1 with home_location + bike mileage/type.
+
+``UserBrief`` lives here (and not in ``schemas/ride``) because it's a generic
+user-summary DTO consumed by destinations, ratings, ride plans, chat — the
+user domain owns it. The original definition in ``schemas/ride`` is now a
+re-export for back-compat.
+"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -8,6 +14,15 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from app.models.ride import BikeType
+
+
+class UserBrief(BaseModel):
+    id: UUID
+    name: str
+    avatar_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
 
 
 class BikeOut(BaseModel):
