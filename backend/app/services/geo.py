@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 from typing import Any
 
-from sqlalchemy import Float, cast, func
+from sqlalchemy import func
 
 EARTH_RADIUS_KM = 6371.0088
 
@@ -33,10 +33,12 @@ def haversine_sql_expression(
     ``(origin_lat, origin_lng)`` and the row's ``(lat_col, lng_col)``.
 
     The formula matches :func:`haversine_km` exactly; ``a`` is mathematically
-    in ``[0, 1]`` so no clamp is needed.
+    in ``[0, 1]`` so no clamp is needed. ``origin_lat`` / ``origin_lng`` are
+    bound as Python floats — SQLAlchemy emits ``float8`` parameters directly,
+    so no explicit ``cast()`` wrapper is needed (audit #23 cleanup).
     """
-    lat1 = func.radians(cast(origin_lat, Float))
-    lng1 = func.radians(cast(origin_lng, Float))
+    lat1 = func.radians(origin_lat)
+    lng1 = func.radians(origin_lng)
     lat2 = func.radians(lat_col)
     lng2 = func.radians(lng_col)
     dlat = lat2 - lat1
