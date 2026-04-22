@@ -206,6 +206,103 @@ class ApiClient {
     });
   }
 
+  // Ride status transitions (M4 — captain only)
+  startRide(id: string) {
+    return this.request<unknown>(`/api/rides/${id}/start`, {
+      method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  completeRide(id: string) {
+    return this.request<unknown>(`/api/rides/${id}/complete`, {
+      method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  listRideLogs(rideId: string, page = 1, limit = 20) {
+    return this.request<unknown>(
+      `/api/rides/${rideId}/logs?page=${page}&limit=${limit}`,
+      { headers: this.headers() },
+    );
+  }
+
+  // Ride logs (M4 — post-ride capture)
+  createRideLog(data: { ride_plan_id: string; actual_start_ts?: string }) {
+    return this.request<unknown>("/api/ride-logs", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  getRideLog(id: string) {
+    return this.request<unknown>(`/api/ride-logs/${id}`, { headers: this.headers() });
+  }
+
+  updateRideLog(
+    id: string,
+    data: {
+      actual_start_ts?: string | null;
+      actual_end_ts?: string | null;
+      actual_cost?: number | null;
+      road_condition?: "good" | "ok" | "rough" | "bad" | null;
+      recommended?: boolean | null;
+      notes?: string | null;
+    },
+  ) {
+    return this.request<unknown>(`/api/ride-logs/${id}`, {
+      method: "PATCH",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Cloudinary direct-upload signing (M4)
+  // Returns the signed params the frontend will POST to Cloudinary's upload
+  // endpoint directly. Returns 503 if the backend isn't configured with
+  // CLOUDINARY_* env vars — UI should fall back to URL-paste in that case.
+  signRideMedia(rideLogId: string) {
+    return this.request<{
+      cloud_name: string;
+      api_key: string;
+      timestamp: number;
+      folder: string;
+      signature: string;
+      upload_url: string;
+      max_image_bytes: number;
+      max_video_bytes: number;
+      ride_log_id: string;
+    }>(`/api/ride-logs/${rideLogId}/media/sign`, {
+      method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  confirmRideMedia(
+    rideLogId: string,
+    data: {
+      url: string;
+      media_type?: "image" | "video";
+      caption?: string | null;
+      link_to_destination?: boolean;
+    },
+  ) {
+    return this.request<unknown>(`/api/ride-logs/${rideLogId}/media`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  deleteRideMedia(rideLogId: string, mediaId: string) {
+    return this.request<unknown>(`/api/ride-logs/${rideLogId}/media/${mediaId}`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+  }
+
   // Chat
   getChatGroups() {
     return this.request<unknown>("/api/chat/groups", { headers: this.headers() });
