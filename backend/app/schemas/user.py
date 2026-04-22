@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.ride import BikeType
 
@@ -58,13 +58,16 @@ class UserOut(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    avatar_url: Optional[str] = None
-    bio: Optional[str] = None
-    home_city: Optional[str] = None
-    home_latitude: Optional[float] = None
-    home_longitude: Optional[float] = None
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    phone: Optional[str] = Field(default=None, max_length=20)
+    avatar_url: Optional[str] = Field(default=None, max_length=500)
+    bio: Optional[str] = Field(default=None, max_length=2000)
+    home_city: Optional[str] = Field(default=None, max_length=100)
+    # Bounds enforced server-side because home coords feed the M2 Haversine
+    # filter + cost calculator — an out-of-range value silently poisons every
+    # subsequent radius/distance/cost call for the user.
+    home_latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    home_longitude: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class BikeUpdate(BaseModel):

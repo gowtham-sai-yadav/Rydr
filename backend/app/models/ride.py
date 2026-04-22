@@ -19,6 +19,7 @@ from sqlalchemy import (
     String,
     Text,
     Time,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -173,6 +174,19 @@ class RidePlanParticipant(Base):
         SQLEnum(ParticipantStatus, name="participant_status"),
         nullable=False,
         default=ParticipantStatus.pending,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "ride_plan_id", "user_id", name="uq_participant_ride_user"
+        ),
     )
 
     ride_plan = relationship("RidePlan", back_populates="participants")

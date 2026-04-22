@@ -176,3 +176,62 @@ The "with a map" portion ships when the frontend UX track lands. Backend complet
 ## Frontend debt closed by M2
 
 None — M2 doesn't ship any UI. Profile-page M1 debt still open.
+
+## Audit deferrals — recorded posture (from second-pass audit, 2026-05-24)
+
+The second-pass audit (`docs/review/phase3-m2-destination-discovery-audit.md`)
+surfaced six items deliberately deferred. Captured here so the next reviewer
+doesn't re-litigate.
+
+- **Currency policy (audit #10):** Cost calculator and `CostEstimate` are
+  INR-only. `POST /api/destinations` rejects non-INR submissions (400). Re-open
+  when there's a real multi-currency requirement; until then, `INR` is the
+  single source of truth and field names are currency-neutral
+  (`fuel` / `food` / `entry` / `total_low` / `total_high`).
+- **Ranking math (audit #19):** `sort=popularity` is `rating_count DESC,
+  avg_rating DESC`. Fresh destinations start at zero and rank last — accepted
+  for M2's tiny dataset (5 seeded destinations). When the destination table
+  grows, add a `sort=trending` mode backed by either an on-the-fly
+  `COUNT(*) FILTER (WHERE created_at > now() - interval '30 days')` or a
+  denormalized `recent_rating_count_30d` column. Don't redefine `popularity`.
+- **Rating privacy (audit #27):** `GET /ratings` returns full `UserBrief`
+  (id, name, avatar) without auth. Phase 3 spec accepts this — "everything is
+  public." When the follow system (M6) or any privacy gate lands, revisit by
+  (a) requiring auth on the ratings endpoint and/or (b) adding
+  `Rating.is_anonymous` so reviewers can opt out.
+- **JWT hardening (audit #3):** Default `SECRET_KEY`, no `iss`/`aud` claims,
+  no `require=[exp,sub]` on decode. Explicitly M9's "auth hardening" milestone
+  — see `PHASE3_PLAN.md §4.1 item 10`. Don't pre-empt.
+- **CORS (audit #14):** `allow_origins=["http://localhost:3000"]` is hardcoded.
+  Pre-existing from M0, not introduced by M2. Production deploy gate; M9 will
+  parameterize via `ALLOWED_ORIGINS` env.
+- **Rate limiting / submission cap (audit #25):** `POST /api/destinations` has
+  no per-user cap. Academic-project scope — moderation tooling is explicitly
+  out of Phase 3. Once we have admin tools (post-M9), revisit with `slowapi`
+  or a row-count precheck.
+- **Migration safety (audit #30, applied):** M1 `downgrade()` now refuses
+  unless `ALLOW_DESTRUCTIVE_DOWNGRADE=1` is set. `./run.sh reset` remains the
+  documented recovery path.
+
+## Audit fixes landed (cumulative across both audit passes)
+
+First-pass: #1 (atomic rating upsert), #2 (re-fetch after POST submit),
+#3 (recent-rider dedup), #4 (pagination tiebreaker), #5 (filter-slug 400),
+#6 (DestinationCreate bounds), #7 (currency-neutral cost fields + INR submit
+gate), #8 (unified Haversine), #11 (validate tags pre-flush + dedup),
+#12 (cost-estimate `fuel_included` flag), #13 (frontend error normalization),
+#18 (eager-load rating user), #20 (shared `EARTH_RADIUS_KM`),
+#22 partial (`UserBrief` moved to `schemas/user`).
+
+Second-pass: #22 finish (drop unused `UserBrief` reexport from
+`schemas/ride`), #26 (lat/lng bounds on `UserUpdate` + `SignupRequest`),
+#13 + #24 + #28 (ILIKE escaping, empty-list cleanup, `q` min length + strip),
+#23 (drop superfluous `cast()` in SQL Haversine), #29 (redundant `db.refresh`
+already gone from first-pass rewrite), #30 (M1 downgrade guarded).
+
+**Audit #2 reviewed as a false positive in practice:** FastAPI's
+`Depends(get_db)` caching dedupes the session within a single request, so
+`get_optional_user` does not open a second session for M2 endpoints (which all
+already depend on `get_db`). The proposed "lazy session" refactor would
+actually *worsen* the authenticated path (2 sessions per request) without
+helping the anonymous path. No change made.

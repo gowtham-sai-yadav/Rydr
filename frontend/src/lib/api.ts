@@ -92,17 +92,56 @@ class ApiClient {
     return this.request<unknown>(`/api/users/${userId}`, { headers: this.headers() });
   }
 
-  // Rides
-  getRideFeed(page = 1, limit = 12) {
-    return this.request<unknown>(`/api/rides/feed?page=${page}&limit=${limit}`, { headers: this.headers() });
+  // Rides (M3 — destination-anchored ride planning)
+  //
+  // NOTE: the existing `/rides/create` page is still on the old PoC payload
+  // shape (`stops`, `ride_date`, `start_time`) and will break against this
+  // backend until the UX track rewrites it. The methods below match the
+  // new server contract.
+  getRideFeed(params: {
+    destination_id?: string;
+    region?: string;
+    date_from?: string;
+    date_to?: string;
+    page?: number;
+    limit?: number;
+  } = {}) {
+    const qs = new URLSearchParams();
+    if (params.destination_id) qs.set("destination_id", params.destination_id);
+    if (params.region) qs.set("region", params.region);
+    if (params.date_from) qs.set("date_from", params.date_from);
+    if (params.date_to) qs.set("date_to", params.date_to);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<unknown>(`/api/rides/feed${suffix}`, { headers: this.headers() });
   }
 
-  getMyRides(status?: string) {
-    const q = status ? `?status=${status}` : "";
-    return this.request<unknown>(`/api/rides/mine${q}`, { headers: this.headers() });
+  getMyRides(params: { status?: string; include_left?: boolean; page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.include_left) qs.set("include_left", "true");
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<unknown>(`/api/rides/mine${suffix}`, { headers: this.headers() });
   }
 
-  createRide(data: Record<string, unknown>) {
+  createRide(data: {
+    destination_id: string;
+    title: string;
+    description?: string | null;
+    thumbnail_url?: string | null;
+    planned_date: string; // YYYY-MM-DD
+    planned_start_time: string; // HH:MM:SS
+    estimated_end_time?: string | null;
+    visibility?: "solo" | "group";
+    difficulty_level?: "easy" | "moderate" | "hard" | "expert";
+    recommended_bike_type?: string | null;
+    break_schedule?: string | null;
+    max_riders?: number;
+    route_id?: string | null;
+  }) {
     return this.request<unknown>("/api/rides", {
       method: "POST",
       headers: this.headers(),
@@ -122,11 +161,16 @@ class ApiClient {
     });
   }
 
-  deleteRide(id: string) {
+  cancelRide(id: string) {
     return this.request<unknown>(`/api/rides/${id}`, {
       method: "DELETE",
       headers: this.headers(),
     });
+  }
+
+  // Back-compat alias — old call sites used `deleteRide`. Soft-cancel semantics.
+  deleteRide(id: string) {
+    return this.cancelRide(id);
   }
 
   joinRide(id: string) {
@@ -136,11 +180,25 @@ class ApiClient {
     });
   }
 
-  getParticipants(rideId: string) {
-    return this.request<unknown>(`/api/rides/${rideId}/participants`, { headers: this.headers() });
+  leaveRide(id: string) {
+    return this.request<unknown>(`/api/rides/${id}/leave`, {
+      method: "POST",
+      headers: this.headers(),
+    });
   }
 
-  updateParticipant(rideId: string, userId: string, status: string) {
+  getParticipants(rideId: string, params: { status?: string; page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<unknown>(`/api/rides/${rideId}/participants${suffix}`, {
+      headers: this.headers(),
+    });
+  }
+
+  updateParticipant(rideId: string, userId: string, status: "approved" | "rejected") {
     return this.request<unknown>(`/api/rides/${rideId}/participants/${userId}`, {
       method: "PUT",
       headers: this.headers(),
