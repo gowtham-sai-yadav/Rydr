@@ -1,7 +1,7 @@
 """ChatGroup + ChatMessage.
 
-ChatGroup FK renamed to ride_plan_id in M1. ChatMessage added — table is live but
-endpoint wiring stays mock (MOCK_MESSAGES) until M5.
+ChatGroup FK renamed to ride_plan_id in M1. ChatMessage rows are populated by
+the real chat endpoints since M5 (`backend/app/routers/chat.py`).
 """
 from __future__ import annotations
 
