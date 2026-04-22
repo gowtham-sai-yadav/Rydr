@@ -303,13 +303,48 @@ class ApiClient {
     });
   }
 
-  // Chat
-  getChatGroups() {
-    return this.request<unknown>("/api/chat/groups", { headers: this.headers() });
+  // Chat (M5 — canonical shapes; the existing /chat/[groupId] page reads
+  // the OLD mock shape (sender_name/content/timestamp/is_mine) and will
+  // crash at runtime until the UX track rewrites it — same pattern as
+  // /rides/create after M3.)
+  getChatGroups(params: { page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<unknown>(`/api/chat/groups${suffix}`, { headers: this.headers() });
   }
 
-  getChatMessages(groupId: string) {
-    return this.request<unknown>(`/api/chat/groups/${groupId}/messages`, { headers: this.headers() });
+  getChatGroup(groupId: string) {
+    return this.request<unknown>(`/api/chat/groups/${groupId}`, { headers: this.headers() });
+  }
+
+  getChatMessages(
+    groupId: string,
+    params: { since?: string; limit?: number } = {},
+  ) {
+    const qs = new URLSearchParams();
+    if (params.since) qs.set("since", params.since);
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<unknown>(`/api/chat/groups/${groupId}/messages${suffix}`, {
+      headers: this.headers(),
+    });
+  }
+
+  sendChatMessage(groupId: string, body: string) {
+    return this.request<unknown>(`/api/chat/groups/${groupId}/messages`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  deleteChatMessage(messageId: string) {
+    return this.request<unknown>(`/api/chat/messages/${messageId}`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
   }
 
   // Destinations (M2)
