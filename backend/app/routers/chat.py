@@ -25,12 +25,11 @@ Patterns reused from M2/M3/M4 audits:
 """
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.dependencies import get_current_user, get_db
@@ -39,6 +38,7 @@ from app.models.ride import (
     ParticipantStatus,
     RidePlan,
     RidePlanParticipant,
+    RidePlanStatus,
 )
 from app.models.user import User
 from app.schemas.chat import (
@@ -49,6 +49,7 @@ from app.schemas.chat import (
     ChatMessageListResponse,
     ChatMessageOut,
 )
+from app.services.ride_helpers import approved_counts_for as _approved_counts_for
 
 router = APIRouter()
 
@@ -59,6 +60,9 @@ router = APIRouter()
 def _user_is_approved_member(
     db: Session, ride_plan_id: UUID, user_id: UUID
 ) -> bool:
+    """Standalone membership check used by delete_message where we don't go
+    through ``_load_group_or_404`` (the message lookup already has the ride
+    in hand)."""
     return (
         db.query(RidePlanParticipant.id)
         .filter(
@@ -73,67 +77,69 @@ def _user_is_approved_member(
 
 def _load_group_or_404(
     db: Session, group_id: UUID, user: User
-) -> Tuple[ChatGroup, str]:
-    """Load the group with ride+destination eager-loaded, gate by membership.
+) -> ChatGroup:
+    """Load the group + check membership in a SINGLE SQL statement.
 
-    Returns ``(group, role)`` where role is ``"captain"`` or ``"participant"``.
-    Raises 404 for non-members (don't leak existence) and 404 for missing
-    groups (same response, can't distinguish from outside).
+    Audit #10: the previous two-query implementation (group lookup, then
+    participant lookup) had a measurable timing difference between
+    "group doesn't exist" (1 query) and "group exists but you're not a
+    member" (2 queries). Both returned 404 but were distinguishable by
+    response time, defeating the don't-leak-existence intent.
+
+    This collapses to one query: ``ChatGroup JOIN ride_plans JOIN destinations
+    LEFT JOIN ride_plan_participants`` (the last filtered on the caller +
+    ``status=approved``). Captain access is checked in Python after the
+    fetch — same query cost either way.
+
+    Audit #15: the previous ``(group, role)`` tuple return was unused at
+    every call site; reverted to bare ``ChatGroup``.
     """
-    group = (
-        db.query(ChatGroup)
+    result = (
+        db.query(ChatGroup, RidePlanParticipant.id.label("membership_id"))
         .options(
             joinedload(ChatGroup.ride_plan).joinedload(RidePlan.destination)
+        )
+        .outerjoin(
+            RidePlanParticipant,
+            and_(
+                RidePlanParticipant.ride_plan_id == ChatGroup.ride_plan_id,
+                RidePlanParticipant.user_id == user.id,
+                RidePlanParticipant.status == ParticipantStatus.approved,
+            ),
         )
         .filter(ChatGroup.id == group_id)
         .first()
     )
-    if not group or group.ride_plan is None:
+    if result is None:
         raise HTTPException(status_code=404, detail="Chat group not found")
 
+    group, membership_id = result
     ride = group.ride_plan
-    if ride.captain_id == user.id:
-        return group, "captain"
+    if ride is None:
+        # Audit #16 — defensive; ride_plan_id is NOT NULL + CASCADE so this
+        # branch is unreachable today. Kept as belt-and-braces against future
+        # schema changes that loosen the FK.
+        raise HTTPException(status_code=404, detail="Chat group not found")
 
-    if _user_is_approved_member(db, ride.id, user.id):
-        return group, "participant"
+    if ride.captain_id == user.id or membership_id is not None:
+        return group
 
     raise HTTPException(status_code=404, detail="Chat group not found")
-
-
-def _approved_counts_for(
-    db: Session, ride_ids: list[UUID]
-) -> dict[UUID, int]:
-    """Single-query batch count of approved participants across rides.
-
-    Mirrors the helper in routers/rides.py — duplicated here rather than
-    cross-importing to keep the chat router free of router-to-router imports.
-    """
-    if not ride_ids:
-        return {}
-    rows = (
-        db.query(
-            RidePlanParticipant.ride_plan_id,
-            func.count(RidePlanParticipant.id),
-        )
-        .filter(
-            RidePlanParticipant.ride_plan_id.in_(ride_ids),
-            RidePlanParticipant.status == ParticipantStatus.approved,
-        )
-        .group_by(RidePlanParticipant.ride_plan_id)
-        .all()
-    )
-    return {rid: cnt for rid, cnt in rows}
 
 
 def _build_group_out(
     group: ChatGroup, participant_count: int
 ) -> ChatGroupOut:
+    """Audit #14: the canonical display name for a chat room is the live
+    ``ride.title`` — ``chat_groups.name`` was set at creation and silently
+    drifts when the captain renames the ride via ``PUT /api/rides/{id}``.
+    Sourcing from ``ride.title`` keeps the chat header in sync. The DB
+    column is now vestigial; M9 can drop it."""
     ride = group.ride_plan
     return ChatGroupOut(
         id=group.id,
         ride_plan_id=group.ride_plan_id,
-        name=group.name,
+        name=ride.title if ride is not None else group.name,
         ride=ChatGroupRide(
             id=ride.id,
             title=ride.title,
@@ -209,7 +215,7 @@ def get_group(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ChatGroupOut:
-    group, _ = _load_group_or_404(db, group_id, user)
+    group = _load_group_or_404(db, group_id, user)
     counts = _approved_counts_for(db, [group.ride_plan_id])
     return _build_group_out(group, counts.get(group.ride_plan_id, 0))
 
@@ -222,7 +228,14 @@ def get_group(
 )
 def list_messages(
     group_id: UUID,
-    since: Optional[datetime] = Query(default=None),
+    after_id: Optional[UUID] = Query(
+        default=None,
+        description="Forward keyset cursor. Returns messages strictly after this one in (created_at, id) order — used for polling.",
+    ),
+    before_id: Optional[UUID] = Query(
+        default=None,
+        description="Backward keyset cursor. Returns messages strictly before this one — used to load older history.",
+    ),
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -230,22 +243,87 @@ def list_messages(
     # 404 if not a member — must come before any data work to avoid leaks.
     _load_group_or_404(db, group_id, user)
 
+    if after_id is not None and before_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Pass either after_id (poll forward) or before_id (page back), not both.",
+        )
+
     base = (
         db.query(ChatMessage)
         .options(selectinload(ChatMessage.author))
         .filter(ChatMessage.chat_group_id == group_id)
     )
 
-    if since is not None:
-        # Poll mode: strictly newer than the caller's last-seen ts, ASC so the
-        # client can directly append.
+    if after_id is not None:
+        # Audit #3: switched from `since: datetime > created_at` to keyset
+        # `(created_at, id) > (anchor.created_at, anchor.id)`. The plain
+        # timestamp compare silently drops messages with identical
+        # microsecond timestamps under contention; the tuple form orders
+        # ties by id so nothing falls through the cracks.
+        anchor = (
+            db.query(ChatMessage.created_at)
+            .filter(
+                ChatMessage.id == after_id,
+                ChatMessage.chat_group_id == group_id,
+            )
+            .first()
+        )
+        if anchor is None:
+            raise HTTPException(
+                status_code=400,
+                detail="after_id does not reference a message in this chat group",
+            )
+        anchor_ts = anchor[0]
         rows = (
-            base.filter(ChatMessage.created_at > since)
+            base.filter(
+                or_(
+                    ChatMessage.created_at > anchor_ts,
+                    and_(
+                        ChatMessage.created_at == anchor_ts,
+                        ChatMessage.id > after_id,
+                    ),
+                )
+            )
             .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
             .limit(limit)
             .all()
         )
         has_more = len(rows) == limit
+    elif before_id is not None:
+        # Audit #4: backward history paging — symmetric to after_id. Client
+        # passes the oldest currently-rendered message id; server returns
+        # the page of older messages, returned ASC so the client can prepend.
+        anchor = (
+            db.query(ChatMessage.created_at)
+            .filter(
+                ChatMessage.id == before_id,
+                ChatMessage.chat_group_id == group_id,
+            )
+            .first()
+        )
+        if anchor is None:
+            raise HTTPException(
+                status_code=400,
+                detail="before_id does not reference a message in this chat group",
+            )
+        anchor_ts = anchor[0]
+        rows = (
+            base.filter(
+                or_(
+                    ChatMessage.created_at < anchor_ts,
+                    and_(
+                        ChatMessage.created_at == anchor_ts,
+                        ChatMessage.id < before_id,
+                    ),
+                )
+            )
+            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+            .limit(limit)
+            .all()
+        )
+        has_more = len(rows) == limit
+        rows = list(reversed(rows))
     else:
         # Initial load: fetch the newest `limit`, return chronologically.
         rows = (
@@ -278,7 +356,16 @@ def send_message(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> ChatMessageOut:
-    _load_group_or_404(db, group_id, user)
+    group = _load_group_or_404(db, group_id, user)
+
+    # Audit #12: cancelled rides are read-only chats. Reads still work
+    # (post-mortem / archive), writes don't. Completed rides remain writable
+    # so riders can keep posting recaps + photos.
+    if group.ride_plan.status == RidePlanStatus.cancelled:
+        raise HTTPException(
+            status_code=409,
+            detail="This ride was cancelled — its chat is read-only",
+        )
 
     msg = ChatMessage(
         chat_group_id=group_id,
@@ -321,6 +408,16 @@ def delete_message(
         raise HTTPException(status_code=404, detail="Message not found")
 
     ride = msg.chat_group.ride_plan
+
+    # Audit #12: cancelled rides are read-only chats — moderation must happen
+    # before the cancel. Returning 409 instead of 403/404 because the caller
+    # may have legit author/captain rights; the ride state itself is the block.
+    if ride.status == RidePlanStatus.cancelled:
+        raise HTTPException(
+            status_code=409,
+            detail="This ride was cancelled — its chat is read-only",
+        )
+
     is_captain = ride.captain_id == user.id
     is_author = msg.author_id == user.id
 

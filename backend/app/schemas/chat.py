@@ -65,7 +65,11 @@ class ChatMessageOut(BaseModel):
     chat_group_id: UUID
     body: str
     created_at: datetime
-    author: Optional[UserBrief] = None
+    # author is never null in practice — `chat_messages.author_id` is
+    # `NOT NULL` with `ondelete=CASCADE`, so the row literally cannot exist
+    # without an author. (Audit #19 — tightened from Optional[UserBrief].)
+    # Revisit if account-deletion ever switches the FK to SET NULL.
+    author: UserBrief
 
     class Config:
         from_attributes = True
