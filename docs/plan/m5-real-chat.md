@@ -229,3 +229,55 @@ A short list of things I checked rather than guessed:
 - ✅ Frontend `chat/page.tsx` reads only `group.id` + `group.name` — confirmed `chat/page.tsx:37,45`. Adding fields to `ChatGroupOut` is safe.
 
 Anything not on this list is documented decision-with-reasoning, not assumption.
+
+---
+
+## Audit response — second pass (2026-05-24)
+
+The M5 audit (`docs/review/phase3-m5-real-chat-audit.md`) raised 24 findings.
+The triage and resolution:
+
+### Landed in this PR (audit fixes)
+
+| # | Fix | What changed |
+|---|---|---|
+| 2 | 204 no-content body parse | `request<T>` short-circuits on `res.status === 204 || Content-Length === '0'`; `deleteChatMessage` / `deleteRideMedia` returns `Promise<void>` instead of throwing on success. |
+| 3 + 4 | Keyset cursors instead of timestamp polling | Dropped `since` param; added `after_id` (forward poll) and `before_id` (backward history). Server resolves the cursor via `(created_at, id)` tuple-compare so messages at identical microseconds are not silently dropped, and history past `limit` is now reachable. |
+| 9 | Naive-datetime trap | Moot — no datetime query param remains after #3/#4. |
+| 10 | Membership-leak via timing | `_load_group_or_404` collapsed to one SQL statement using `LEFT JOIN ride_plan_participants`; the "group exists, you're not a member" code path no longer needs an extra round-trip vs "group missing." Also a perf win. |
+| 12 | Cancelled-ride chat is read-only | `send_message` + `delete_message` return 409 when `ride.status == cancelled`. Reads still work (post-mortem). |
+| 14 | ChatGroup.name → ride.title | `_build_group_out` sources `ChatGroupOut.name` from `ride.title` so renaming a ride keeps the chat header in sync. The DB column stays vestigial; M9 may drop. |
+| 15 | Dead `role` return | `_load_group_or_404` now returns bare `ChatGroup`; callers updated. |
+| 18 | Duplicate `_approved_counts_for` | Extracted to `backend/app/services/ride_helpers.py`; both routers import. |
+| 19 | `Optional[UserBrief]` on message author | Tightened to `UserBrief` (non-optional) — DB FK is `NOT NULL + CASCADE` so author always exists for live rows. |
+| 24 | `commit-m2.sh` git hygiene | Deleted — backdate script served its purpose. |
+
+### Deferred (with reason)
+
+| # | Item | Why we're not doing it in M5 |
+|---|---|---|
+| 1 | `/chat/[groupId]/page.tsx` UI crash on canonical shape | Same agreed pattern as `/rides/create` after M3 — UX-track rewrites the page when a dedicated frontend pass starts. Documented in "Frontend debt opened by M5". |
+| 5 | Rate limit + ETag + visibility pause | Consistent with all prior rate-limit deferrals to **M9** ("rate limiting basics" in PHASE3_PLAN §4.1 item 10). Polling cadence is a UI choice the frontend controls; visibility-pause is UX-track. |
+| 6 | Idempotency key on send | No client retry logic exists yet; the column + partial-unique-index + handler dedupe is **M9** future-proofing landed alongside the retry implementation. |
+| 7 | Soft delete | Plan originally chose hard delete (no moderation tooling planned for Phase 3, audit acknowledged). M9 can revisit if abuse signal emerges. Trade-off: viewer-side stale-row visibility until refresh. |
+| 8 | DB `CheckConstraint` on body length | Pydantic covers the only writer (the API); DB-level defense-in-depth migration is **M9**. |
+| 11 | Websocket migration | See "Future realtime architecture" section below; no code in M5. |
+| 13 | XSS / unicode strip | Frontend renders chat via JSX text interpolation (safe). Documented rule: **no `dangerouslySetInnerHTML` in chat renderers**. Unicode-category strip is **M9**. |
+| 16 | Unreachable null check | Defensive belt-and-braces; kept with explanatory comment. |
+| 17 | Author cascade on user delete | No user-delete endpoint exists yet. When it lands (post-Phase 3), switch FK to `SET NULL` and make `author` optional then. |
+| 20 | Last-message preview + unread count | UX surface, not M5 scope. Add when the UX track redesigns the `/chat` index. |
+| 21 | If-Modified-Since short-circuit | Covered by #5; same milestone. |
+| 22 | Typed `Promise<T>` in api.ts | **M9** repo-wide typing pass; doing it piecemeal per milestone is inconsistent with how M2/M3/M4 deferred. |
+| 23 | UI send button doesn't hit API | Same as #1 — UX-track work. |
+
+### Future realtime architecture (audit #11 documentation hook)
+
+The M5 contract is intentionally pull-based; a future push-based push channel
+would slot in as:
+
+- **Cursor compatibility**: `after_id` is already an opaque message identifier; the same id can serve as `Last-Event-ID` for an SSE `EventSource`, or as a Redis Stream entry id for a Kafka-style fan-out. No client-side change.
+- **Event envelope**: when realtime lands, wrap message payloads as `{type: "message.created" | "message.deleted", payload: ChatMessageOut}` so the client can demux a single event stream. Today's REST endpoints return the bare `ChatMessageOut` — the envelope is purely additive.
+- **Pub/sub mechanism**: Postgres `LISTEN/NOTIFY` is the cheapest first step (no new infra) — emit on every commit in `send_message` / `delete_message`. Move to Redis Pub/Sub or a Kafka topic only when fan-out > ~100 subscribers per ride.
+- **Soft delete (audit #7) becomes load-bearing then**: realtime needs tombstone events so viewers can drop stale rows from their local store. The same `deleted_at` migration enables both server-side tombstones and the SSE delete event.
+
+That migration is **out of M5 scope** but is the natural landing surface for the realtime work.
