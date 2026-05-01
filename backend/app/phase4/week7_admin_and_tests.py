@@ -1,1 +1,12 @@
-PHASE4_INDEXES = [\n    "idx_destinations_region_rating",\n    "idx_rides_start_time_status",\n    "idx_ride_participants_ride_status",\n]\n\nPHASE4_COVERAGE_TARGETS = {\n    "destinations": "basic API regression",\n    "rides": "capacity/waitlist scenarios",\n    "chat": "membership + persistence",\n}\n
+PHASE4_INDEXES = [
+    "idx_destinations_region_rating",
+    "idx_rides_start_time_status",
+    "idx_ride_participants_ride_status",
+]
+
+PHASE4_COVERAGE_TARGETS = {
+    "destinations": "basic API regression",
+    "rides": "capacity/waitlist scenarios",
+    "chat": "membership + persistence",
+}
+
