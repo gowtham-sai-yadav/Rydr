@@ -1,1 +1,10 @@
-export const phase4ColorTokens = {\n  canvas: "#0f0f10",\n  panel: "#17181a",\n  ink: "#f7f7f7",\n  accentPrimary: "#f6c948",\n  accentSuccess: "#4cc38a",\n} as const;\n\nexport const phase4Spacing = [4, 8, 12, 16, 24, 32] as const;\n
+export const phase4ColorTokens = {
+  canvas: "#0f0f10",
+  panel: "#17181a",
+  ink: "#f7f7f7",
+  accentPrimary: "#f6c948",
+  accentSuccess: "#4cc38a",
+} as const;
+
+export const phase4Spacing = [4, 8, 12, 16, 24, 32] as const;
+
