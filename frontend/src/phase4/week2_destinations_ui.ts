@@ -1,1 +1,16 @@
-export type DestinationCardView = {\n  id: number;\n  name: string;\n  region?: string;\n  avgRating: number;\n  reviewCount: number;\n  heroMediaUrl?: string;\n};\n\nexport type DestinationFilterView = {\n  query?: string;\n  vibes: string[];\n  vehicleFit: string[];\n  maxCost?: "low" | "mid" | "high";\n};\n
+export type DestinationCardView = {
+  id: number;
+  name: string;
+  region?: string;
+  avgRating: number;
+  reviewCount: number;
+  heroMediaUrl?: string;
+};
+
+export type DestinationFilterView = {
+  query?: string;
+  vibes: string[];
+  vehicleFit: string[];
+  maxCost?: "low" | "mid" | "high";
+};
+
