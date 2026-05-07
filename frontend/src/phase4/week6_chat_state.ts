@@ -1,1 +1,13 @@
-export type ChatMessageView = {\n  id: number;\n  authorId: number;\n  body: string;\n  sentAtIso: string;\n};\n\nexport type ChatState = {\n  roomId: number;\n  messages: ChatMessageView[];\n  unreadCount: number;\n};\n
+export type ChatMessageView = {
+  id: number;
+  authorId: number;
+  body: string;
+  sentAtIso: string;
+};
+
+export type ChatState = {
+  roomId: number;
+  messages: ChatMessageView[];
+  unreadCount: number;
+};
+
