@@ -52,6 +52,14 @@ class UserOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     bike: Optional[BikeOut] = None
+    # M6 follow surface — populated by ``routers/users.py::_load_user_with_social``
+    # via scalar subqueries folded into the main SELECT (one round trip vs four).
+    # ``is_followed_by_me`` is False for anonymous callers, False for the
+    # caller's own profile (DB-level ``ck_follow_not_self`` makes the EXISTS
+    # query return zero rows naturally).
+    followers_count: int = 0
+    following_count: int = 0
+    is_followed_by_me: bool = False
 
     class Config:
         from_attributes = True

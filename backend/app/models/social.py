@@ -11,8 +11,10 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
+    Index,
     String,
     Text,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -38,6 +40,29 @@ class Follow(Base):
 
     __table_args__ = (
         CheckConstraint("follower_id != followed_id", name="ck_follow_not_self"),
+        # Added in M6 (audit: M1 left the table with only the composite PK,
+        # which doesn't help WHERE followed_id = :id lookups). Each index
+        # folds ``created_at DESC`` so the "newest first" sort served by
+        # ``_paginated_follow_list`` comes free.
+        #
+        # M6 audit #1 follow-up: the direction (DESC) must match the
+        # corresponding Alembic migration verbatim. ``text("created_at DESC")``
+        # is the portable way to express ordered-column index entries that
+        # mirrors ``sa.text(...)`` in the migration — using a bare
+        # ``"created_at"`` defaults to ASC, which produces an
+        # ``alembic --autogenerate`` diff on every run.
+        Index(
+            "idx_follows_followed_created",
+            "followed_id",
+            text("created_at DESC"),
+            postgresql_using="btree",
+        ),
+        Index(
+            "idx_follows_follower_created",
+            "follower_id",
+            text("created_at DESC"),
+            postgresql_using="btree",
+        ),
     )
 
     follower = relationship(

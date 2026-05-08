@@ -29,7 +29,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, func, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, selectinload
 
@@ -44,6 +44,7 @@ from app.models.ride import (
     RidePlanVisibility,
 )
 from app.models.ride_log import RideLog
+from app.models.social import Follow
 from app.models.user import User
 from app.schemas.destination import DestinationSummary
 from app.schemas.ride import (
@@ -223,10 +224,14 @@ def ride_feed(
     region: Optional[str] = Query(default=None, max_length=100),
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
+    following_only: bool = Query(
+        default=False,
+        description="Only show rides captained by users I follow. Requires authentication.",
+    ),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=50),
     db: Session = Depends(get_db),
-    _user: Optional[User] = Depends(get_optional_user),
+    user: Optional[User] = Depends(get_optional_user),
 ) -> RidePlanListResponse:
     today = date.today()
     query = (
@@ -252,6 +257,20 @@ def ride_feed(
         query = query.filter(RidePlan.planned_date >= date_from)
     if date_to is not None:
         query = query.filter(RidePlan.planned_date <= date_to)
+    if following_only:
+        # M6: filter to captains in the set of users I follow. Requires auth —
+        # otherwise the question "rides I follow" is meaningless.
+        if user is None:
+            raise HTTPException(
+                status_code=400,
+                detail="following_only=true requires authentication",
+            )
+        followed_ids = (
+            select(Follow.followed_id)
+            .where(Follow.follower_id == user.id)
+            .scalar_subquery()
+        )
+        query = query.filter(RidePlan.captain_id.in_(followed_ids))
 
     total = query.with_entities(func.count(RidePlan.id)).scalar() or 0
     rows = (
