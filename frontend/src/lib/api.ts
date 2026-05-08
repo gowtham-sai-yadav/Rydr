@@ -99,6 +99,42 @@ class ApiClient {
     return this.request<unknown>(`/api/users/${userId}`, { headers: this.headers() });
   }
 
+  // Follow (M6)
+  followUser(userId: string) {
+    return this.request<unknown>(`/api/users/${userId}/follow`, {
+      method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  unfollowUser(userId: string) {
+    // Server returns 204; request<T> short-circuits the body parse (M5 audit #2)
+    return this.request<void>(`/api/users/${userId}/follow`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+  }
+
+  getFollowers(userId: string, params: { page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<unknown>(`/api/users/${userId}/followers${suffix}`, {
+      headers: this.headers(),
+    });
+  }
+
+  getFollowing(userId: string, params: { page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<unknown>(`/api/users/${userId}/following${suffix}`, {
+      headers: this.headers(),
+    });
+  }
+
   // Rides (M3 — destination-anchored ride planning)
   //
   // NOTE: the existing `/rides/create` page is still on the old PoC payload
@@ -110,6 +146,7 @@ class ApiClient {
     region?: string;
     date_from?: string;
     date_to?: string;
+    following_only?: boolean;  // M6: requires auth when true
     page?: number;
     limit?: number;
   } = {}) {
@@ -118,6 +155,7 @@ class ApiClient {
     if (params.region) qs.set("region", params.region);
     if (params.date_from) qs.set("date_from", params.date_from);
     if (params.date_to) qs.set("date_to", params.date_to);
+    if (params.following_only) qs.set("following_only", "true");
     if (params.page) qs.set("page", String(params.page));
     if (params.limit) qs.set("limit", String(params.limit));
     const suffix = qs.toString() ? `?${qs.toString()}` : "";

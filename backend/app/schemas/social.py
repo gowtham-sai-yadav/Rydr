@@ -7,14 +7,35 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.user import UserBrief
+
 
 class FollowOut(BaseModel):
+    """Raw follow edge — used as the response to POST /follow."""
+
     follower_id: UUID
     followed_id: UUID
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class FollowEdgeOut(BaseModel):
+    """Edge projected for list responses: the "other" user in the
+    relationship is embedded as a UserBrief. The handler decides which side
+    is "other" — for ``/followers`` the embedded user is the follower; for
+    ``/following`` it's the followed."""
+
+    user: UserBrief
+    created_at: datetime
+
+
+class FollowListResponse(BaseModel):
+    edges: List[FollowEdgeOut] = []
+    total: int
+    page: int
+    limit: int
 
 
 class DiscussionCommentOut(BaseModel):

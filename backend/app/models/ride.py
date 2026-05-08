@@ -15,11 +15,13 @@ from sqlalchemy import (
     Enum as SQLEnum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     Time,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -135,6 +137,20 @@ class RidePlan(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        # M6 audit #4: index supports both ``/api/rides/mine`` (filters on
+        # ``captain_id``) and the M6 ``/api/rides/feed?following_only=true``
+        # path (``captain_id IN (subquery)``). ``planned_date DESC`` is folded
+        # in so the planner can serve the typical "upcoming first" sort from
+        # the index without a separate Sort step. Postgres doesn't auto-index
+        # FK columns, so the M1 schema was missing this.
+        Index(
+            "idx_ride_plans_captain_planned_date",
+            "captain_id",
+            text("planned_date DESC"),
+        ),
     )
 
     destination = relationship("Destination", back_populates="ride_plans")
