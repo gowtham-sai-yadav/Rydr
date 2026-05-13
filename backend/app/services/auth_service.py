@@ -1,10 +1,12 @@
 """Auth service — password hashing, JWT issue, user creation.
 
 Extended in M1 to accept optional bike mileage / type and home_location at signup.
+M9 hardening: tokens now carry an ``iss`` claim and use timezone-aware
+``exp`` so decoders can demand the issuer + reject tokens without exp/sub.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from jose import jwt
@@ -17,6 +19,9 @@ from app.models.user import User
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# M9: issuer claim — pinned so decoders can reject tokens minted elsewhere.
+JWT_ISSUER = "rydr"
+
 
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
@@ -27,9 +32,18 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(user_id: str) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    # M9: timezone-aware ``exp`` (was ``datetime.utcnow()``, naive). Naive
+    # datetimes round-trip through python-jose without the timezone, so the
+    # decoder's clock skew tolerance can subtly mismatch the encoder's.
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    )
     return jwt.encode(
-        {"sub": str(user_id), "exp": expire},
+        {
+            "sub": str(user_id),
+            "iss": JWT_ISSUER,
+            "exp": expire,
+        },
         settings.SECRET_KEY,
         algorithm=settings.ALGORITHM,
     )

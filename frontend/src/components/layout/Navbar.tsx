@@ -4,9 +4,10 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
 const navItems = [
+  { href: "/destinations", label: "Discover" },
   { href: "/rides", label: "Rides" },
-  { href: "/profile", label: "Profile" },
   { href: "/chat", label: "Chat" },
+  { href: "/profile", label: "Profile" },
 ];
 
 export default function Navbar() {
