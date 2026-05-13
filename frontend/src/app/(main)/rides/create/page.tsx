@@ -1,78 +1,69 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
+import type { DestinationSummary } from "@/lib/api.types";
 
-interface StopForm {
-  name: string;
-  description: string;
-  latitude: string;
-  longitude: string;
-  is_break_stop: boolean;
-}
 
-export default function CreateRidePage() {
+function CreateRideForm() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const searchParams = useSearchParams();
 
+  // Destination picker — fetched once on mount.
+  const [destinations, setDestinations] = useState<DestinationSummary[]>([]);
+  const [destinationsLoading, setDestinationsLoading] = useState(true);
+
+  const [destinationId, setDestinationId] = useState(
+    searchParams.get("destination") || "",
+  );
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
-  const [rideDate, setRideDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
-  const [difficulty, setDifficulty] = useState("moderate");
-  const [bikeType, setBikeType] = useState("");
+  const [plannedDate, setPlannedDate] = useState("");
+  const [plannedStartTime, setPlannedStartTime] = useState("");
+  const [estimatedEndTime, setEstimatedEndTime] = useState("");
+  const [visibility, setVisibility] = useState<"group" | "solo">("group");
+  const [difficulty, setDifficulty] = useState<"easy" | "moderate" | "hard" | "expert">("moderate");
+  const [recommendedBikeType, setRecommendedBikeType] = useState("");
   const [breakSchedule, setBreakSchedule] = useState("");
   const [maxRiders, setMaxRiders] = useState("10");
-  const [stops, setStops] = useState<StopForm[]>([
-    { name: "", description: "", latitude: "", longitude: "", is_break_stop: false },
-  ]);
 
-  const addStop = () => {
-    setStops([...stops, { name: "", description: "", latitude: "", longitude: "", is_break_stop: false }]);
-  };
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const removeStop = (index: number) => {
-    if (stops.length === 1) return;
-    setStops(stops.filter((_, i) => i !== index));
-  };
-
-  const updateStop = (index: number, field: keyof StopForm, value: string | boolean) => {
-    const updated = [...stops];
-    updated[index] = { ...updated[index], [field]: value };
-    setStops(updated);
-  };
+  useEffect(() => {
+    api
+      .listDestinations({ limit: 100 })
+      .then((res) => setDestinations(res.destinations))
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load destinations"))
+      .finally(() => setDestinationsLoading(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!destinationId) {
+      setError("Please pick a destination");
+      return;
+    }
     setLoading(true);
     try {
-      const res = await api.createRide({
+      // Backend wants HH:MM:SS; <input type="time"> emits HH:MM — pad seconds.
+      const padSeconds = (t: string) => (t.length === 5 ? `${t}:00` : t);
+      const ride = await api.createRide({
+        destination_id: destinationId,
         title,
         description: description || null,
         thumbnail_url: thumbnailUrl || null,
-        ride_date: rideDate,
-        start_time: startTime,
-        estimated_end_time: endTime || null,
+        planned_date: plannedDate,
+        planned_start_time: padSeconds(plannedStartTime),
+        estimated_end_time: estimatedEndTime ? padSeconds(estimatedEndTime) : null,
+        visibility,
         difficulty_level: difficulty,
-        recommended_bike_type: bikeType || null,
+        recommended_bike_type: recommendedBikeType || null,
         break_schedule: breakSchedule || null,
         max_riders: parseInt(maxRiders) || 10,
-        stops: stops
-          .filter((s) => s.name.trim())
-          .map((s, i) => ({
-            name: s.name,
-            description: s.description || null,
-            stop_order: i + 1,
-            latitude: s.latitude ? parseFloat(s.latitude) : null,
-            longitude: s.longitude ? parseFloat(s.longitude) : null,
-            is_break_stop: s.is_break_stop,
-          })),
       });
-      const ride = res as { id: string };
       router.push(`/rides/${ride.id}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to create ride");
@@ -83,7 +74,7 @@ export default function CreateRidePage() {
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-white mb-6">Create a Ride</h1>
+      <h1 className="text-2xl font-bold text-white mb-6">Plan a Ride</h1>
 
       {error && (
         <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
@@ -92,7 +83,40 @@ export default function CreateRidePage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Basic Info */}
+        {/* Destination */}
+        <div className="bg-gray-800 rounded-xl p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-white">Destination</h2>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Where to? *</label>
+            {destinationsLoading ? (
+              <p className="text-gray-500 text-sm">Loading destinations…</p>
+            ) : (
+              <select
+                value={destinationId}
+                onChange={(e) => setDestinationId(e.target.value)}
+                required
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">— pick a destination —</option>
+                {destinations.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}
+                    {d.region ? ` · ${d.region}` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+            <p className="text-xs text-gray-500 mt-1">
+              Don&apos;t see your spot?{" "}
+              <a href="/destinations/new" className="text-orange-500 hover:text-orange-400">
+                Add a destination
+              </a>
+              .
+            </p>
+          </div>
+        </div>
+
+        {/* Basic info */}
         <div className="bg-gray-800 rounded-xl p-6 space-y-4">
           <h2 className="text-lg font-semibold text-white">Ride Details</h2>
           <div>
@@ -101,8 +125,9 @@ export default function CreateRidePage() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               required
+              maxLength={200}
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-              placeholder="e.g. Pacific Coast Sunrise Run"
+              placeholder="e.g. Sunday sunrise to Nandi"
             />
           </div>
           <div>
@@ -112,7 +137,7 @@ export default function CreateRidePage() {
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-              placeholder="Describe the ride experience..."
+              placeholder="Pace, meet point, what to bring…"
             />
           </div>
           <div>
@@ -121,12 +146,12 @@ export default function CreateRidePage() {
               value={thumbnailUrl}
               onChange={(e) => setThumbnailUrl(e.target.value)}
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-              placeholder="https://images.unsplash.com/..."
+              placeholder="https://..."
             />
           </div>
         </div>
 
-        {/* Timing */}
+        {/* Schedule */}
         <div className="bg-gray-800 rounded-xl p-6 space-y-4">
           <h2 className="text-lg font-semibold text-white">Schedule</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -134,43 +159,54 @@ export default function CreateRidePage() {
               <label className="block text-sm text-gray-400 mb-1">Date *</label>
               <input
                 type="date"
-                value={rideDate}
-                onChange={(e) => setRideDate(e.target.value)}
+                value={plannedDate}
+                onChange={(e) => setPlannedDate(e.target.value)}
                 required
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Start Time *</label>
+              <label className="block text-sm text-gray-400 mb-1">Start *</label>
               <input
                 type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
+                value={plannedStartTime}
+                onChange={(e) => setPlannedStartTime(e.target.value)}
                 required
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">End Time</label>
+              <label className="block text-sm text-gray-400 mb-1">End (est.)</label>
               <input
                 type="time"
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
+                value={estimatedEndTime}
+                onChange={(e) => setEstimatedEndTime(e.target.value)}
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
           </div>
         </div>
 
-        {/* Ride Config */}
+        {/* Configuration */}
         <div className="bg-gray-800 rounded-xl p-6 space-y-4">
           <h2 className="text-lg font-semibold text-white">Configuration</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
+              <label className="block text-sm text-gray-400 mb-1">Visibility</label>
+              <select
+                value={visibility}
+                onChange={(e) => setVisibility(e.target.value as "group" | "solo")}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="group">Group ride (others can join)</option>
+                <option value="solo">Solo (just me)</option>
+              </select>
+            </div>
+            <div>
               <label className="block text-sm text-gray-400 mb-1">Difficulty</label>
               <select
                 value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value)}
+                onChange={(e) => setDifficulty(e.target.value as typeof difficulty)}
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
               >
                 <option value="easy">Easy</option>
@@ -180,116 +216,58 @@ export default function CreateRidePage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Bike Type</label>
-              <input
-                value={bikeType}
-                onChange={(e) => setBikeType(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                placeholder="e.g. Sport / Naked"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Max Riders</label>
+              <label className="block text-sm text-gray-400 mb-1">Max riders</label>
               <input
                 type="number"
                 value={maxRiders}
                 onChange={(e) => setMaxRiders(e.target.value)}
-                min={2}
+                min={1}
                 max={50}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                disabled={visibility === "solo"}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
           </div>
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Break Schedule</label>
-            <input
-              value={breakSchedule}
-              onChange={(e) => setBreakSchedule(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-              placeholder="e.g. Coffee break at mile 30, lunch at endpoint"
-            />
-          </div>
-        </div>
-
-        {/* Stops */}
-        <div className="bg-gray-800 rounded-xl p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">Stops</h2>
-            <button
-              type="button"
-              onClick={addStop}
-              className="text-orange-500 hover:text-orange-400 text-sm font-medium flex items-center gap-1"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Add Stop
-            </button>
-          </div>
-
-          {stops.map((stop, i) => (
-            <div key={i} className="bg-gray-700/50 rounded-lg p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-orange-500">Stop {i + 1}</span>
-                {stops.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeStop(i)}
-                    className="text-red-400 hover:text-red-300 text-sm"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input
-                  value={stop.name}
-                  onChange={(e) => updateStop(i, "name", e.target.value)}
-                  placeholder="Stop name *"
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-                <input
-                  value={stop.description}
-                  onChange={(e) => updateStop(i, "description", e.target.value)}
-                  placeholder="Description"
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 items-center">
-                <input
-                  value={stop.latitude}
-                  onChange={(e) => updateStop(i, "latitude", e.target.value)}
-                  placeholder="Latitude"
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-                <input
-                  value={stop.longitude}
-                  onChange={(e) => updateStop(i, "longitude", e.target.value)}
-                  placeholder="Longitude"
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-                <label className="flex items-center gap-2 text-sm text-gray-300">
-                  <input
-                    type="checkbox"
-                    checked={stop.is_break_stop}
-                    onChange={(e) => updateStop(i, "is_break_stop", e.target.checked)}
-                    className="rounded border-gray-600 text-orange-500 focus:ring-orange-500"
-                  />
-                  Break stop
-                </label>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Recommended bike type</label>
+              <input
+                value={recommendedBikeType}
+                onChange={(e) => setRecommendedBikeType(e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                placeholder="e.g. Adventure, 150cc+"
+              />
             </div>
-          ))}
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Break schedule</label>
+              <input
+                value={breakSchedule}
+                onChange={(e) => setBreakSchedule(e.target.value)}
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                placeholder="e.g. Tea at km 30"
+              />
+            </div>
+          </div>
         </div>
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || destinationsLoading}
           className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
         >
-          {loading ? "Creating ride..." : "Create Ride"}
+          {loading ? "Creating ride…" : "Create Ride"}
         </button>
       </form>
     </div>
+  );
+}
+
+
+export default function CreateRidePage() {
+  // useSearchParams must be inside a Suspense boundary in app router.
+  return (
+    <Suspense fallback={<div className="text-gray-400 text-center py-8">Loading…</div>}>
+      <CreateRideForm />
+    </Suspense>
   );
 }
