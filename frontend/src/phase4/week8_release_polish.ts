@@ -1,1 +1,7 @@
-export const releasePolishItems = {\n  emptyStates: true,\n  errorStates: true,\n  consistencyPass: true,\n  crossBrowserCheck: ["chrome", "safari", "firefox"],\n} as const;\n
+export const releasePolishItems = {
+  emptyStates: true,
+  errorStates: true,
+  consistencyPass: true,
+  crossBrowserCheck: ["chrome", "safari", "firefox"],
+} as const;
+
