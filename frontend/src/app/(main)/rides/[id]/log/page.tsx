@@ -187,20 +187,20 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-orange-500" />
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
       </div>
     );
   }
 
   if (!ride || !log) {
-    return <div className="text-center py-12 text-gray-400">{error || "Couldn’t load this ride log."}</div>;
+    return <div className="text-center py-12 text-mute">{error || "Couldn’t load this ride log."}</div>;
   }
 
   if (log.rider_id !== user?.id) {
     return (
-      <div className="text-center py-12 text-gray-400">
+      <div className="text-center py-12 text-mute">
         Only the rider can edit their own log.{" "}
-        <Link href={`/rides/${id}`} className="text-orange-500">Back to ride</Link>
+        <Link href={`/rides/${id}`} className="text-accent-blue">Back to ride</Link>
       </div>
     );
   }
@@ -208,41 +208,41 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-12">
       <div>
-        <Link href={`/rides/${ride.id}`} className="text-orange-500 hover:text-orange-400 text-sm">
+        <Link href={`/rides/${ride.id}`} className="text-accent-blue hover:text-accent-blue text-sm">
           ← {ride.title}
         </Link>
-        <h1 className="text-2xl font-bold text-white mt-1">Log this ride</h1>
+        <h1 className="text-2xl font-bold text-ink mt-1">Log this ride</h1>
         {ride.destination && (
-          <p className="text-gray-400 text-sm">at {ride.destination.name}</p>
+          <p className="text-mute text-sm">at {ride.destination.name}</p>
         )}
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg text-sm">
+        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg text-sm">
           {error}
         </div>
       )}
 
       {/* Feedback */}
-      <div className="bg-gray-800 rounded-xl p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-white">How did it go?</h2>
+      <div className="bg-surface-card rounded-xl p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-ink">How did it go?</h2>
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Total cost (₹)</label>
+            <label className="block text-sm text-mute mb-1">Total cost (₹)</label>
             <input
               type="number"
               value={actualCost}
               onChange={(e) => setActualCost(e.target.value)}
               min={0}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Road condition</label>
+            <label className="block text-sm text-mute mb-1">Road condition</label>
             <select
               value={roadCondition}
               onChange={(e) => setRoadCondition(e.target.value as typeof roadCondition)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
             >
               <option value="">—</option>
               <option value="good">Good</option>
@@ -252,11 +252,11 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Recommend?</label>
+            <label className="block text-sm text-mute mb-1">Recommend?</label>
             <select
               value={recommended}
               onChange={(e) => setRecommended(e.target.value as typeof recommended)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
             >
               <option value="">—</option>
               <option value="yes">Yes — go for it</option>
@@ -264,38 +264,38 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Ended at</label>
+            <label className="block text-sm text-mute mb-1">Ended at</label>
             <input
               type="datetime-local"
               value={endTs}
               onChange={(e) => setEndTs(e.target.value)}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
             />
           </div>
         </div>
         <div>
-          <label className="block text-sm text-gray-400 mb-1">Notes</label>
+          <label className="block text-sm text-mute mb-1">Notes</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
             maxLength={5000}
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
             placeholder="Highlights, gotchas, what you'd tell a friend…"
           />
         </div>
         <button
           onClick={saveFeedback}
           disabled={savingPatch}
-          className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg"
+          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink font-medium py-2.5 rounded-lg"
         >
           {savingPatch ? "Saving…" : "Save feedback"}
         </button>
       </div>
 
       {/* Media */}
-      <div className="bg-gray-800 rounded-xl p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-white">Photos & videos</h2>
+      <div className="bg-surface-card rounded-xl p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-ink">Photos & videos</h2>
 
         {log.media.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
@@ -309,7 +309,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
                 />
                 <button
                   onClick={() => removeMedia(m.id)}
-                  className="absolute top-1 right-1 bg-red-600/80 hover:bg-red-700 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute top-1 right-1 bg-accent-red/80 hover:bg-accent-red text-ink text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   Remove
                 </button>
@@ -319,7 +319,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
         )}
 
         <div>
-          <label className="block text-sm text-gray-400 mb-1">Upload (image or video)</label>
+          <label className="block text-sm text-mute mb-1">Upload (image or video)</label>
           <input
             type="file"
             accept="image/*,video/*"
@@ -329,24 +329,24 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
               if (f) uploadFile(f);
               e.target.value = "";
             }}
-            className="block w-full text-sm text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-orange-600 file:text-white file:font-medium file:cursor-pointer hover:file:bg-orange-700 disabled:opacity-50"
+            className="block w-full text-sm text-body file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:bg-ink file:text-canvas file:font-medium file:cursor-pointer hover:file:bg-surface-light disabled:opacity-50"
           />
-          {uploading && <p className="text-xs text-gray-400 mt-2">Uploading…</p>}
+          {uploading && <p className="text-xs text-mute mt-2">Uploading…</p>}
         </div>
 
-        <div className="border-t border-gray-700 pt-3">
-          <label className="block text-sm text-gray-400 mb-1">Or paste an image URL</label>
+        <div className="border-t border-hairline-strong pt-3">
+          <label className="block text-sm text-mute mb-1">Or paste an image URL</label>
           <div className="flex gap-2">
             <input
               value={manualUrl}
               onChange={(e) => setManualUrl(e.target.value)}
               placeholder="https://..."
-              className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="flex-1 bg-surface-elevated border border-hairline-strong rounded-lg px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
             />
             <button
               onClick={confirmManualUrl}
               disabled={uploading || !manualUrl.trim()}
-              className="bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium"
+              className="bg-surface-elevated hover:bg-surface-elevated disabled:opacity-50 text-ink px-4 py-2 rounded-lg text-sm font-medium"
             >
               Attach
             </button>
@@ -355,8 +355,8 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
       </div>
 
       {/* Rating */}
-      <div className="bg-gray-800 rounded-xl p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-white">
+      <div className="bg-surface-card rounded-xl p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-ink">
           Rate this destination
         </h2>
         <div className="flex items-center gap-2">
@@ -366,29 +366,29 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
               type="button"
               onClick={() => setStars(n)}
               className={`text-3xl transition-colors ${
-                n <= stars ? "text-yellow-400" : "text-gray-600 hover:text-gray-500"
+                n <= stars ? "text-accent-yellow" : "text-gray-600 hover:text-stone"
               }`}
             >
               ★
             </button>
           ))}
-          {stars > 0 && <span className="text-gray-400 text-sm ml-2">{stars} / 5</span>}
+          {stars > 0 && <span className="text-mute text-sm ml-2">{stars} / 5</span>}
         </div>
         <div>
-          <label className="block text-sm text-gray-400 mb-1">Review (optional)</label>
+          <label className="block text-sm text-mute mb-1">Review (optional)</label>
           <textarea
             value={review}
             onChange={(e) => setReview(e.target.value)}
             rows={3}
             maxLength={2000}
-            className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+            className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
             placeholder="What worked, what didn't…"
           />
         </div>
         <button
           onClick={saveRating}
           disabled={savingRating || stars < 1}
-          className="w-full bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg"
+          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink font-medium py-2.5 rounded-lg"
         >
           {savingRating
             ? "Submitting…"
@@ -400,7 +400,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
 
       <Link
         href={`/destinations/${ride.destination_id}`}
-        className="block text-center text-orange-500 hover:text-orange-400 text-sm py-2"
+        className="block text-center text-accent-blue hover:text-accent-blue text-sm py-2"
       >
         See the destination page →
       </Link>

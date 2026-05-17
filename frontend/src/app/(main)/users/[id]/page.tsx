@@ -71,26 +71,26 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-orange-500" />
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
       </div>
     );
   }
 
   if (!profile) {
-    return <div className="text-center py-12 text-gray-400">{error || "User not found"}</div>;
+    return <div className="text-center py-12 text-mute">{error || "User not found"}</div>;
   }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-12">
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg text-sm">
+        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg text-sm">
           {error}
         </div>
       )}
 
       {/* Header */}
-      <div className="bg-gray-800 rounded-xl p-6 flex flex-col sm:flex-row gap-4 items-center sm:items-start">
-        <div className="w-20 h-20 rounded-full bg-orange-600 flex items-center justify-center text-3xl font-bold text-white">
+      <div className="bg-surface-card rounded-xl p-6 flex flex-col sm:flex-row gap-4 items-center sm:items-start">
+        <div className="w-20 h-20 rounded-full bg-ink text-canvas flex items-center justify-center text-3xl font-bold text-ink">
           {profile.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -103,19 +103,19 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           )}
         </div>
         <div className="flex-1 text-center sm:text-left">
-          <h1 className="text-2xl font-bold text-white">{profile.name}</h1>
+          <h1 className="text-2xl font-bold text-ink">{profile.name}</h1>
           {profile.home_city && (
-            <p className="text-gray-400 text-sm">{profile.home_city}</p>
+            <p className="text-mute text-sm">{profile.home_city}</p>
           )}
-          {profile.bio && <p className="text-gray-300 text-sm mt-2">{profile.bio}</p>}
+          {profile.bio && <p className="text-body text-sm mt-2">{profile.bio}</p>}
           <div className="flex justify-center sm:justify-start gap-6 mt-3">
             <Link href={`/users/${profile.id}/followers`} className="text-sm hover:opacity-80">
-              <span className="text-white font-semibold">{profile.followers_count}</span>{" "}
-              <span className="text-gray-400">followers</span>
+              <span className="text-ink font-semibold">{profile.followers_count}</span>{" "}
+              <span className="text-mute">followers</span>
             </Link>
             <Link href={`/users/${profile.id}/following`} className="text-sm hover:opacity-80">
-              <span className="text-white font-semibold">{profile.following_count}</span>{" "}
-              <span className="text-gray-400">following</span>
+              <span className="text-ink font-semibold">{profile.following_count}</span>{" "}
+              <span className="text-mute">following</span>
             </Link>
           </div>
         </div>
@@ -125,8 +125,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
             disabled={busy}
             className={`px-6 py-2 rounded-lg font-medium transition-colors ${
               profile.is_followed_by_me
-                ? "bg-gray-700 text-white hover:bg-gray-600"
-                : "bg-orange-600 text-white hover:bg-orange-700"
+                ? "bg-surface-elevated text-ink hover:bg-surface-elevated"
+                : "bg-ink text-canvas hover:bg-surface-light"
             } disabled:opacity-50`}
           >
             {profile.is_followed_by_me ? "Following" : "Follow"}
@@ -135,7 +135,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         {isSelf && (
           <Link
             href="/profile"
-            className="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg font-medium"
+            className="bg-surface-elevated hover:bg-surface-elevated text-ink px-6 py-2 rounded-lg font-medium"
           >
             Edit profile
           </Link>
@@ -144,26 +144,26 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
 
       {/* Bike */}
       {profile.bike && (profile.bike.name || profile.bike.model) && (
-        <div className="bg-gray-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-3">Bike</h2>
+        <div className="bg-surface-card rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-ink mb-3">Bike</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             <div>
-              <p className="text-xs text-gray-400 uppercase">Name</p>
-              <p className="text-white font-medium">{profile.bike.name || "—"}</p>
+              <p className="text-xs text-mute uppercase">Name</p>
+              <p className="text-ink font-medium">{profile.bike.name || "—"}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400 uppercase">Model</p>
-              <p className="text-white font-medium">{profile.bike.model || "—"}</p>
+              <p className="text-xs text-mute uppercase">Model</p>
+              <p className="text-ink font-medium">{profile.bike.model || "—"}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-400 uppercase">Engine</p>
-              <p className="text-white font-medium">
+              <p className="text-xs text-mute uppercase">Engine</p>
+              <p className="text-ink font-medium">
                 {profile.bike.engine_cc ? `${profile.bike.engine_cc} cc` : "—"}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-400 uppercase">Type</p>
-              <p className="text-white font-medium capitalize">{profile.bike.type}</p>
+              <p className="text-xs text-mute uppercase">Type</p>
+              <p className="text-ink font-medium capitalize">{profile.bike.type}</p>
             </div>
           </div>
         </div>

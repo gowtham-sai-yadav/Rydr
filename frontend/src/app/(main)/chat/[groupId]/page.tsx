@@ -128,41 +128,61 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-orange-500" />
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
       </div>
     );
   }
 
-  const ride = group?.ride;
+  // The backend deliberately returns 404 for non-members (don't leak group
+  // existence). Most paths into this page should be hidden upstream, but if
+  // the user navigates here directly (old link, pending approval), show a
+  // useful empty-state instead of leaving the send input hanging beneath a
+  // bare error toast.
+  if (!group) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16 space-y-4">
+        <h2 className="heading-md">Chat unavailable</h2>
+        <p className="text-mute text-sm">
+          {error ||
+            "This chat group doesn't exist, or you're not an approved participant of the ride."}
+        </p>
+        <p className="text-mute text-sm">
+          Captains approve riders from the ride detail page. Once you&apos;re
+          approved, the chat will open here.
+        </p>
+        <Link href="/rides" className="link text-sm">
+          ← Back to rides
+        </Link>
+      </div>
+    );
+  }
+
+  const ride = group.ride;
   const isCancelled = ride?.status === "cancelled";
 
   return (
     <div className="max-w-2xl mx-auto flex flex-col" style={{ height: "calc(100vh - 10rem)" }}>
-      {/* Header — ride context */}
-      {group && (
-        <div className="bg-gray-800 rounded-xl p-4 mb-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-white font-semibold">{group.name}</h1>
-            {ride && (
-              <p className="text-gray-400 text-xs">
-                {ride.destination_name && `${ride.destination_name} · `}
-                {ride.planned_date} · {ride.participant_count} riders
-              </p>
-            )}
-          </div>
+      {/* Header — ride context. `group` is guaranteed non-null here by the
+          earlier short-circuit return. */}
+      <div className="card p-4 mb-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-ink font-semibold">{group.name}</h1>
           {ride && (
-            <Link
-              href={`/rides/${ride.id}`}
-              className="text-orange-500 hover:text-orange-400 text-sm font-medium"
-            >
-              Ride →
-            </Link>
+            <p className="text-mute text-xs">
+              {ride.destination_name && `${ride.destination_name} · `}
+              {ride.planned_date} · {ride.participant_count} riders
+            </p>
           )}
         </div>
-      )}
+        {ride && (
+          <Link href={`/rides/${ride.id}`} className="link text-sm font-medium">
+            Ride →
+          </Link>
+        )}
+      </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-2 rounded-lg mb-2 text-sm">
+        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-2 rounded-lg mb-2 text-sm">
           {error}
         </div>
       )}
@@ -170,7 +190,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
       {/* Messages */}
       <div className="flex-1 overflow-y-auto space-y-4 pb-4">
         {messages.length === 0 ? (
-          <div className="text-center text-gray-500 py-12 text-sm">
+          <div className="text-center text-stone py-12 text-sm">
             No messages yet — say hi 👋
           </div>
         ) : (
@@ -181,22 +201,22 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
                 <div className={`max-w-xs sm:max-w-md ${isMine ? "order-2" : ""}`}>
                   {!isMine && (
                     <div className="flex items-center gap-2 mb-1">
-                      <div className="w-6 h-6 rounded-full bg-orange-600 flex items-center justify-center text-xs font-bold text-white">
+                      <div className="w-6 h-6 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold text-ink">
                         {msg.author.name.charAt(0)}
                       </div>
-                      <span className="text-gray-400 text-xs">{msg.author.name}</span>
+                      <span className="text-mute text-xs">{msg.author.name}</span>
                     </div>
                   )}
                   <div
                     className={`px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap break-words ${
                       isMine
-                        ? "bg-orange-600 text-white rounded-br-md"
-                        : "bg-gray-800 text-gray-200 rounded-bl-md"
+                        ? "bg-ink text-canvas rounded-br-md"
+                        : "bg-surface-card text-ink rounded-bl-md"
                     }`}
                   >
                     {msg.body}
                   </div>
-                  <p className={`text-xs text-gray-500 mt-1 ${isMine ? "text-right" : ""}`}>
+                  <p className={`text-xs text-stone mt-1 ${isMine ? "text-right" : ""}`}>
                     {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </p>
                 </div>
@@ -209,23 +229,23 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
 
       {/* Input */}
       {isCancelled ? (
-        <div className="pt-4 border-t border-gray-800 text-center text-gray-500 text-sm py-3">
+        <div className="pt-4 border-t border-hairline text-center text-stone text-sm py-3">
           This ride was cancelled — the chat is read-only.
         </div>
       ) : (
-        <form onSubmit={handleSend} className="flex gap-3 pt-4 border-t border-gray-800">
+        <form onSubmit={handleSend} className="flex gap-3 pt-4 border-t border-hairline">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type a message…"
             maxLength={2000}
             disabled={sending}
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-full px-5 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
+            className="flex-1 bg-surface-card border border-hairline-strong rounded-full px-5 py-3 text-ink placeholder:text-stone focus:outline-none focus:ring-2 focus:ring-ink/30 disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={sending || !input.trim()}
-            className="bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white w-12 h-12 rounded-full flex items-center justify-center transition-colors"
+            className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink w-12 h-12 rounded-full flex items-center justify-center transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
