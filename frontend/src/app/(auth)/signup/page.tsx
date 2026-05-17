@@ -48,23 +48,23 @@ export default function SignupPage() {
 
   return (
     <div className="w-full max-w-md">
-      <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold text-orange-500 mb-2">Ryder</h1>
-        <p className="text-gray-400">Join the ride.</p>
+      <div className="text-center mb-10">
+        <h1 className="display-xl mb-3">Rydr</h1>
+        <p className="text-charcoal body-md">Sign up to start planning rides.</p>
       </div>
 
-      <div className="bg-gray-800 rounded-xl p-8 shadow-lg">
-        <div className="flex items-center gap-3 mb-6">
-          <div className={`h-1 flex-1 rounded ${step >= 1 ? "bg-orange-500" : "bg-gray-600"}`} />
-          <div className={`h-1 flex-1 rounded ${step >= 2 ? "bg-orange-500" : "bg-gray-600"}`} />
+      <div className="card-bordered p-8">
+        <div className="flex items-center gap-2 mb-6">
+          <div className={`h-0.5 flex-1 rounded ${step >= 1 ? "bg-ink" : "bg-hairline-strong"}`} />
+          <div className={`h-0.5 flex-1 rounded ${step >= 2 ? "bg-ink" : "bg-hairline-strong"}`} />
         </div>
 
-        <h2 className="text-2xl font-semibold text-white mb-6">
+        <h2 className="heading-md text-ink mb-6">
           {step === 1 ? "Your details" : "Your bike"}
         </h2>
 
         {error && (
-          <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg mb-4 text-sm">
+          <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-md mb-4 text-sm">
             {error}
           </div>
         )}
@@ -72,110 +72,110 @@ export default function SignupPage() {
         {step === 1 ? (
           <form onSubmit={handleNext} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Name</label>
+              <label className="label-eyebrow block mb-2">Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                className="input"
                 placeholder="Your full name"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+              <label className="label-eyebrow block mb-2">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                className="input"
                 placeholder="you@example.com"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Phone (optional)</label>
+              <label className="label-eyebrow block mb-2">Phone (optional)</label>
               <input
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder="+1 234 567 890"
+                className="input"
+                placeholder="+91 98765 43210"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Password</label>
+              <label className="label-eyebrow block mb-2">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder="Min 6 characters"
+                minLength={8}
+                className="input"
+                placeholder="Min 8 characters"
               />
             </div>
-            <button
-              type="submit"
-              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 rounded-lg transition-colors"
-            >
-              Next: Bike Details
+            <button type="submit" className="btn btn-primary w-full h-11">
+              Continue
             </button>
           </form>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Bike Name</label>
+              <label className="label-eyebrow block mb-2">Bike name</label>
               <input
                 type="text"
                 value={bikeName}
                 onChange={(e) => setBikeName(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder='e.g. "Shadow"'
+                className="input"
+                placeholder='"Shadow"'
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Model</label>
+              <label className="label-eyebrow block mb-2">Model</label>
               <input
                 type="text"
                 value={bikeModel}
                 onChange={(e) => setBikeModel(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                placeholder="e.g. Honda CB650R"
+                className="input"
+                placeholder="Honda CB650R"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-300 mb-1">Year</label>
+              <label className="label-eyebrow block mb-2">Year</label>
               <input
                 type="number"
                 value={bikeYear}
                 onChange={(e) => setBikeYear(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                className="input"
                 placeholder="2024"
               />
             </div>
+            <p className="caption">
+              You can add mileage and home location on your profile after sign-up — they power cost estimates.
+            </p>
             <div className="flex gap-3">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="flex-1 border border-gray-600 text-gray-300 hover:bg-gray-700 font-semibold py-3 rounded-lg transition-colors"
+                className="btn btn-outline flex-1 h-11"
               >
                 Back
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="flex-1 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors"
+                className="btn btn-primary flex-1 h-11"
               >
-                {loading ? "Creating..." : "Create Account"}
+                {loading ? "Creating…" : "Create account"}
               </button>
             </div>
           </form>
         )}
 
-        <p className="text-center text-gray-400 mt-6 text-sm">
+        <p className="text-center text-charcoal mt-6 text-sm">
           Already have an account?{" "}
-          <Link href="/login" className="text-orange-500 hover:text-orange-400 font-medium">
+          <Link href="/login" className="link font-medium">
             Sign in
           </Link>
         </p>

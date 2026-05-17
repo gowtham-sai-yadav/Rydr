@@ -26,32 +26,32 @@ export default function FollowingListPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="max-w-2xl mx-auto space-y-4 pb-12">
-      <Link href={`/users/${id}`} className="text-orange-500 hover:text-orange-400 text-sm">
+      <Link href={`/users/${id}`} className="text-accent-blue hover:text-accent-blue text-sm">
         ← back
       </Link>
-      <h1 className="text-2xl font-bold text-white">Following · {total}</h1>
+      <h1 className="text-2xl font-bold text-ink">Following · {total}</h1>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg text-sm">
+        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg text-sm">
           {error}
         </div>
       )}
 
       {loading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-orange-500" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
         </div>
       ) : edges.length === 0 ? (
-        <p className="text-gray-400 text-center py-12">Not following anyone yet.</p>
+        <p className="text-mute text-center py-12">Not following anyone yet.</p>
       ) : (
         <div className="space-y-2">
           {edges.map((e) => (
             <Link
               key={e.user.id}
               href={`/users/${e.user.id}`}
-              className="flex items-center gap-3 bg-gray-800 hover:bg-gray-750 rounded-xl p-4 transition-colors"
+              className="flex items-center gap-3 bg-surface-card hover:bg-surface-elevated rounded-xl p-4 transition-colors"
             >
-              <div className="w-10 h-10 rounded-full bg-orange-600 flex items-center justify-center font-bold text-white">
+              <div className="w-10 h-10 rounded-full bg-ink text-canvas flex items-center justify-center font-bold text-ink">
                 {e.user.avatar_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -64,8 +64,8 @@ export default function FollowingListPage({ params }: { params: Promise<{ id: st
                 )}
               </div>
               <div className="flex-1">
-                <p className="text-white font-medium">{e.user.name}</p>
-                <p className="text-gray-500 text-xs">
+                <p className="text-ink font-medium">{e.user.name}</p>
+                <p className="text-stone text-xs">
                   since {new Date(e.created_at).toLocaleDateString()}
                 </p>
               </div>
