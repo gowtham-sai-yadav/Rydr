@@ -19,9 +19,7 @@ Create Date: 2026-05-28 00:00:00
 """
 from typing import Sequence, Union
 
-import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects.postgresql import UUID
 
 
 revision: str = "d4e7b9f1c8a3"
@@ -31,39 +29,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "badges",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("slug", sa.String(length=50), nullable=False),
-        sa.Column("name", sa.String(length=100), nullable=False),
-        sa.Column("description", sa.String(length=255), nullable=False),
-        sa.Column("icon_url", sa.String(length=500), nullable=True),
-        sa.UniqueConstraint("slug", name="uq_badges_slug"),
-    )
-
-    op.create_table(
-        "user_badges",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column(
-            "user_id",
-            UUID(as_uuid=True),
-            sa.ForeignKey("users.id", ondelete="CASCADE"),
-            nullable=False,
-        ),
-        sa.Column(
-            "badge_id",
-            UUID(as_uuid=True),
-            sa.ForeignKey("badges.id", ondelete="CASCADE"),
-            nullable=False,
-        ),
-        sa.Column(
-            "earned_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-        sa.UniqueConstraint("user_id", "badge_id", name="uq_user_badge"),
-    )
+    # "badges" and "user_badges" were already created as forward-looking
+    # stubs in the M1 destination-schema migration (b4e6c8f2a1d3) — creating
+    # either again here fails on a fresh database. Only the two read-path
+    # indexes are new.
     op.create_index(
         "idx_user_badges_user_id", "user_badges", ["user_id"]
     )
@@ -75,5 +44,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("idx_user_badges_badge_id", table_name="user_badges")
     op.drop_index("idx_user_badges_user_id", table_name="user_badges")
-    op.drop_table("user_badges")
-    op.drop_table("badges")
