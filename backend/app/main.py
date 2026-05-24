@@ -2,7 +2,20 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, badges, chat, destinations, ride_logs, rides, tags, users
+from app.routers import (
+    auth,
+    badges,
+    chat,
+    destinations,
+    feed,
+    leaderboard,
+    moderation,
+    notifications,
+    ride_logs,
+    rides,
+    tags,
+    users,
+)
 
 app = FastAPI(title="Ryder API", version="1.0.0")
 
@@ -25,6 +38,10 @@ app.include_router(rides.router, prefix="/api/rides", tags=["Rides"])
 app.include_router(ride_logs.router, prefix="/api/ride-logs", tags=["RideLogs"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(badges.router, prefix="/api/badges", tags=["Badges"])
+app.include_router(feed.router, prefix="/api/feed", tags=["Feed"])
+app.include_router(leaderboard.router, prefix="/api/leaderboard", tags=["Leaderboard"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
+app.include_router(moderation.router, prefix="/api/moderation", tags=["Moderation"])
 
 
 @app.get("/api/health")
