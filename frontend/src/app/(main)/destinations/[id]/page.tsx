@@ -220,7 +220,7 @@ export default function DestinationDetailPage({
                 href={`/users/${r.id}`}
                 className="flex items-center gap-2 bg-surface-elevated/50 hover:bg-surface-elevated rounded-full pr-3 pl-1 py-1"
               >
-                <div className="w-7 h-7 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold text-ink">
+                <div className="w-7 h-7 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
                   {r.name.charAt(0)}
                 </div>
                 <span className="text-ink text-sm">{r.name}</span>
@@ -263,7 +263,7 @@ export default function DestinationDetailPage({
                       href={`/users/${r.user.id}`}
                       className="flex items-center gap-2 hover:opacity-80"
                     >
-                      <div className="w-7 h-7 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold text-ink">
+                      <div className="w-7 h-7 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
                         {r.user.name.charAt(0)}
                       </div>
                       <span className="text-ink text-sm font-medium">{r.user.name}</span>

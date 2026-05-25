@@ -220,7 +220,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
             href={`/users/${ride.captain.id}`}
             className="bg-surface-card rounded-xl p-4 flex items-center gap-4 hover:bg-surface-elevated transition-colors"
           >
-            <div className="w-12 h-12 rounded-full bg-ink text-canvas flex items-center justify-center text-lg font-bold text-ink">
+            <div className="w-12 h-12 rounded-full bg-ink text-canvas flex items-center justify-center text-lg font-bold">
               {ride.captain.name.charAt(0)}
             </div>
             <div>
@@ -326,7 +326,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
               <button
                 onClick={handleJoin}
                 disabled={busy}
-                className="flex-1 bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink py-3 rounded-lg font-medium transition-colors"
+                className="flex-1 bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 py-3 rounded-lg font-medium transition-colors"
               >
                 {busy ? "Requesting…" : "Request to join"}
               </button>
@@ -347,7 +347,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
               <button
                 onClick={handleStart}
                 disabled={busy}
-                className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink px-6 py-3 rounded-lg font-medium"
+                className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 px-6 py-3 rounded-lg font-medium"
               >
                 Start
               </button>
@@ -393,7 +393,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
               {participants.map((p) => (
                 <div key={p.id} className="flex items-center justify-between bg-surface-elevated/50 rounded-lg p-3">
                   <Link href={`/users/${p.user_id}`} className="flex items-center gap-3 hover:opacity-80">
-                    <div className="w-8 h-8 rounded-full bg-ink text-canvas flex items-center justify-center text-sm font-bold text-ink">
+                    <div className="w-8 h-8 rounded-full bg-ink text-canvas flex items-center justify-center text-sm font-bold">
                       {p.user?.name?.charAt(0) || "?"}
                     </div>
                     <div>

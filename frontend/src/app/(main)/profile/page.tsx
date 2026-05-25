@@ -122,7 +122,7 @@ export default function ProfilePage() {
       <div className="bg-surface-card rounded-xl p-6">
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-ink text-canvas flex items-center justify-center text-2xl font-bold text-ink">
+            <div className="w-16 h-16 rounded-full bg-ink text-canvas flex items-center justify-center text-2xl font-bold">
               {user.name.charAt(0)}
             </div>
             <div>
@@ -213,7 +213,7 @@ export default function ProfilePage() {
             <button
               onClick={handleSaveProfile}
               disabled={saving}
-              className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink px-6 py-2 rounded-lg text-sm font-medium"
+              className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 px-6 py-2 rounded-lg text-sm font-medium"
             >
               {saving ? "Saving…" : "Save changes"}
             </button>
@@ -335,7 +335,7 @@ export default function ProfilePage() {
             <button
               onClick={handleSaveBike}
               disabled={saving}
-              className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink px-6 py-2 rounded-lg text-sm font-medium"
+              className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 px-6 py-2 rounded-lg text-sm font-medium"
             >
               {saving ? "Saving…" : "Save bike"}
             </button>

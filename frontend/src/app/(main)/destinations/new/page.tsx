@@ -288,7 +288,7 @@ export default function NewDestinationPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink font-semibold py-3 rounded-lg transition-colors"
+          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 font-semibold py-3 rounded-lg transition-colors"
         >
           {loading ? "Submitting…" : "Add destination"}
         </button>

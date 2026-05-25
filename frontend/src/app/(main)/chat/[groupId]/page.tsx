@@ -201,7 +201,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
                 <div className={`max-w-xs sm:max-w-md ${isMine ? "order-2" : ""}`}>
                   {!isMine && (
                     <div className="flex items-center gap-2 mb-1">
-                      <div className="w-6 h-6 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold text-ink">
+                      <div className="w-6 h-6 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
                         {msg.author.name.charAt(0)}
                       </div>
                       <span className="text-mute text-xs">{msg.author.name}</span>
@@ -245,7 +245,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
           <button
             type="submit"
             disabled={sending || !input.trim()}
-            className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 text-ink w-12 h-12 rounded-full flex items-center justify-center transition-colors"
+            className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 w-12 h-12 rounded-full flex items-center justify-center transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
