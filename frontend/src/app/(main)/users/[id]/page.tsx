@@ -90,7 +90,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
 
       {/* Header */}
       <div className="bg-surface-card rounded-xl p-6 flex flex-col sm:flex-row gap-4 items-center sm:items-start">
-        <div className="w-20 h-20 rounded-full bg-ink text-canvas flex items-center justify-center text-3xl font-bold text-ink">
+        <div className="w-20 h-20 rounded-full bg-ink text-canvas flex items-center justify-center text-3xl font-bold">
           {profile.avatar_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
