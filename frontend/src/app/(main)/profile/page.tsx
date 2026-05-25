@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import type { BadgeOut, BikeType, UserBadgeOut, UserStatsOut } from "@/lib/api.types";
 import { BadgeShelf } from "@/components/badges/BadgeShelf";
+import { RideStatsPanel } from "@/components/profile/RideStatsPanel";
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
@@ -378,6 +379,14 @@ export default function ProfilePage() {
             <p className="text-xs text-mute uppercase mt-1">Completed</p>
           </div>
         </div>
+      </div>
+
+      {/* Activity — computed client-side from ride history. No distance
+          field exists in the backend schema yet, so this shows ride
+          cadence instead of kilometers ridden. */}
+      <div className="bg-surface-card rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-ink mb-4">Activity</h3>
+        <RideStatsPanel />
       </div>
 
       {/* Follow surface */}

@@ -8,6 +8,7 @@ import type {
   DestinationOut,
   RatingOut,
 } from "@/lib/api.types";
+import { DestinationMap } from "@/components/destinations/DestinationMap";
 
 
 export default function DestinationDetailPage({
@@ -122,6 +123,20 @@ export default function DestinationDetailPage({
           <p className="text-body whitespace-pre-wrap">{destination.description}</p>
         </div>
       )}
+
+      {/* Location */}
+      <DestinationMap
+        destinations={[
+          {
+            id: destination.id,
+            name: destination.name,
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+            region: destination.region,
+          },
+        ]}
+        compact
+      />
 
       {/* Practical info */}
       <div className="bg-surface-card rounded-xl p-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
