@@ -3,7 +3,8 @@ import { useState, useEffect, use, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import type { UserOut } from "@/lib/api.types";
+import type { UserBadgeOut, UserOut } from "@/lib/api.types";
+import { BadgeShelf } from "@/components/badges/BadgeShelf";
 
 
 export default function UserProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -11,6 +12,9 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
   const { user: me, refreshUser } = useAuth();
 
   const [profile, setProfile] = useState<UserOut | null>(null);
+  // Public view shows earned badges only — no locked tiles. The catalog
+  // endpoint is intentionally skipped here.
+  const [badges, setBadges] = useState<UserBadgeOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -30,7 +34,8 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
 
   useEffect(() => {
     load();
-  }, [load]);
+    api.listUserBadges(id).then(setBadges).catch(() => {});
+  }, [load, id]);
 
   const handleFollow = async () => {
     if (!profile || isSelf) return;
@@ -141,6 +146,16 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           </Link>
         )}
       </div>
+
+      {/* Badges — M8. Public view: earned-only, no locked tiles.
+          Section is hidden entirely when the user has earned nothing
+          so we don't show an empty card on a fresh account. */}
+      {badges.length > 0 && (
+        <div className="bg-surface-card rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-ink mb-3">Badges</h2>
+          <BadgeShelf earned={badges} />
+        </div>
+      )}
 
       {/* Bike */}
       {profile.bike && (profile.bike.name || profile.bike.model) && (
