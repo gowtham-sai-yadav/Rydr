@@ -17,6 +17,8 @@ from app.database import engine
 from app.main import app
 
 _TABLES = [
+    "notifications",
+    "reports",
     "post_comments",
     "post_likes",
     "posts",

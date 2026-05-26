@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.dependencies import get_current_user, get_db, get_optional_user
 from app.models.chat import ChatGroup
 from app.models.destination import Destination
+from app.models.notification import NotificationType
 from app.models.ride import (
     ParticipantStatus,
     RidePlan,
@@ -62,6 +63,7 @@ from app.schemas.ride import (
 from app.schemas.ride_log import RideLogListResponse, RideLogOut
 from app.schemas.user import UserBrief
 from app.services.badge_engine import safe_evaluate as _evaluate_badges
+from app.services.notification_service import create_notification as _notify
 from app.services.ride_helpers import approved_counts_for as _approved_counts_for
 
 router = APIRouter()
@@ -565,26 +567,54 @@ def join_ride(
                 detail="Previous join request was rejected by the captain",
             )
 
+    # Capacity hardening: a request made while the ride is already full
+    # (approved-participant count >= max_riders) lands as ``waitlisted``
+    # instead of ``pending``, so the captain's queue only shows requests
+    # they can actually act on today. Re-checked on every join/re-join
+    # (left -> pending/waitlisted) since capacity can change between calls.
+    target_status = (
+        ParticipantStatus.waitlisted
+        if _participant_count(db, ride_id) >= ride.max_riders
+        else ParticipantStatus.pending
+    )
+
+    # A brand-new join or a re-join after leaving is a genuinely new
+    # request worth notifying the captain about; re-POSTing while already
+    # pending/waitlisted is idempotent and stays silent.
+    is_new_request = existing is None or existing.status == ParticipantStatus.left
+
     # Atomic upsert. Pre-check above returns the clean 4xx for approved /
-    # rejected; this path is for new joins and pending → pending (idempotent)
-    # and left → pending (re-join after leaving).
+    # rejected; this path is for new joins and pending/waitlisted ->
+    # pending/waitlisted (idempotent) and left -> pending/waitlisted
+    # (re-join after leaving).
     stmt = (
         pg_insert(RidePlanParticipant)
         .values(
             ride_plan_id=ride_id,
             user_id=user.id,
-            status=ParticipantStatus.pending,
+            status=target_status,
         )
         .on_conflict_do_update(
             constraint="uq_participant_ride_user",
             set_=dict(
-                status=ParticipantStatus.pending,
+                status=target_status,
                 updated_at=func.now(),
             ),
         )
         .returning(RidePlanParticipant.id)
     )
     participant_id = db.execute(stmt).scalar_one()
+
+    if is_new_request:
+        _notify(
+            db,
+            user_id=ride.captain_id,
+            type=NotificationType.ride_join_requested,
+            message=f"{user.name} requested to join your ride \"{ride.title}\"",
+            actor_id=user.id,
+            ride_plan_id=ride.id,
+        )
+
     db.commit()
 
     participant = (
@@ -724,7 +754,20 @@ def update_participant_status(
                 detail="Ride is at capacity — reject or wait for a spot to open up",
             )
         participant.status = payload.status
-        # TODO M6: notify the participant of approval / rejection.
+        notify_type = (
+            NotificationType.ride_join_approved
+            if payload.status == ParticipantStatus.approved
+            else NotificationType.ride_join_rejected
+        )
+        verb = "approved" if payload.status == ParticipantStatus.approved else "rejected"
+        _notify(
+            db,
+            user_id=participant.user_id,
+            type=notify_type,
+            message=f"Your request to join \"{ride.title}\" was {verb}",
+            actor_id=user.id,
+            ride_plan_id=ride.id,
+        )
         db.commit()
         db.refresh(participant)
 

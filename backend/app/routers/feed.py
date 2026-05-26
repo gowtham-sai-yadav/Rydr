@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import get_current_user, get_db, get_optional_user
+from app.models.notification import NotificationType
 from app.models.post import Post, PostComment, PostLike
 from app.models.ride_log import RideLog
 from app.models.user import User
@@ -35,6 +36,7 @@ from app.schemas.post import (
     PostMediaOut,
     PostOut,
 )
+from app.services.notification_service import create_notification as _notify
 
 router = APIRouter()
 
@@ -180,14 +182,27 @@ def like_post(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> Response:
-    if not db.query(Post.id).filter(Post.id == post_id).first():
+    post = db.query(Post.id, Post.author_id).filter(Post.id == post_id).first()
+    if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     stmt = (
         pg_insert(PostLike)
         .values(post_id=post_id, user_id=user.id)
         .on_conflict_do_nothing(index_elements=["post_id", "user_id"])
+        .returning(PostLike.post_id)
     )
-    db.execute(stmt)
+    inserted = db.execute(stmt).first() is not None
+    if inserted:
+        # Only notify on an actual new like — re-POSTing an existing like
+        # is idempotent and stays silent, same rule as ride join requests.
+        _notify(
+            db,
+            user_id=post.author_id,
+            type=NotificationType.post_liked,
+            message=f"{user.name} liked your post",
+            actor_id=user.id,
+            post_id=post_id,
+        )
     db.commit()
     return Response(status_code=204)
 
@@ -230,10 +245,19 @@ def add_comment(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> PostCommentOut:
-    if not db.query(Post.id).filter(Post.id == post_id).first():
+    post = db.query(Post.id, Post.author_id).filter(Post.id == post_id).first()
+    if not post:
         raise HTTPException(status_code=404, detail="Post not found")
     comment = PostComment(post_id=post_id, author_id=user.id, body=payload.body)
     db.add(comment)
+    _notify(
+        db,
+        user_id=post.author_id,
+        type=NotificationType.post_commented,
+        message=f"{user.name} commented on your post",
+        actor_id=user.id,
+        post_id=post_id,
+    )
     db.commit()
     db.refresh(comment)
     comment = (
