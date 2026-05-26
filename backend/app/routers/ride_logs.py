@@ -49,6 +49,7 @@ from app.schemas.ride_log import (
     RideMediaOut,
 )
 from app.services import cloudinary_service
+from app.services.badge_engine import safe_evaluate as _evaluate_badges
 
 router = APIRouter()
 
@@ -157,6 +158,15 @@ def create_ride_log(
         log_id = inserted_id
 
     fresh = _load_log_or_404(db, log_id)
+
+    # M8 side effect: a fresh ride log is the canonical "I finished this
+    # ride" signal — drives rides_completed. May unlock first-ride,
+    # rider-bronze/silver/gold, or star-rider (if the user already has
+    # a 5-star rating). Idempotent on the existing-log path: re-posting
+    # the same log just re-evaluates and inserts zero new badges.
+    if inserted_id is not None:
+        _evaluate_badges(db, user.id)
+
     return RideLogOut.model_validate(fresh)
 
 

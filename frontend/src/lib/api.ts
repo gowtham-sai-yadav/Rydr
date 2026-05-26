@@ -1,6 +1,7 @@
 import { API_BASE_URL, TOKEN_KEY } from "./constants";
 import type {
   AuthResponse,
+  BadgeOut,
   BikeOut,
   ChatGroupListResponse,
   ChatGroupOut,
@@ -25,6 +26,7 @@ import type {
   RidePlanOut,
   RidePlanParticipantOut,
   TagListResponse,
+  UserBadgeOut,
   UserOut,
   UserStatsOut,
 } from "./api.types";
@@ -559,6 +561,27 @@ class ApiClient {
 
   listTags() {
     return this.request<TagListResponse>("/api/tags", {
+      headers: this.headers(),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Badges (M8)
+  // ---------------------------------------------------------------------------
+  listBadgeCatalog() {
+    return this.request<BadgeOut[]>("/api/badges", {
+      headers: this.headers(),
+    });
+  }
+
+  listMyBadges() {
+    return this.request<UserBadgeOut[]>("/api/badges/me", {
+      headers: this.headers(),
+    });
+  }
+
+  listUserBadges(userId: string) {
+    return this.request<UserBadgeOut[]>(`/api/badges/users/${userId}`, {
       headers: this.headers(),
     });
   }
