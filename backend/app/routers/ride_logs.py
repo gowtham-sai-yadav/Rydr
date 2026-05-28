@@ -44,12 +44,14 @@ from app.schemas.ride_log import (
     CloudinarySignature,
     RideLogCreate,
     RideLogOut,
+    RideLogSummary,
     RideLogUpdate,
     RideMediaConfirm,
     RideMediaOut,
 )
 from app.services import cloudinary_service
 from app.services.badge_engine import safe_evaluate as _evaluate_badges
+from app.services.card_renderer import render_card
 
 router = APIRouter()
 
@@ -64,7 +66,7 @@ def _load_log_or_404(db: Session, log_id: UUID) -> RideLog:
             selectinload(RideLog.media),
             selectinload(RideLog.rider),
             selectinload(RideLog.rating),
-            selectinload(RideLog.ride_plan),
+            selectinload(RideLog.ride_plan).selectinload(RidePlan.destination),
         )
         .filter(RideLog.id == log_id)
         .first()
@@ -72,6 +74,34 @@ def _load_log_or_404(db: Session, log_id: UUID) -> RideLog:
     if not log:
         raise HTTPException(status_code=404, detail="Ride log not found")
     return log
+
+
+def _build_summary(log: RideLog) -> RideLogSummary:
+    duration_minutes = None
+    if log.actual_start_ts and log.actual_end_ts:
+        delta = log.actual_end_ts - log.actual_start_ts
+        duration_minutes = max(int(delta.total_seconds() // 60), 0)
+
+    ride_date = None
+    if log.actual_start_ts:
+        ride_date = log.actual_start_ts.date()
+    elif log.ride_plan is not None:
+        ride_date = log.ride_plan.planned_date
+
+    return RideLogSummary(
+        ride_log_id=log.id,
+        rider_name=log.rider.name if log.rider else "Unknown rider",
+        destination_name=(
+            log.ride_plan.destination.name
+            if log.ride_plan and log.ride_plan.destination
+            else None
+        ),
+        # No distance column on ride_logs today — see RideLogSummary docstring.
+        distance_km=None,
+        duration_minutes=duration_minutes,
+        ride_date=ride_date,
+        photo_url=log.media[0].url if log.media else None,
+    )
 
 
 def _user_can_log_for_ride(db: Session, ride: RidePlan, user: User) -> bool:
@@ -181,6 +211,45 @@ def get_ride_log(
 ) -> RideLogOut:
     log = _load_log_or_404(db, log_id)
     return RideLogOut.model_validate(log)
+
+
+# ---------------------------------------------------------------------------
+# Shareable summary + card (Phase 4) — same visibility as the detail route:
+# public, no auth required, matching "everything public" for ride logs.
+# ---------------------------------------------------------------------------
+@router.get("/{log_id}/summary", response_model=RideLogSummary)
+def get_ride_log_summary(
+    log_id: UUID,
+    db: Session = Depends(get_db),
+    _user=Depends(get_optional_user),
+) -> RideLogSummary:
+    log = _load_log_or_404(db, log_id)
+    return _build_summary(log)
+
+
+@router.get("/{log_id}/card")
+def get_ride_log_card(
+    log_id: UUID,
+    db: Session = Depends(get_db),
+    _user=Depends(get_optional_user),
+) -> Response:
+    log = _load_log_or_404(db, log_id)
+    summary = _build_summary(log)
+
+    detail_lines = []
+    if summary.duration_minutes is not None:
+        hours, minutes = divmod(summary.duration_minutes, 60)
+        detail_lines.append(f"{hours}h {minutes}m on the road" if hours else f"{minutes}m on the road")
+    if summary.ride_date is not None:
+        detail_lines.append(summary.ride_date.strftime("%B %d, %Y"))
+
+    png_bytes = render_card(
+        title=summary.destination_name or "A Rydr ride",
+        subtitle=f"Ridden by {summary.rider_name}",
+        lines=detail_lines,
+        accent_label="RYDR RIDE RECAP",
+    )
+    return Response(content=png_bytes, media_type="image/png")
 
 
 # ---------------------------------------------------------------------------
