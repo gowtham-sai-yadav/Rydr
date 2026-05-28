@@ -1,17 +1,53 @@
+"""Bike + RidePlan + RidePlanParticipant.
+
+Renamed from the PoC's `Ride` model in M1 — now anchors to a Destination.
+Date/time columns migrated from String to proper Date/Time types.
+"""
+from __future__ import annotations
+
+import enum
 import uuid
-from sqlalchemy import Column, String, Text, Integer, Float, Boolean, DateTime, ForeignKey, Enum as SQLEnum
+
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    Enum as SQLEnum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    Time,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-import enum
+from sqlalchemy.sql import func
 
 from app.database import Base
 
 
-class RideStatus(str, enum.Enum):
-    open = "open"
+class BikeType(str, enum.Enum):
+    commuter = "commuter"
+    sport = "sport"
+    adventure = "adventure"
+    cruiser = "cruiser"
+    any = "any"
+
+
+class RidePlanStatus(str, enum.Enum):
+    planned = "planned"
     in_progress = "in_progress"
     completed = "completed"
     cancelled = "cancelled"
+
+
+class RidePlanVisibility(str, enum.Enum):
+    solo = "solo"
+    group = "group"
 
 
 class DifficultyLevel(str, enum.Enum):
@@ -32,59 +68,142 @@ class Bike(Base):
     __tablename__ = "bikes"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+    )
     name = Column(String(100), nullable=True)
     model = Column(String(100), nullable=True)
     year = Column(Integer, nullable=True)
+    engine_cc = Column(Integer, nullable=True)
+    mileage_kmpl = Column(Float, nullable=True)
+    type = Column(
+        SQLEnum(BikeType, name="bike_type"),
+        nullable=False,
+        default=BikeType.any,
+    )
 
     owner = relationship("User", back_populates="bike")
 
 
-class Ride(Base):
-    __tablename__ = "rides"
+class RidePlan(Base):
+    __tablename__ = "ride_plans"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    captain_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    destination_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("destinations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    route_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("routes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    captain_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
     thumbnail_url = Column(String(500), nullable=True)
-    ride_date = Column(String(20), nullable=False)
-    start_time = Column(String(10), nullable=False)
-    estimated_end_time = Column(String(10), nullable=True)
-    difficulty_level = Column(SQLEnum(DifficultyLevel), default=DifficultyLevel.moderate)
+    planned_date = Column(Date, nullable=False)
+    planned_start_time = Column(Time, nullable=False)
+    estimated_end_time = Column(Time, nullable=True)
+    visibility = Column(
+        SQLEnum(RidePlanVisibility, name="ride_plan_visibility"),
+        nullable=False,
+        default=RidePlanVisibility.group,
+    )
+    difficulty_level = Column(
+        SQLEnum(DifficultyLevel, name="difficulty_level"),
+        nullable=False,
+        default=DifficultyLevel.moderate,
+    )
     recommended_bike_type = Column(String(100), nullable=True)
     break_schedule = Column(Text, nullable=True)
-    status = Column(SQLEnum(RideStatus), default=RideStatus.open)
-    max_riders = Column(Integer, default=10)
+    max_riders = Column(Integer, nullable=False, default=10)
+    status = Column(
+        SQLEnum(RidePlanStatus, name="ride_plan_status"),
+        nullable=False,
+        default=RidePlanStatus.planned,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
-    captain = relationship("User", back_populates="captained_rides")
-    stops = relationship("RideStop", back_populates="ride", cascade="all, delete-orphan", order_by="RideStop.stop_order")
-    participants = relationship("RideParticipant", back_populates="ride", cascade="all, delete-orphan")
-    chat_group = relationship("ChatGroup", back_populates="ride", uselist=False, cascade="all, delete-orphan")
+    __table_args__ = (
+        # M6 audit #4: index supports both ``/api/rides/mine`` (filters on
+        # ``captain_id``) and the M6 ``/api/rides/feed?following_only=true``
+        # path (``captain_id IN (subquery)``). ``planned_date DESC`` is folded
+        # in so the planner can serve the typical "upcoming first" sort from
+        # the index without a separate Sort step. Postgres doesn't auto-index
+        # FK columns, so the M1 schema was missing this.
+        Index(
+            "idx_ride_plans_captain_planned_date",
+            "captain_id",
+            text("planned_date DESC"),
+        ),
+    )
+
+    destination = relationship("Destination", back_populates="ride_plans")
+    route = relationship("Route", back_populates="ride_plans")
+    captain = relationship("User", back_populates="captained_ride_plans")
+    participants = relationship(
+        "RidePlanParticipant",
+        back_populates="ride_plan",
+        cascade="all, delete-orphan",
+    )
+    ride_logs = relationship(
+        "RideLog", back_populates="ride_plan", cascade="all, delete-orphan"
+    )
+    chat_group = relationship(
+        "ChatGroup",
+        back_populates="ride_plan",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
-class RideStop(Base):
-    __tablename__ = "ride_stops"
+class RidePlanParticipant(Base):
+    __tablename__ = "ride_plan_participants"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    ride_id = Column(UUID(as_uuid=True), ForeignKey("rides.id", ondelete="CASCADE"), nullable=False)
-    name = Column(String(200), nullable=False)
-    description = Column(Text, nullable=True)
-    stop_order = Column(Integer, nullable=False)
-    latitude = Column(Float, nullable=True)
-    longitude = Column(Float, nullable=True)
-    is_break_stop = Column(Boolean, default=False)
+    ride_plan_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("ride_plans.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status = Column(
+        SQLEnum(ParticipantStatus, name="participant_status"),
+        nullable=False,
+        default=ParticipantStatus.pending,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
-    ride = relationship("Ride", back_populates="stops")
+    __table_args__ = (
+        UniqueConstraint(
+            "ride_plan_id", "user_id", name="uq_participant_ride_user"
+        ),
+    )
 
-
-class RideParticipant(Base):
-    __tablename__ = "ride_participants"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    ride_id = Column(UUID(as_uuid=True), ForeignKey("rides.id", ondelete="CASCADE"), nullable=False)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    status = Column(SQLEnum(ParticipantStatus), default=ParticipantStatus.pending)
-
-    ride = relationship("Ride", back_populates="participants")
-    user = relationship("User", back_populates="participations")
+    ride_plan = relationship("RidePlan", back_populates="participants")
+    user = relationship("User", back_populates="ride_plan_participations")
