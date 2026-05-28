@@ -4,9 +4,10 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
 const navItems = [
+  { href: "/destinations", label: "Discover" },
   { href: "/rides", label: "Rides" },
-  { href: "/profile", label: "Profile" },
   { href: "/chat", label: "Chat" },
+  { href: "/profile", label: "Profile" },
 ];
 
 export default function Navbar() {
@@ -14,36 +15,44 @@ export default function Navbar() {
   const { user, logout } = useAuth();
 
   return (
-    <header className="bg-gray-900 border-b border-gray-800 sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-50 bg-canvas/95 backdrop-blur-sm border-b border-hairline">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          <Link href="/rides" className="text-2xl font-bold text-orange-500">
-            Ryder
+          <Link
+            href="/destinations"
+            className="font-display text-2xl font-light tracking-tight text-ink"
+          >
+            Rydr
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  pathname.startsWith(item.href)
-                    ? "bg-orange-600 text-white"
-                    : "text-gray-300 hover:text-white hover:bg-gray-800"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
+            {navItems.map((item) => {
+              const active = pathname.startsWith(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
+                    active
+                      ? "bg-surface-elevated text-ink"
+                      : "text-charcoal hover:text-ink"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
           </nav>
 
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-400 hidden sm:block">{user?.name}</span>
+            <span className="text-[13px] text-charcoal hidden sm:block">
+              {user?.name}
+            </span>
             <button
               onClick={logout}
-              className="text-sm text-gray-400 hover:text-white transition-colors"
+              className="text-[13px] text-charcoal hover:text-ink transition-colors"
             >
-              Logout
+              Sign out
             </button>
           </div>
         </div>
