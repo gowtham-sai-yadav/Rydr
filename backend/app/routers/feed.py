@@ -193,7 +193,7 @@ def like_post(
     )
     inserted = db.execute(stmt).first() is not None
     if inserted:
-        # Only notify on an actual new like — re-POSTing an existing like
+        # Only notify on an actual new like - re-POSTing an existing like
         # is idempotent and stays silent, same rule as ride join requests.
         _notify(
             db,

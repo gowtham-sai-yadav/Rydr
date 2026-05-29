@@ -1,13 +1,13 @@
-"""Notifications router — Phase 4.
+"""Notifications router - Phase 4.
 
 Surface (all under ``/api/notifications``):
 
-  GET  /               — paginated, newest first, caller's own only
-  POST /{id}/read       — mark one notification read
-  POST /read-all        — mark all the caller's unread notifications read
+  GET  /               - paginated, newest first, caller's own only
+  POST /{id}/read       - mark one notification read
+  POST /read-all        - mark all the caller's unread notifications read
 
 Authorization model: every route implicitly scopes to the caller via
-``Notification.user_id == user.id`` — there is no way to read or mutate
+``Notification.user_id == user.id`` - there is no way to read or mutate
 another user's notifications. A notification id that exists but belongs
 to someone else 404s (don't leak existence), matching the 404-not-403
 convention used elsewhere (chat groups, ride logs).

@@ -98,7 +98,7 @@ def test_captain_can_approve_waitlisted_participant(client):
     assert resp.json()["status"] == "waitlisted"
 
     # rider_a leaves, freeing a seat. Captain can now approve the
-    # waitlisted rider_b — same code path as approving a "pending"
+    # waitlisted rider_b - same code path as approving a "pending"
     # participant, no schema change needed since the validator only
     # restricts the *target* status, not the participant's current one.
     resp = client.post(

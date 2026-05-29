@@ -23,7 +23,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      # Mirrors backend/.env.example — override any of these in a
+      # Mirrors backend/.env.example - override any of these in a
       # docker-compose.override.yml for local secrets rather than editing
       # this file.
       DATABASE_URL: postgresql://rydr:rydr_secret@db:5432/rydr

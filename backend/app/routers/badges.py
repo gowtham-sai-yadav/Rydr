@@ -72,7 +72,7 @@ def get_badge_card(
     """Shareable PNG for one earned badge (Phase 4).
 
     ``badge_id`` here is a ``UserBadge`` (award) id, not a catalog
-    ``Badge`` id — the card needs to show *who* earned it, which only the
+    ``Badge`` id - the card needs to show *who* earned it, which only the
     award row (not the catalog row) knows. Public, no auth required,
     matching the rest of the badge surface's visibility.
     """

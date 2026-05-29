@@ -1,4 +1,4 @@
-"""Notification creation helper — shared by every trigger site.
+"""Notification creation helper - shared by every trigger site.
 
 Centralising this in one function (rather than constructing ``Notification``
 rows inline at each call site) keeps the message-formatting conventions
@@ -27,7 +27,7 @@ def create_notification(
     post_id: Optional[UUID] = None,
     badge_id: Optional[UUID] = None,
 ) -> Optional[Notification]:
-    """Insert a notification row. Does not commit — call sites fold this
+    """Insert a notification row. Does not commit - call sites fold this
     into their existing transaction so the notification and the action
     that triggered it succeed or fail together.
 

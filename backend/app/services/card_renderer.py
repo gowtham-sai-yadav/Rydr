@@ -1,4 +1,4 @@
-"""Shareable PNG card rendering — Phase 4.
+"""Shareable PNG card rendering - Phase 4.
 
 Generates a simple gradient card with a title + subtitle lines, used for
 both the ride-log recap card (``GET /api/ride-logs/{id}/card``) and the
@@ -28,7 +28,7 @@ _ACCENT_COLOR = (56, 189, 248)  # sky-400
 def _load_font(size: int) -> ImageFont.ImageFont:
     # Pillow's default bitmap font ignores `size` on old Pillow versions but
     # newer ones (>=10) accept it for the built-in font. Falls back cleanly
-    # either way — no external font file required.
+    # either way - no external font file required.
     try:
         return ImageFont.load_default(size=size)
     except TypeError:

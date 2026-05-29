@@ -200,7 +200,7 @@ def evaluate_user_badges(db: Session, user_id: UUID) -> int:
         inserted_id = db.execute(stmt).scalar_one_or_none()
         if inserted_id is not None:
             awarded += 1
-            # Notify on genuinely new awards only — on_conflict_do_nothing
+            # Notify on genuinely new awards only - on_conflict_do_nothing
             # means a re-run that finds nothing new inserts nothing here.
             _notify(
                 db,

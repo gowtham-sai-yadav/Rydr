@@ -35,7 +35,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Postgres has no ``DROP VALUE`` for enums. Downgrading would require
     # rebuilding the type (create new type, cast the column, drop the old
-    # type) — out of scope here since no migration in this chain has ever
+    # type) - out of scope here since no migration in this chain has ever
     # needed to actually roll an enum value back. Left as a no-op; any
     # existing 'waitlisted' rows would need to be reassigned before a
     # real downgrade could drop the value.

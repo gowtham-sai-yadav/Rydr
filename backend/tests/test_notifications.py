@@ -39,7 +39,7 @@ def test_join_request_notifies_captain(client):
     assert note["type"] == "ride_join_requested"
     assert note["read_at"] is None
 
-    # Re-requesting while still pending is idempotent — no duplicate notification.
+    # Re-requesting while still pending is idempotent - no duplicate notification.
     resp = client.post(
         f"/api/rides/{ride_id}/join", headers=auth_headers(rider["access_token"])
     )
