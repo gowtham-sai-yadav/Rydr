@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { Inter, Inter_Tight, Geist_Mono } from "next/font/google";
 import "./globals.css";
+// Mapbox GL's stylesheet must be a static global import (Next.js only
+// allows global CSS from the root layout) — DestinationMap loads the JS
+// itself lazily so the map bundle stays out of pages that never render it.
+import "mapbox-gl/dist/mapbox-gl.css";
 
 
 // Inter — UI body type. Free, open-source.

@@ -9,6 +9,8 @@ from app.routers import (
     destinations,
     feed,
     leaderboard,
+    moderation,
+    notifications,
     ride_logs,
     rides,
     tags,
@@ -38,6 +40,8 @@ app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
 app.include_router(badges.router, prefix="/api/badges", tags=["Badges"])
 app.include_router(feed.router, prefix="/api/feed", tags=["Feed"])
 app.include_router(leaderboard.router, prefix="/api/leaderboard", tags=["Leaderboard"])
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
+app.include_router(moderation.router, prefix="/api/moderation", tags=["Moderation"])
 
 
 @app.get("/api/health")

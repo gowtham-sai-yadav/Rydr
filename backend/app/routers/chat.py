@@ -5,8 +5,16 @@ Surface (all under ``/api/chat``):
   GET    /api/chat/groups                   — list groups the caller can access
   GET    /api/chat/groups/{id}              — detail w/ slim ride summary
   GET    /api/chat/groups/{id}/messages     — since-polling, ASC chronological
-  POST   /api/chat/groups/{id}/messages     — send (1–2000 chars, trimmed)
+  POST   /api/chat/groups/{id}/messages     - send (1-2000 chars, trimmed)
   DELETE /api/chat/messages/{id}            — author or captain only, hard delete
+  WS     /api/chat/groups/{id}/ws           - live send/broadcast, auth via ?token=
+
+The WebSocket endpoint is additive - it reuses the same membership check,
+the same read-only-if-cancelled rule, and the same message-persistence path
+as the HTTP POST route (through the shared ``_create_message`` helper) so
+the two surfaces can never drift apart on validation. The HTTP GET/POST
+endpoints stay as-is for history/polling; the frontend is expected to use
+GET for history and the WS connection for live updates.
 
 Authorization is strict — captain OR participant with ``status=approved``.
 Pending / rejected / left users get **404** (not 403) so the existence of
@@ -25,14 +33,24 @@ Patterns reused from M2/M3/M4 audits:
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, Optional, Set
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from pydantic import ValidationError
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.dependencies import get_current_user, get_db
+from app.database import SessionLocal
+from app.dependencies import _decode_token, get_current_user, get_db
 from app.models.chat import ChatGroup, ChatMessage
 from app.models.ride import (
     ParticipantStatus,
@@ -52,6 +70,42 @@ from app.schemas.chat import (
 from app.services.ride_helpers import approved_counts_for as _approved_counts_for
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# In-memory connection registry for the WebSocket endpoint.
+#
+# Single-process only: a multi-instance deployment (more than one uvicorn
+# worker/pod) would need a pub/sub backplane (e.g. Redis) so a message sent
+# to a socket on instance A reaches members connected to instance B. This
+# repo's docker-compose has no Redis, so this in-memory map is the
+# intentionally simple starting point.
+# ---------------------------------------------------------------------------
+class ConnectionManager:
+    def __init__(self) -> None:
+        self._groups: Dict[UUID, Set[WebSocket]] = {}
+
+    async def connect(self, group_id: UUID, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self._groups.setdefault(group_id, set()).add(websocket)
+
+    def disconnect(self, group_id: UUID, websocket: WebSocket) -> None:
+        sockets = self._groups.get(group_id)
+        if sockets is None:
+            return
+        sockets.discard(websocket)
+        if not sockets:
+            self._groups.pop(group_id, None)
+
+    async def broadcast(self, group_id: UUID, payload: dict) -> None:
+        for socket in list(self._groups.get(group_id, ())):
+            try:
+                await socket.send_json(payload)
+            except Exception:  # noqa: BLE001 - a dead socket shouldn't break the loop
+                self.disconnect(group_id, socket)
+
+
+manager = ConnectionManager()
 
 
 # ---------------------------------------------------------------------------
@@ -75,10 +129,14 @@ def _user_is_approved_member(
     )
 
 
-def _load_group_or_404(
+def _find_group_if_member(
     db: Session, group_id: UUID, user: User
-) -> ChatGroup:
-    """Load the group + check membership in a SINGLE SQL statement.
+) -> Optional[ChatGroup]:
+    """Load the group + check membership in a SINGLE SQL statement, or
+    return ``None`` if the group doesn't exist or the caller isn't a
+    member. No exception raised - the WebSocket route needs to close with
+    a WS-specific code instead of an HTTPException, so the raising variant
+    (``_load_group_or_404``) wraps this rather than duplicating the query.
 
     Audit #10: the previous two-query implementation (group lookup, then
     participant lookup) had a measurable timing difference between
@@ -111,7 +169,7 @@ def _load_group_or_404(
         .first()
     )
     if result is None:
-        raise HTTPException(status_code=404, detail="Chat group not found")
+        return None
 
     group, membership_id = result
     ride = group.ride_plan
@@ -119,12 +177,40 @@ def _load_group_or_404(
         # Audit #16 — defensive; ride_plan_id is NOT NULL + CASCADE so this
         # branch is unreachable today. Kept as belt-and-braces against future
         # schema changes that loosen the FK.
-        raise HTTPException(status_code=404, detail="Chat group not found")
+        return None
 
     if ride.captain_id == user.id or membership_id is not None:
         return group
 
-    raise HTTPException(status_code=404, detail="Chat group not found")
+    return None
+
+
+def _load_group_or_404(
+    db: Session, group_id: UUID, user: User
+) -> ChatGroup:
+    group = _find_group_if_member(db, group_id, user)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Chat group not found")
+    return group
+
+
+def _create_message(db: Session, group_id: UUID, user: User, body: str) -> ChatMessage:
+    """Persist a chat message and return it with ``author`` eager-loaded.
+
+    Shared by the HTTP POST route and the WebSocket route so both surfaces
+    validate and write messages identically. Caller is responsible for the
+    membership + cancelled-ride checks; this just does the write.
+    """
+    msg = ChatMessage(chat_group_id=group_id, author_id=user.id, body=body)
+    db.add(msg)
+    db.commit()
+
+    return (
+        db.query(ChatMessage)
+        .options(selectinload(ChatMessage.author))
+        .filter(ChatMessage.id == msg.id)
+        .one()
+    )
 
 
 def _build_group_out(
@@ -367,23 +453,8 @@ def send_message(
             detail="This ride was cancelled — its chat is read-only",
         )
 
-    msg = ChatMessage(
-        chat_group_id=group_id,
-        author_id=user.id,
-        body=payload.body,
-    )
-    db.add(msg)
     # TODO M6: notify other approved participants of the new message.
-    db.commit()
-
-    # Re-fetch with the author relationship eager-loaded so the response build
-    # doesn't lazy-load (same pattern as M4 rating-submit fix from audit #18).
-    fresh = (
-        db.query(ChatMessage)
-        .options(selectinload(ChatMessage.author))
-        .filter(ChatMessage.id == msg.id)
-        .one()
-    )
+    fresh = _create_message(db, group_id, user, payload.body)
     return ChatMessageOut.model_validate(fresh)
 
 
@@ -437,3 +508,72 @@ def delete_message(
     # TODO M6: optionally notify the room (e.g. "message deleted by captain").
     db.commit()
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Live chat - WebSocket
+# ---------------------------------------------------------------------------
+@router.websocket("/groups/{group_id}/ws")
+async def chat_ws(websocket: WebSocket, group_id: UUID) -> None:
+    """Live send/broadcast for a chat group's messages.
+
+    Auth: JWT passed as ``?token=`` (browsers can't set an Authorization
+    header on a WebSocket handshake). Decoded with the same
+    ``_decode_token`` helper ``get_current_user`` uses, so the two paths
+    can't drift on token-validation rules. Invalid/expired token closes
+    with 4401; not a member of the group closes with 4404; connecting to
+    a cancelled ride's chat closes with 4409 (its chat is read-only -
+    viewers should use the existing GET history endpoint instead).
+
+    A plain ``Depends(get_db)`` doesn't work for WebSocket routes the way
+    it does for HTTP ones (there's no per-request lifecycle to hang it
+    off), so this opens its own session for the life of the connection.
+    """
+    token = websocket.query_params.get("token")
+    user_id = _decode_token(token) if token else None
+    if user_id is None:
+        await websocket.close(code=4401)
+        return
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user is None:
+            await websocket.close(code=4401)
+            return
+
+        group = _find_group_if_member(db, group_id, user)
+        if group is None:
+            await websocket.close(code=4404)
+            return
+
+        if group.ride_plan.status == RidePlanStatus.cancelled:
+            # Read-only rides: reject the whole connection. Viewers can
+            # still fetch history via the existing HTTP GET endpoint.
+            await websocket.close(code=4409)
+            return
+
+        await manager.connect(group_id, websocket)
+        try:
+            while True:
+                try:
+                    raw = await websocket.receive_json()
+                    payload = ChatMessageCreate.model_validate(raw)
+                except (ValidationError, ValueError):
+                    # Malformed frame (bad JSON or failed body validation) -
+                    # ignore it and keep the connection open rather than
+                    # dropping the whole socket over one bad message.
+                    continue
+
+                fresh = _create_message(db, group_id, user, payload.body)
+                out = ChatMessageOut.model_validate(fresh).model_dump(mode="json")
+                # Broadcast to everyone in the group, including the sender -
+                # doubles as the send ack so the client doesn't need to
+                # locally echo before the server confirms persistence.
+                await manager.broadcast(group_id, out)
+        except WebSocketDisconnect:
+            pass
+        finally:
+            manager.disconnect(group_id, websocket)
+    finally:
+        db.close()
