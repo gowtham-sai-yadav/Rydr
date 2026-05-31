@@ -62,8 +62,8 @@ export interface UserOut {
   followers_count: number;
   following_count: number;
   is_followed_by_me: boolean;
-  // Moderation surface — being added to the User model in parallel. Read
-  // defensively: absent/false both mean "not an admin".
+  // Moderation surface: being added to the User model in parallel. Read
+  // defensively, absent/false both mean "not an admin".
   is_admin?: boolean;
 }
 
@@ -415,7 +415,7 @@ export interface UserBadgeOut {
 }
 
 // ---------------------------------------------------------------------------
-// Social feed (new — written against the documented contract; backend
+// Social feed (new, written against the documented contract; backend
 // routes live at backend/app/routers/feed.py on main, not yet present in
 // this worktree, so field names are our best-effort match to the rest of
 // the API's conventions and should be reconciled against the real schema
@@ -454,7 +454,7 @@ export interface PostCommentOut {
 }
 
 // ---------------------------------------------------------------------------
-// Leaderboard (two independent endpoints — riders by all-time ride-log
+// Leaderboard (two independent endpoints, riders by all-time ride-log
 // count, destinations by completed-ride count this calendar month)
 // ---------------------------------------------------------------------------
 export interface RiderLeaderboardEntry {

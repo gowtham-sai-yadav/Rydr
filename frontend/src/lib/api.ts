@@ -92,7 +92,7 @@ class ApiClient {
     return res.json();
   }
 
-  // Binary (image/png) response — used by the shareable-card endpoints.
+  // Binary (image/png) response, used by the shareable-card endpoints.
   private async requestBlob(path: string, options: RequestInit = {}): Promise<Blob> {
     const res = await fetch(`${API_BASE_URL}${path}`, options);
     if (!res.ok) {
@@ -622,7 +622,7 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Social feed (Phase 4 W4) — POST /api/feed wraps an optional ride_log_id
+  // Social feed (Phase 4 W4). POST /api/feed wraps an optional ride_log_id
   // so a completed ride's photos surface as the post's media without a
   // separate upload; like/unlike are 204-no-body and idempotent.
   // ---------------------------------------------------------------------------
@@ -673,7 +673,7 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Leaderboard (Phase 4 W5) — two independent endpoints, no combined route.
+  // Leaderboard (Phase 4 W5), two independent endpoints, no combined route.
   // ---------------------------------------------------------------------------
   getRiderLeaderboard(limit = 20) {
     return this.request<RiderLeaderboardResponse>(
@@ -718,7 +718,7 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Moderation (Phase 4) — filing a report only requires auth; reading and
+  // Moderation (Phase 4). Filing a report only requires auth; reading and
   // actioning the queue is admin-gated server-side (403 for non-admins).
   // ---------------------------------------------------------------------------
   listReports(params: { status?: ReportStatus; page?: number; limit?: number } = {}) {
