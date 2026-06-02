@@ -26,7 +26,7 @@ export default function FollowersListPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="max-w-2xl mx-auto space-y-4 pb-12">
-      <Link href={`/users/${id}`} className="text-accent-blue hover:text-accent-blue text-sm">
+      <Link href={`/users/${id}`} className="text-accent-gold hover:text-accent-gold text-sm">
         ← back
       </Link>
       <h1 className="text-2xl font-bold text-ink">Followers · {total}</h1>

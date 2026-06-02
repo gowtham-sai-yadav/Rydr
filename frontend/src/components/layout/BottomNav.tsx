@@ -38,7 +38,7 @@ export default function BottomNav() {
               key={item.href}
               href={item.href}
               className={`flex flex-col items-center px-3 py-1 transition-colors ${
-                active ? "text-ink" : "text-charcoal"
+                active ? "text-accent-gold" : "text-charcoal"
               }`}
             >
               <svg

@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import DestinationMap from "@/components/destinations/DestinationMap";
 import type {
   DestinationSummary,
   TagListResponse,
@@ -10,6 +11,7 @@ import type {
 
 
 type SortMode = "rating" | "distance" | "popularity";
+type ViewMode = "grid" | "map";
 
 
 export default function DestinationsPage() {
@@ -18,6 +20,7 @@ export default function DestinationsPage() {
   const [destinations, setDestinations] = useState<DestinationSummary[]>([]);
   const [tags, setTags] = useState<TagListResponse>({ vibe: [], vehicle_fit: [] });
   const [loading, setLoading] = useState(true);
+  const [view, setView] = useState<ViewMode>("grid");
   const [error, setError] = useState("");
 
   // Filter state
@@ -85,14 +88,34 @@ export default function DestinationsPage() {
     <div className="max-w-5xl mx-auto space-y-6 pb-12 glow-orange">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-ink">Destinations</h1>
-        {user && (
-          <Link
-            href="/destinations/new"
-            className="bg-ink text-canvas hover:bg-surface-light text-sm font-medium px-4 py-2 rounded-lg"
-          >
-            Add destination
-          </Link>
-        )}
+        <div className="flex items-center gap-3">
+          <div className="flex gap-1 bg-surface-card rounded-lg p-1">
+            <button
+              onClick={() => setView("grid")}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                view === "grid" ? "bg-accent-gold text-canvas" : "text-mute hover:text-ink"
+              }`}
+            >
+              Grid
+            </button>
+            <button
+              onClick={() => setView("map")}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                view === "map" ? "bg-accent-gold text-canvas" : "text-mute hover:text-ink"
+              }`}
+            >
+              Map
+            </button>
+          </div>
+          {user && (
+            <Link
+              href="/destinations/new"
+              className="bg-accent-gold text-canvas hover:bg-accent-gold/90 text-sm font-medium px-4 py-2 rounded-lg"
+            >
+              Add destination
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -113,7 +136,7 @@ export default function DestinationsPage() {
                 onClick={() => toggleTag(t.slug)}
                 className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
                   selectedTags.has(t.slug)
-                    ? "bg-ink text-canvas"
+                    ? "bg-accent-gold text-canvas"
                     : "bg-surface-elevated text-body hover:bg-surface-elevated"
                 }`}
               >
@@ -132,7 +155,7 @@ export default function DestinationsPage() {
                 onClick={() => toggleVehicleFit(t.slug)}
                 className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
                   selectedVehicleFit.has(t.slug)
-                    ? "bg-ink text-canvas"
+                    ? "bg-accent-gold text-canvas"
                     : "bg-surface-elevated text-body hover:bg-surface-elevated"
                 }`}
               >
@@ -163,7 +186,7 @@ export default function DestinationsPage() {
                 type="checkbox"
                 checked={useHomeOrigin}
                 onChange={(e) => setUseHomeOrigin(e.target.checked)}
-                className="rounded border-hairline-strong text-accent-blue focus:ring-ink/30"
+                className="rounded border-hairline-strong text-accent-gold focus:ring-ink/30"
               />
               Show distance from home
             </label>
@@ -175,7 +198,7 @@ export default function DestinationsPage() {
                 setSelectedVehicleFit(new Set());
                 setQuery("");
               }}
-              className="text-sm text-accent-blue hover:text-accent-blue ml-auto"
+              className="text-sm text-accent-gold hover:text-accent-gold ml-auto"
             >
               Clear all
             </button>
@@ -197,18 +220,29 @@ export default function DestinationsPage() {
       ) : destinations.length === 0 ? (
         <div className="text-center py-12 text-mute">
           No destinations match. Try clearing filters or{" "}
-          <Link href="/destinations/new" className="text-accent-blue hover:text-accent-blue">
+          <Link href="/destinations/new" className="text-accent-gold hover:text-accent-gold">
             adding a new one
           </Link>
           .
         </div>
+      ) : view === "map" ? (
+        <DestinationMap
+          destinations={destinations.map((d) => ({
+            id: d.id,
+            name: d.name,
+            latitude: d.latitude,
+            longitude: d.longitude,
+            region: d.region,
+          }))}
+          height={480}
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {destinations.map((d) => (
             <Link
               key={d.id}
               href={`/destinations/${d.id}`}
-              className="bg-surface-card rounded-xl overflow-hidden hover:ring-1 hover:ring-hairline-strong transition-all"
+              className="bg-surface-card rounded-xl overflow-hidden hover:ring-1 hover:ring-accent-gold/40 transition-all"
             >
               <div className="aspect-video bg-surface-elevated relative">
                 {d.hero_media_url && (
@@ -229,7 +263,7 @@ export default function DestinationsPage() {
                 <h3 className="text-ink font-semibold">{d.name}</h3>
                 {d.region && <p className="text-mute text-sm">{d.region}</p>}
                 <div className="flex items-center gap-3 mt-2 text-xs">
-                  <span className="text-accent-yellow">
+                  <span className="text-accent-gold">
                     ★ {d.avg_rating.toFixed(1)}
                   </span>
                   <span className="text-stone">({d.rating_count})</span>
