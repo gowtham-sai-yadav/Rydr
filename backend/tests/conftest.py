@@ -19,6 +19,8 @@ from app.main import app
 _TABLES = [
     "notifications",
     "reports",
+    "badges",
+    "tags",
     "post_comments",
     "post_likes",
     "posts",
