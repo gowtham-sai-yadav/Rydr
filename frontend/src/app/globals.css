@@ -7,7 +7,7 @@
  * translucent-white hairlines (no drop shadows). Gold-pill primary CTA:
  * gold is the dominant accent (primary actions, active states, links,
  * headings/highlights, star ratings). Green is reserved for small
- * secondary/positive indicators only (status dots, small badges) — never
+ * secondary/positive indicators only (status dots, small badges), never
  * a primary color or a full surface. Orange stays as an atmospheric
  * radial-wash glow. Red stays semantic for errors.
  *
@@ -41,12 +41,12 @@
   --color-accent-orange-glow: rgba(255, 89, 0, 0.22);
   --color-accent-yellow: #ffc53d;
 
-  /* gold — the dominant accent. Primary actions, active states, links,
+  /* gold, the dominant accent. Primary actions, active states, links,
      headings/highlights, borders on hover, star ratings. */
   --color-accent-gold: #e5b80b;
   --color-accent-gold-glow: rgba(229, 184, 11, 0.28);
 
-  /* green — small secondary/positive indicators only (status dot, small
+  /* green, small secondary/positive indicators only (status dot, small
      badge, success toast). Never a primary color or a full surface. */
   --color-accent-green: #16c172;
   --color-accent-green-glow: rgba(22, 193, 114, 0.18);
@@ -114,7 +114,7 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
-  /* Primary — gold pill on canvas. The dominant accent, the brightest
+  /* Primary: gold pill on canvas. The dominant accent, the brightest
      color on the page. Used once per viewport for the dominant CTA. */
   .btn-primary {
     background-color: var(--color-accent-gold);
