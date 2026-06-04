@@ -288,7 +288,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
           <button
             type="submit"
             disabled={sending || !input.trim()}
-            className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 w-12 h-12 rounded-full flex items-center justify-center transition-colors"
+            className="bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 w-12 h-12 rounded-full flex items-center justify-center transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}

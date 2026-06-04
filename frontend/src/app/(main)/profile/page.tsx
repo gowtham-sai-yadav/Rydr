@@ -144,7 +144,7 @@ export default function ProfilePage() {
           </div>
           <button
             onClick={() => setEditing(!editing)}
-            className="text-accent-blue hover:text-accent-blue text-sm font-medium"
+            className="text-accent-gold hover:text-accent-gold text-sm font-medium"
           >
             {editing ? "Cancel" : "Edit"}
           </button>
@@ -221,7 +221,7 @@ export default function ProfilePage() {
             <button
               onClick={handleSaveProfile}
               disabled={saving}
-              className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 px-6 py-2 rounded-lg text-sm font-medium"
+              className="bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 px-6 py-2 rounded-lg text-sm font-medium"
             >
               {saving ? "Saving…" : "Save changes"}
             </button>
@@ -235,7 +235,7 @@ export default function ProfilePage() {
           <h3 className="text-lg font-semibold text-ink">My Bike</h3>
           <button
             onClick={() => setEditBike(!editBike)}
-            className="text-accent-blue hover:text-accent-blue text-sm font-medium"
+            className="text-accent-gold hover:text-accent-gold text-sm font-medium"
           >
             {editBike ? "Cancel" : "Edit"}
           </button>
@@ -343,7 +343,7 @@ export default function ProfilePage() {
             <button
               onClick={handleSaveBike}
               disabled={saving}
-              className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 px-6 py-2 rounded-lg text-sm font-medium"
+              className="bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 px-6 py-2 rounded-lg text-sm font-medium"
             >
               {saving ? "Saving…" : "Save bike"}
             </button>
@@ -367,15 +367,15 @@ export default function ProfilePage() {
         <h3 className="text-lg font-semibold text-ink mb-4">Ride stats</h3>
         <div className="grid grid-cols-3 gap-4">
           <div className="text-center">
-            <p className="text-3xl font-bold text-accent-blue">{stats?.rides_captained ?? 0}</p>
+            <p className="text-3xl font-bold text-accent-gold">{stats?.rides_captained ?? 0}</p>
             <p className="text-xs text-mute uppercase mt-1">Captained</p>
           </div>
           <div className="text-center">
-            <p className="text-3xl font-bold text-accent-blue">{stats?.rides_joined ?? 0}</p>
+            <p className="text-3xl font-bold text-accent-gold">{stats?.rides_joined ?? 0}</p>
             <p className="text-xs text-mute uppercase mt-1">Joined</p>
           </div>
           <div className="text-center">
-            <p className="text-3xl font-bold text-accent-blue">{stats?.rides_completed ?? 0}</p>
+            <p className="text-3xl font-bold text-accent-gold">{stats?.rides_completed ?? 0}</p>
             <p className="text-xs text-mute uppercase mt-1">Completed</p>
           </div>
         </div>
@@ -395,14 +395,14 @@ export default function ProfilePage() {
         <div className="flex gap-6 text-sm">
           <a
             href={`/users/${user.id}/followers`}
-            className="text-body hover:text-accent-blue"
+            className="text-body hover:text-accent-gold"
           >
             <span className="text-ink font-semibold">{user.followers_count}</span>{" "}
             <span>followers</span>
           </a>
           <a
             href={`/users/${user.id}/following`}
-            className="text-body hover:text-accent-blue"
+            className="text-body hover:text-accent-gold"
           >
             <span className="text-ink font-semibold">{user.following_count}</span>{" "}
             <span>following</span>

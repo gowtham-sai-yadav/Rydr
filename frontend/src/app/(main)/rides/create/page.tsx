@@ -108,11 +108,21 @@ function CreateRideForm() {
             )}
             <p className="text-xs text-stone mt-1">
               Don&apos;t see your spot?{" "}
-              <a href="/destinations/new" className="text-accent-blue hover:text-accent-blue">
+              <a href="/destinations/new" className="text-accent-gold hover:text-accent-gold">
                 Add a destination
               </a>
               .
             </p>
+            {destinationId && (
+              <p className="text-xs text-stone mt-2">
+                <a
+                  href={`/journey/plan?destination=${destinationId}`}
+                  className="text-accent-gold hover:text-accent-gold"
+                >
+                  Plan the route with waypoints →
+                </a>
+              </p>
+            )}
           </div>
         </div>
 
@@ -253,7 +263,7 @@ function CreateRideForm() {
         <button
           type="submit"
           disabled={loading || destinationsLoading}
-          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 font-semibold py-3 rounded-lg transition-colors"
+          className="w-full bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 font-semibold py-3 rounded-lg transition-colors"
         >
           {loading ? "Creating ride…" : "Create Ride"}
         </button>

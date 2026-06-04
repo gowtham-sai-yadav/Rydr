@@ -64,7 +64,7 @@ export default function RidesPage() {
           <button
             onClick={() => setMainTab("feed")}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              mainTab === "feed" ? "bg-ink text-canvas" : "text-mute hover:text-ink"
+              mainTab === "feed" ? "bg-accent-gold text-canvas" : "text-mute hover:text-ink"
             }`}
           >
             Feed
@@ -72,7 +72,7 @@ export default function RidesPage() {
           <button
             onClick={() => setMainTab("mine")}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              mainTab === "mine" ? "bg-ink text-canvas" : "text-mute hover:text-ink"
+              mainTab === "mine" ? "bg-accent-gold text-canvas" : "text-mute hover:text-ink"
             }`}
           >
             My Rides
@@ -81,7 +81,7 @@ export default function RidesPage() {
 
         <Link
           href="/rides/create"
-          className="bg-ink text-canvas hover:bg-surface-light px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+          className="bg-accent-gold text-canvas hover:bg-accent-gold/90 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -97,7 +97,7 @@ export default function RidesPage() {
             type="checkbox"
             checked={followingOnly}
             onChange={(e) => setFollowingOnly(e.target.checked)}
-            className="rounded border-hairline-strong text-accent-blue focus:ring-ink/30"
+            className="rounded border-hairline-strong text-accent-gold focus:ring-ink/30"
           />
           Only show rides from people I follow
         </label>
@@ -111,7 +111,7 @@ export default function RidesPage() {
               onClick={() => setMyFilter(f)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium capitalize whitespace-nowrap transition-colors ${
                 myFilter === f
-                  ? "bg-ink text-canvas"
+                  ? "bg-accent-gold text-canvas"
                   : "bg-surface-card text-mute hover:text-ink"
               }`}
             >
@@ -141,7 +141,7 @@ export default function RidesPage() {
               ? "No rides planned right now."
               : "You don't have any rides yet."}
           </p>
-          <Link href="/rides/create" className="text-accent-blue hover:text-accent-blue text-sm mt-2 inline-block">
+          <Link href="/rides/create" className="text-accent-gold hover:text-accent-gold text-sm mt-2 inline-block">
             Plan one
           </Link>
         </div>

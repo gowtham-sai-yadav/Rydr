@@ -3,12 +3,12 @@ import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import DestinationMap from "@/components/destinations/DestinationMap";
 import type {
   CostEstimate,
   DestinationOut,
   RatingOut,
 } from "@/lib/api.types";
-import { DestinationMap } from "@/components/destinations/DestinationMap";
 
 
 export default function DestinationDetailPage({
@@ -78,7 +78,7 @@ export default function DestinationDetailPage({
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${destination.latitude},${destination.longitude}`;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12 glow-blue">
+    <div className="max-w-4xl mx-auto space-y-6 pb-12 glow-gold">
       {/* Hero */}
       <div className="relative rounded-xl overflow-hidden h-72 bg-surface-card">
         {destination.hero_media_url && (
@@ -96,7 +96,7 @@ export default function DestinationDetailPage({
             <p className="text-body">{destination.region}, {destination.country}</p>
           )}
           <div className="flex items-center gap-3 mt-2 text-sm">
-            <span className="text-accent-yellow">★ {destination.avg_rating.toFixed(1)}</span>
+            <span className="text-accent-gold">★ {destination.avg_rating.toFixed(1)}</span>
             <span className="text-body">({destination.rating_count} ratings)</span>
             <span className="text-body capitalize">· {destination.terrain_difficulty}</span>
           </div>
@@ -135,7 +135,7 @@ export default function DestinationDetailPage({
             region: destination.region,
           },
         ]}
-        compact
+        height={220}
       />
 
       {/* Practical info */}
@@ -189,13 +189,13 @@ export default function DestinationDetailPage({
               </div>
               <div>
                 <p className="text-xs text-mute">Total</p>
-                <p className="text-accent-blue font-semibold">
+                <p className="text-accent-gold font-semibold">
                   {cost.currency} {cost.total_low}–{cost.total_high}
                 </p>
               </div>
             </div>
           ) : (
-            <div className="bg-yellow-500/10 border border-yellow-500/20 text-yellow-300 px-4 py-3 rounded-lg text-sm">
+            <div className="bg-accent-gold/10 border border-accent-gold/20 text-accent-gold px-4 py-3 rounded-lg text-sm">
               Add your bike&apos;s mileage on your{" "}
               <Link href="/profile" className="underline">profile</Link>{" "}
               to see a fuel estimate.
@@ -208,9 +208,15 @@ export default function DestinationDetailPage({
       <div className="flex flex-wrap gap-3">
         <Link
           href={`/rides/create?destination=${destination.id}`}
-          className="flex-1 bg-ink text-canvas hover:bg-surface-light text-center py-3 rounded-lg font-medium"
+          className="flex-1 bg-accent-gold text-canvas hover:bg-accent-gold/90 text-center py-3 rounded-lg font-medium"
         >
           Plan a ride here
+        </Link>
+        <Link
+          href={`/journey/plan?destination=${destination.id}`}
+          className="bg-surface-elevated hover:bg-surface-elevated text-ink px-6 py-3 rounded-lg font-medium"
+        >
+          Plan route
         </Link>
         <a
           href={mapsUrl}
@@ -221,6 +227,20 @@ export default function DestinationDetailPage({
           Open in Google Maps
         </a>
       </div>
+
+      {/* Map */}
+      <DestinationMap
+        destinations={[
+          {
+            id: destination.id,
+            name: destination.name,
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+            region: destination.region,
+          },
+        ]}
+        height={280}
+      />
 
       {/* Recent riders */}
       {destination.recent_rider_count > 0 && (
@@ -284,7 +304,7 @@ export default function DestinationDetailPage({
                       <span className="text-ink text-sm font-medium">{r.user.name}</span>
                     </Link>
                   )}
-                  <span className="text-accent-yellow text-sm">{"★".repeat(r.stars)}{"☆".repeat(5 - r.stars)}</span>
+                  <span className="text-accent-gold text-sm">{"★".repeat(r.stars)}{"☆".repeat(5 - r.stars)}</span>
                 </div>
                 {r.review && <p className="text-body text-sm">{r.review}</p>}
               </div>
