@@ -85,9 +85,9 @@ export default function DestinationsPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12 glow-orange">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-ink">Destinations</h1>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex gap-1 bg-surface-card rounded-lg p-1">
             <button
               onClick={() => setView("grid")}
