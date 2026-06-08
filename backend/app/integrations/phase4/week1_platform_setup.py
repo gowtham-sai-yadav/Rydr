@@ -1,1 +1,10 @@
-INTEGRATION_ACCOUNTS = {\n    "map_provider": "mapbox",\n    "media_provider": "cloudinary",\n}\n\nNEXT_EXPORT_VALIDATION = {\n    "enabled": True,\n    "target": "android-webview-compatible-static-build",\n}\n
+INTEGRATION_ACCOUNTS = {
+    "map_provider": "mapbox",
+    "media_provider": "cloudinary",
+}
+
+NEXT_EXPORT_VALIDATION = {
+    "enabled": True,
+    "target": "android-webview-compatible-static-build",
+}
+
