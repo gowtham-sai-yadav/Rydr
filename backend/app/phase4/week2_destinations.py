@@ -1,0 +1,1 @@
+from typing import TypedDict\n\n\nclass DestinationFilterPayload(TypedDict, total=False):\n    q: str\n    distance_km: float\n    vibe: list[str]\n    cost_band: str\n    vehicle_fit: list[str]\n\n\nDESTINATION_FILTER_KEYS = ["q", "distance_km", "vibe", "cost_band", "vehicle_fit"]\n
