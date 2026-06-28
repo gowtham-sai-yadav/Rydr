@@ -1,0 +1,1 @@
+SOCIAL_FEED_EVENT_TYPES = ("post", "like", "comment")\n\n\ndef ride_summary_payload(ride_id: int, distance_km: float, duration_min: int, destination: str) -> dict:\n    return {\n        "ride_id": ride_id,\n        "distance_km": round(distance_km, 2),\n        "duration_min": duration_min,\n        "destination": destination,\n    }\n
