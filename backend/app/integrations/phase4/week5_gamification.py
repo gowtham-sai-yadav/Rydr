@@ -1,1 +1,8 @@
-ACHIEVEMENT_TRIGGERS = {\n    "first_ride": "ride.completed.count>=1",\n    "distance_100": "ride.distance.total_km>=100",\n    "social_10": "social.posts.count>=10",\n}\n\nNOTIFICATION_CHANNEL = "in_app"\n
+ACHIEVEMENT_TRIGGERS = {
+    "first_ride": "ride.completed.count>=1",
+    "distance_100": "ride.distance.total_km>=100",
+    "social_10": "social.posts.count>=10",
+}
+
+NOTIFICATION_CHANNEL = "in_app"
+
