@@ -4,12 +4,16 @@ realistic user base, a broad destination library, and social feed activity.
 Idempotent: skips if any User already exists.
 Run via: python -m app.seed  (from backend/)
 
-Images: every URL in this file uses Picsum Photos' deterministic seeded
-endpoint (``https://picsum.photos/seed/<seed>/<w>/<h>``). Unlike hand-picked
-Unsplash photo IDs (which rot - dead/moved photo IDs are common and there's
-no way to verify dozens of them without live network access), a Picsum seed
-always resolves to a real image, so nothing ever renders as a broken-image
-icon.
+Images: user avatars and ride-log photos use Picsum's deterministic seeded
+endpoint (``https://picsum.photos/seed/<seed>/<w>/<h>``), which always
+resolves but returns an arbitrary photo - fine when the subject doesn't
+matter. Destination photos are different: showing a desert dune for a misty
+Western Ghats hill station is worse than a placeholder, so those use
+``https://picsum.photos/id/<id>/<w>/<h>`` with specific photo ids that were
+downloaded and visually checked against each destination's terrain (see
+TERRAIN_IMAGES / DESTINATION_TERRAIN below) - mountain hill-stations get
+green ridgelines, coastal rides get shoreline, the one high-altitude cold
+desert (Spiti) gets snow-capped peaks, and so on.
 """
 from __future__ import annotations
 
@@ -18,7 +22,7 @@ import re
 from datetime import date, datetime, time, timedelta, timezone
 
 from app.database import SessionLocal
-from app.models.badge import Badge
+from app.models.badge import Badge, BadgeRarity
 from app.models.destination import (
     Destination,
     DestinationMedia,
@@ -28,15 +32,19 @@ from app.models.destination import (
     TerrainDifficulty,
 )
 from app.models.post import Post, PostComment, PostLike
+from app.models.social import Follow
 from app.models.ride import (
     Bike,
     BikeType,
     DifficultyLevel,
+    ParticipantStatus,
     RidePlan,
+    RidePlanParticipant,
     RidePlanStatus,
     RidePlanVisibility,
 )
 from app.models.ride_log import MediaType, RideLog, RideMedia, RoadCondition
+from app.models.chat import ChatGroup, ChatMessage
 from app.models.user import User
 from app.services.auth_service import hash_password
 
@@ -45,12 +53,157 @@ from app.services.auth_service import hash_password
 # Image helper
 # ---------------------------------------------------------------------------
 def picsum(seed: str, w: int = 800, h: int = 500) -> str:
-    """Deterministic, always-resolving image URL for a given seed string."""
+    """Deterministic, always-resolving image URL for a given seed string.
+    The photo itself is arbitrary - only used where subject matter doesn't
+    matter (user avatars, ride-log snapshots)."""
     return f"https://picsum.photos/seed/{seed}/{w}/{h}"
+
+
+def picsum_id(photo_id: int, w: int = 800, h: int = 500) -> str:
+    """A specific, visually-verified Picsum photo, for places where the
+    subject matter has to actually match (destination hero/gallery)."""
+    return f"https://picsum.photos/id/{photo_id}/{w}/{h}"
 
 
 def slugify(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+# ---------------------------------------------------------------------------
+# Destination imagery - terrain-matched, not random
+# ---------------------------------------------------------------------------
+# Each list holds Picsum photo ids that were downloaded and visually
+# confirmed to show that terrain. Multiple ids per bucket give variety
+# across destinations that share a bucket.
+TERRAIN_IMAGES: dict[str, list[int]] = {
+    "mountain": [66, 116, 177, 731],      # green ridgelines / hill-station valleys
+    "waterfall": [15, 28],                 # rock-strewn waterfall gorges
+    "coastal": [37, 74, 275, 338, 588],    # shoreline, cliffs, pier
+    "forest": [190, 10, 28],               # tree canopy / forest path
+    "lake": [469],                         # still water, reflection
+    "desert": [184],                       # Thar-style sand dunes at dusk
+    "fort": [546],                         # stone archways / heritage interior
+    "snow": [29, 572],                     # snow-capped high-altitude peaks
+    "viewpoint": [388, 705],               # sunrise/sunset scenic, generic fallback
+}
+
+# Explicit per-destination bucket, set by hand against each entry's actual
+# terrain/description below - not inferred from tags, since a spot tagged
+# both "mountain" and "waterfall" still needs one clear photo to pick.
+DESTINATION_TERRAIN: dict[str, str] = {
+    "Nandi Hills": "viewpoint",
+    "Skandagiri": "viewpoint",
+    "Savandurga": "mountain",
+    "Muthyala Maduvu": "waterfall",
+    "Ramanagara": "mountain",
+    "Devarayanadurga": "forest",
+    "Bannerghatta": "forest",
+    "Antaragange": "mountain",
+    "Sangama": "forest",
+    "Gokarna": "coastal",
+    "Chikmagalur": "mountain",
+    "Lonavala": "waterfall",
+    "Mahabaleshwar": "mountain",
+    "Malshej Ghat": "waterfall",
+    "Matheran": "forest",
+    "Igatpuri": "waterfall",
+    "Yelagiri": "mountain",
+    "Yercaud": "mountain",
+    "Ooty": "mountain",
+    "Kodaikanal": "mountain",
+    "Pondicherry via ECR": "coastal",
+    "Ananthagiri Hills": "waterfall",
+    "Pakhal Lake": "lake",
+    "Warangal Fort": "fort",
+    "Nagarjuna Sagar": "lake",
+    "Lansdowne": "forest",
+    "Nahan": "mountain",
+    "Chakrata": "waterfall",
+    "Kasauli": "mountain",
+    "Sariska": "forest",
+    "Mandarmani": "coastal",
+    "Digha": "coastal",
+    "Pushkar": "desert",
+    "Jaisalmer": "desert",
+    "Udaipur": "lake",
+    "Munnar": "mountain",
+    "Wayanad": "waterfall",
+    "Vagamon": "mountain",
+    "Goa Coastal Loop": "coastal",
+    "Tirthan Valley": "forest",
+    "Spiti Valley": "snow",
+    "Mussoorie": "mountain",
+    "Nainital": "lake",
+}
+
+
+# Real photo of the actual named place for every destination - one Wikimedia
+# Commons/Wikipedia photo per entry, looked up per-destination and visually
+# checked (not a generic "mountain"/"beach" stock photo). Every URL here is
+# unique, so no two destinations share a hero image.
+DESTINATION_PHOTOS: dict[str, str] = {
+    "Ananthagiri Hills": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/Ananthagiri_Hills.JPG/960px-Ananthagiri_Hills.JPG",
+    "Antaragange": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Antharagange.JPG/960px-Antharagange.JPG",
+    "Bannerghatta": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/48/Lurking_tiger.jpg/960px-Lurking_tiger.jpg",
+    "Chakrata": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2a/Chakrata_small.JPG/960px-Chakrata_small.JPG",
+    "Chikmagalur": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Chikmagalur%2C_India._%287793316622%29.jpg/960px-Chikmagalur%2C_India._%287793316622%29.jpg",
+    "Devarayanadurga": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/Yoga_Narasimha_Temple_Devarayanadurga.JPG/960px-Yoga_Narasimha_Temple_Devarayanadurga.JPG",
+    "Digha": "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Digha_Tourist_Lodge_front_yard_1.jpg/960px-Digha_Tourist_Lodge_front_yard_1.jpg",
+    "Goa Coastal Loop": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fc/BeachFun.jpg/960px-BeachFun.jpg",
+    "Gokarna": "https://upload.wikimedia.org/wikipedia/commons/d/dd/Delight_india.jpg",
+    "Igatpuri": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Igatpuri_waterfall.jpg/960px-Igatpuri_waterfall.jpg",
+    "Jaisalmer": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Jaisalmer_Fort.jpg/960px-Jaisalmer_Fort.jpg",
+    "Kasauli": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1d/Kasauli_hills.jpg/960px-Kasauli_hills.jpg",
+    "Kodaikanal": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/da/Boating_in_Kodaikanal_Lake_with_Mist.jpg/960px-Boating_in_Kodaikanal_Lake_with_Mist.jpg",
+    "Lansdowne": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Lansdowne_Landscape.jpg/960px-Lansdowne_Landscape.jpg",
+    "Lonavala": "https://upload.wikimedia.org/wikipedia/commons/5/5d/Mumbai_Pune_Expressway2.jpg",
+    "Mahabaleshwar": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/01/MAHABALESWAR_LANDSCAPE.jpg/960px-MAHABALESWAR_LANDSCAPE.jpg",
+    "Malshej Ghat": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2b/Malshej_Hills.jpg/960px-Malshej_Hills.jpg",
+    "Mandarmani": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Mandarmani_Sea_Beach.jpg/960px-Mandarmani_Sea_Beach.jpg",
+    "Matheran": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Matheran_In_Clouds.jpg/960px-Matheran_In_Clouds.jpg",
+    "Munnar": "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b9/Munnar_Overview.jpg/960px-Munnar_Overview.jpg",
+    "Mussoorie": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Mussoorie_Snow_Over_Dehradun_%2814831297545%29.jpg/960px-Mussoorie_Snow_Over_Dehradun_%2814831297545%29.jpg",
+    "Muthyala Maduvu": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Muthyalamaduvu2.jpg/960px-Muthyalamaduvu2.jpg",
+    "Nagarjuna Sagar": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c9/NagarjunaSagarDam.JPG/960px-NagarjunaSagarDam.JPG",
+    "Nahan": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Banethi_forest_rest_house_%2CSirmaur_%2CNahan_%2CHimachal_Pardesh_01.jpg/960px-Banethi_forest_rest_house_%2CSirmaur_%2CNahan_%2CHimachal_Pardesh_01.jpg",
+    "Nainital": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Nainital_metro.jpg/960px-Nainital_metro.jpg",
+    "Nandi Hills": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Sun_rising_over_a_blanket_of_clouds%2C_Nandi_Hills%2C_Karnataka_%28edit%29.jpg/960px-Sun_rising_over_a_blanket_of_clouds%2C_Nandi_Hills%2C_Karnataka_%28edit%29.jpg",
+    "Ooty": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Ooty_lake.jpg/960px-Ooty_lake.jpg",
+    "Pakhal Lake": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/ca/Pakhal_Lake_Telangana.jpg/960px-Pakhal_Lake_Telangana.jpg",
+    "Pondicherry via ECR": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/View_of_Rock_Beach_%28Puducherry_Beach%29_3.jpg/960px-View_of_Rock_Beach_%28Puducherry_Beach%29_3.jpg",
+    "Pushkar": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Pushkar.jpg/960px-Pushkar.jpg",
+    "Ramanagara": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Ramanagara_.jpg/960px-Ramanagara_.jpg",
+    "Sangama": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6e/Cauvery_Kaveri_River_Karnataka_India.jpg/960px-Cauvery_Kaveri_River_Karnataka_India.jpg",
+    "Sariska": "https://upload.wikimedia.org/wikipedia/commons/e/e5/Sariska_Tiger_Reserve%2C_Alwar.jpg",
+    "Savandurga": "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5b/Savandurga_Hill_02.jpg/960px-Savandurga_Hill_02.jpg",
+    "Skandagiri": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Skandagiri.jpg/960px-Skandagiri.jpg",
+    "Spiti Valley": "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3f/Spiti_River_Kaza_Himachal_Jun18_D72_7232.jpg/960px-Spiti_River_Kaza_Himachal_Jun18_D72_7232.jpg",
+    "Tirthan Valley": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/94/Tirthan_River_Tirthan_Valley_DSC00968.jpg/960px-Tirthan_River_Tirthan_Valley_DSC00968.jpg",
+    "Udaipur": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Evening_view%2C_City_Palace%2C_Udaipur.jpg/960px-Evening_view%2C_City_Palace%2C_Udaipur.jpg",
+    "Vagamon": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/eb/Vagamon_meadows.JPG/960px-Vagamon_meadows.JPG",
+    "Warangal Fort": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Shiv_Linga_at_Warangal_Fort_Complex.jpg/960px-Shiv_Linga_at_Warangal_Fort_Complex.jpg",
+    "Wayanad": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Blue%2C_Green_%26_White.jpg/960px-Blue%2C_Green_%26_White.jpg",
+    "Yelagiri": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/01Yelagiri_Hills.jpg/960px-01Yelagiri_Hills.jpg",
+    "Yercaud": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Yercaud_lake.jpg/960px-Yercaud_lake.jpg",
+}
+
+
+def _destination_images(name: str) -> tuple[str, list[str]]:
+    """Returns (hero_url, gallery_urls) for a destination. Hero is the real,
+    verified photo of that specific place from DESTINATION_PHOTOS. Gallery
+    fills in from the destination's terrain bucket (Picsum ids), rotated by
+    name so no two destinations show the identical gallery pair - the hero
+    is what carries the "is this actually the place" signal, the gallery
+    just needs to feel like more of the same terrain."""
+    hero = DESTINATION_PHOTOS[name]
+    bucket = DESTINATION_TERRAIN.get(name, "viewpoint")
+    ids = TERRAIN_IMAGES[bucket]
+    start = sum(ord(c) for c in name) % len(ids)
+    gallery = [
+        picsum_id(ids[start]),
+        picsum_id(ids[(start + 1) % len(ids)]),
+    ]
+    return hero, gallery
 
 
 # ---------------------------------------------------------------------------
@@ -77,13 +230,27 @@ TAGS = [
 ]
 
 
+# (slug, name, description, rarity) - slug must match a key in
+# badge_engine.BADGE_PREDICATES or the badge can never actually be earned
+# (this catalog and that predicate table previously drifted independently
+# and had zero overlapping slugs - nothing was awardable. Fixed here.)
 BADGES = [
-    ("first_ride", "First Ride", "Complete your first ride log"),
-    ("dawn_patrol", "Dawn Patrol", "Start a ride before 7:00 AM"),
-    ("century_club", "Century Club", "Complete a ride of 100 km or more"),
-    ("destination_collector", "Destination Collector", "Visit 5 unique destinations"),
-    ("storyteller", "Storyteller", "Upload 10 photos across rides"),
-    ("early_adopter", "Early Adopter", "Joined Rydr during Phase 3 launch"),
+    ("first-ride", "First Ride", "Complete your first ride log", "common"),
+    ("dawn-patrol", "Dawn Patrol", "Start a ride before 7:00 AM", "common"),
+    ("rider-bronze", "Rider Bronze", "Complete 3 rides", "common"),
+    ("captain-bronze", "Captain Bronze", "Captain your first ride", "common"),
+    ("joiner-bronze", "Joiner Bronze", "Get approved on 3 rides you didn't captain", "common"),
+    ("rider-silver", "Rider Silver", "Complete 6 rides", "rare"),
+    ("captain-silver", "Captain Silver", "Captain 5 rides", "rare"),
+    ("century-club", "Century Club", "Complete a single ride of 100 km or more", "rare"),
+    ("storyteller", "Storyteller", "Upload 10 photos across your rides", "rare"),
+    ("destination-collector", "Destination Collector", "Visit 5 unique destinations", "rare"),
+    ("rider-gold", "Rider Gold", "Complete 10 rides", "epic"),
+    ("star-rider", "Star Rider", "Complete 3+ rides and leave a 5-star rating", "epic"),
+    ("double-trouble", "Double Trouble", "Log two separate rides in one day", "epic"),
+    ("distance-1000", "1000 Club", "Ride 1,000 km lifetime", "epic"),
+    ("consistency-6", "Half-Year Streak", "Ride at least once a month for 6 months straight", "legendary"),
+    ("consistency-12", "Iron Year", "Ride at least once a month for 12 months straight", "legendary"),
 ]
 
 
@@ -363,7 +530,7 @@ USERS = [
 # ---------------------------------------------------------------------------
 def _dest(name, description, region, lat, lng, terrain, food_cost, entry_cost,
           season, tod, tags):
-    slug = slugify(name)
+    hero, gallery = _destination_images(name)
     return {
         "name": name,
         "description": description,
@@ -375,9 +542,9 @@ def _dest(name, description, region, lat, lng, terrain, food_cost, entry_cost,
         "estimated_entry_cost": entry_cost,
         "best_season": season,
         "best_time_of_day": tod,
-        "hero_media_url": picsum(f"{slug}-hero"),
+        "hero_media_url": hero,
         "tag_slugs": tags,
-        "gallery": [picsum(f"{slug}-gallery-1"), picsum(f"{slug}-gallery-2")],
+        "gallery": gallery,
     }
 
 
@@ -418,6 +585,51 @@ DESTINATIONS = [
         "Karnataka", 12.8060, 77.4230, TerrainDifficulty.chill, 200, 30,
         "Jun-Sep for full flow", "Morning",
         ["waterfall", "offbeat", "any"],
+    ),
+    _dest(
+        "Ramanagara",
+        "Rocky monolith hills an hour from Bangalore on NICE Road/Mysore "
+        "highway - famous as the Sholay shooting location and now a vulture "
+        "sanctuary. Short, scenic, and an easy after-work ride.",
+        "Karnataka", 12.7217, 77.2812, TerrainDifficulty.chill, 200, 30,
+        "Oct-Mar", "Late afternoon for golden-hour rock light",
+        ["viewpoint", "mountain", "offbeat", "any"],
+    ),
+    _dest(
+        "Devarayanadurga",
+        "Forested hill-temple ride out of Tumkur - two temples atop a "
+        "boulder-strewn hill reached via a winding forest road, with a "
+        "cooler microclimate than the plains below.",
+        "Karnataka", 13.3667, 77.2833, TerrainDifficulty.moderate, 250, 20,
+        "Year-round", "Morning",
+        ["forest", "temple", "offbeat", "any"],
+    ),
+    _dest(
+        "Bannerghatta",
+        "Forest and wildlife loop on Bangalore's southern edge - a shaded "
+        "ride past the national park and biological park, popular as a "
+        "quick escape without a full day commitment.",
+        "Karnataka", 12.8000, 77.5771, TerrainDifficulty.chill, 300, 80,
+        "Year-round, avoid peak monsoon", "Morning",
+        ["forest", "offbeat", "any"],
+    ),
+    _dest(
+        "Antaragange",
+        "Volcanic rock-hill trek-and-ride near Kolar with a cave temple "
+        "circuit at the summit - a compact, offbeat half-day loop east of "
+        "Bangalore.",
+        "Karnataka", 13.1500, 78.1300, TerrainDifficulty.moderate, 200, 20,
+        "Oct-Feb", "Early morning before the rocks heat up",
+        ["mountain", "temple", "offbeat", "any"],
+    ),
+    _dest(
+        "Sangama",
+        "River-confluence ride via Kanakapura Road where the Arkavathy meets "
+        "the Cauvery - forested backroads for most of the way, with a quiet "
+        "riverside stop at the end.",
+        "Karnataka", 12.4167, 77.2833, TerrainDifficulty.moderate, 250, 20,
+        "Oct-Feb, avoid monsoon flooding", "Morning",
+        ["forest", "offbeat", "any"],
     ),
     _dest(
         "Gokarna",
@@ -782,66 +994,69 @@ def _build_feed_activity(db, users: list[User], destinations: list[Destination])
     rng = random.Random(20260826)
     now = datetime.now(timezone.utc)
 
-    # --- Ride plans + ride logs: give ~2/3 of users a completed ride each on
-    # a destination near their home city (falls back to any destination). ---
+    # --- Ride plans + ride logs: every user gets 1-2 completed rides, each
+    # with a terrain-matched photo (same destination image bank as the
+    # destination cards themselves, so a ride log for a coastal spot shows a
+    # coastal photo, not whatever a random seed happened to return). ---
     ride_logs: list[RideLog] = []
     for user in users:
-        if rng.random() > 0.7:
-            continue
-        dest = rng.choice(destinations)
-        days_ago = rng.randint(3, 180)
-        planned = date.today() - timedelta(days=days_ago)
-        plan = RidePlan(
-            destination_id=dest.id,
-            captain_id=user.id,
-            title=f"Ride to {dest.name}",
-            description=f"Solo/group log for a completed ride to {dest.name}.",
-            planned_date=planned,
-            planned_start_time=time(6, 30),
-            estimated_end_time=time(18, 0),
-            visibility=RidePlanVisibility.solo,
-            difficulty_level=rng.choice(list(DifficultyLevel)),
-            max_riders=rng.choice([1, 2, 4, 6]),
-            status=RidePlanStatus.completed,
-        )
-        db.add(plan)
-        db.flush()
+        for _ in range(rng.randint(1, 2)):
+            dest = rng.choice(destinations)
+            days_ago = rng.randint(1, 45)
+            planned = date.today() - timedelta(days=days_ago)
+            plan = RidePlan(
+                destination_id=dest.id,
+                captain_id=user.id,
+                title=f"Ride to {dest.name}",
+                description=f"Solo/group log for a completed ride to {dest.name}.",
+                planned_date=planned,
+                planned_start_time=time(6, 30),
+                estimated_end_time=time(18, 0),
+                visibility=RidePlanVisibility.solo,
+                difficulty_level=rng.choice(list(DifficultyLevel)),
+                max_riders=rng.choice([1, 2, 4, 6]),
+                status=RidePlanStatus.completed,
+            )
+            db.add(plan)
+            db.flush()
 
-        start_ts = datetime.combine(planned, time(6, 30), tzinfo=timezone.utc)
-        end_ts = start_ts + timedelta(hours=rng.randint(6, 12))
-        log = RideLog(
-            ride_plan_id=plan.id,
-            rider_id=user.id,
-            actual_start_ts=start_ts,
-            actual_end_ts=end_ts,
-            actual_cost=rng.randint(500, 3500),
-            road_condition=rng.choice(list(RoadCondition)),
-            recommended=rng.random() > 0.15,
-            notes="Logged via seed data.",
-        )
-        db.add(log)
-        db.flush()
+            start_ts = datetime.combine(planned, time(6, 30), tzinfo=timezone.utc)
+            end_ts = start_ts + timedelta(hours=rng.randint(6, 12))
+            log = RideLog(
+                ride_plan_id=plan.id,
+                rider_id=user.id,
+                actual_start_ts=start_ts,
+                actual_end_ts=end_ts,
+                actual_cost=rng.randint(500, 3500),
+                road_condition=rng.choice(list(RoadCondition)),
+                recommended=rng.random() > 0.15,
+                notes="Logged via seed data.",
+            )
+            db.add(log)
+            db.flush()
 
-        if rng.random() > 0.5:
-            slug = slugify(dest.name)
+            bucket = DESTINATION_TERRAIN.get(dest.name, "viewpoint")
+            photo_ids = TERRAIN_IMAGES[bucket]
+            photo_id = photo_ids[rng.randrange(len(photo_ids))]
             db.add(
                 RideMedia(
                     ride_log_id=log.id,
-                    url=picsum(f"{slug}-ridelog-{user.email.split('@')[0]}"),
+                    url=picsum_id(photo_id),
                     media_type=MediaType.image,
                     uploaded_by_user_id=user.id,
                     caption=f"On the road to {dest.name}",
                 )
             )
-        ride_logs.append(log)
-        log._destination = dest  # stash for post generation below
+            ride_logs.append(log)
+            log._destination = dest  # stash for post generation below
 
-    # --- Posts: ride recaps for some logs, plus standalone text posts. ---
+    # --- Posts: a ride recap for every ride log, plus enough standalone
+    # posts that every user ends up with 2-3 posts total and the feed reads
+    # as recently active (all within the last two weeks). ---
     posts: list[Post] = []
+    posts_by_author: dict[str, int] = {}
 
     for log in ride_logs:
-        if rng.random() > 0.6:
-            continue
         dest = log._destination
         template = rng.choice(RECAP_TEMPLATES)
         caption = template.format(
@@ -855,25 +1070,27 @@ def _build_feed_activity(db, users: list[User], destinations: list[Destination])
             author_id=log.rider_id,
             ride_log_id=log.id,
             caption=caption,
-            created_at=log.actual_end_ts + timedelta(hours=rng.randint(1, 48)),
+            created_at=now - timedelta(days=rng.randint(0, 13), hours=rng.randint(0, 23)),
         )
         db.add(post)
         posts.append(post)
+        posts_by_author[log.rider_id] = posts_by_author.get(log.rider_id, 0) + 1
 
-    # Standalone posts (no ride log) to round the feed out to ~20 total.
-    target_total = 22
-    while len(posts) < target_total:
-        user = rng.choice(users)
-        dest = rng.choice(destinations)
-        template = rng.choice(STANDALONE_TEMPLATES)
-        caption = template.format(dest=dest.name)
-        post = Post(
-            author_id=user.id,
-            caption=caption,
-            created_at=now - timedelta(days=rng.randint(0, 60), hours=rng.randint(0, 23)),
-        )
-        db.add(post)
-        posts.append(post)
+    # Top up standalone posts so every user has at least 2, and most reach 3.
+    for user in users:
+        have = posts_by_author.get(user.id, 0)
+        target = rng.choice([2, 2, 3])
+        for _ in range(max(0, target - have)):
+            dest = rng.choice(destinations)
+            template = rng.choice(STANDALONE_TEMPLATES)
+            caption = template.format(dest=dest.name)
+            post = Post(
+                author_id=user.id,
+                caption=caption,
+                created_at=now - timedelta(days=rng.randint(0, 13), hours=rng.randint(0, 23)),
+            )
+            db.add(post)
+            posts.append(post)
 
     db.flush()
 
@@ -898,10 +1115,103 @@ def _build_feed_activity(db, users: list[User], destinations: list[Destination])
             )
 
 
+UPCOMING_RIDE_TITLES = [
+    "Sunrise run to {d}", "Weekend loop to {d}", "{d} for the coffee and curves",
+    "First-timer friendly ride to {d}", "Monsoon chase to {d}", "Early morning {d} run",
+    "Long weekend to {d}", "After-work escape to {d}", "{d} - anyone free Saturday?",
+    "Group cruise to {d}", "Open ride to {d}", "No-approval-needed cruise to {d}",
+]
+
+UPCOMING_RIDE_CHAT_MESSAGES = [
+    "Excited for this one, what time are we meeting?",
+    "Bringing my GoPro, someone remind me to charge it.",
+    "Weather looks decent for Saturday, fingers crossed.",
+    "First time on this route, any tips?",
+    "I'll bring a puncture kit just in case.",
+    "Can we do a fuel stop about halfway?",
+    "Count me in, see you all there.",
+    "Anyone else riding a smaller cc bike? Wondering about pace.",
+    "Let's meet 15 min early for a quick group photo before we set off.",
+    "Perfect, this is exactly the kind of ride I needed this week.",
+]
+
+
+def _build_upcoming_group_rides(db, users: list[User], destinations: list[Destination]) -> None:
+    """Future, joinable group rides with an active chat group each - what
+    /rides and /chat actually need to not be empty right after signup.
+    _build_feed_activity above only creates *completed* solo ride history
+    (for the profile stats + feed recap), which is a different surface.
+
+    Two of the ten are seeded with requires_approval=False and one with
+    max_riders=None, so both new ride-creation options actually have a
+    live example to exercise instead of only existing in the create form.
+    """
+    rng = random.Random(20260826)
+    now = datetime.now(timezone.utc)
+
+    captains = rng.sample(users, k=min(10, len(users)))
+    for i, captain in enumerate(captains):
+        dest = rng.choice(destinations)
+        planned = date.today() + timedelta(days=rng.randint(3, 45))
+        title = rng.choice(UPCOMING_RIDE_TITLES).format(d=dest.name)
+        open_ride = i >= 7
+
+        plan = RidePlan(
+            destination_id=dest.id,
+            captain_id=captain.id,
+            title=title,
+            description=f"Group ride to {dest.name}. Moderate pace, all riders welcome.",
+            planned_date=planned,
+            planned_start_time=time(6, 30),
+            estimated_end_time=time(18, 0),
+            visibility=RidePlanVisibility.group,
+            difficulty_level=rng.choice(list(DifficultyLevel)),
+            max_riders=None if i == 9 else rng.choice([4, 6, 8, 10]),
+            requires_approval=not open_ride,
+            status=RidePlanStatus.planned,
+        )
+        db.add(plan)
+        db.flush()
+
+        chat = ChatGroup(ride_plan_id=plan.id, name=plan.title)
+        db.add(chat)
+        db.flush()
+
+        pool = [u for u in users if u.id != captain.id]
+        approved = rng.sample(pool, k=min(rng.randint(2, 5), len(pool)))
+        pending = rng.sample(
+            [u for u in pool if u not in approved],
+            k=min(rng.randint(0, 2), max(0, len(pool) - len(approved))),
+        )
+
+        for u in approved:
+            db.add(RidePlanParticipant(ride_plan_id=plan.id, user_id=u.id, status=ParticipantStatus.approved))
+        for u in pending:
+            db.add(RidePlanParticipant(ride_plan_id=plan.id, user_id=u.id, status=ParticipantStatus.pending))
+
+        participants = [captain] + approved
+        base_time = now - timedelta(days=rng.randint(0, 3))
+        for m in range(rng.randint(2, 5)):
+            author = rng.choice(participants)
+            db.add(ChatMessage(
+                chat_group_id=chat.id,
+                author_id=author.id,
+                body=rng.choice(UPCOMING_RIDE_CHAT_MESSAGES),
+                created_at=base_time + timedelta(minutes=m * rng.randint(5, 90)),
+            ))
+
+    db.flush()
+
+
 def seed() -> None:
     db = SessionLocal()
     try:
-        if db.query(User).first():
+        # Tags are only ever created here - there's no user-facing endpoint
+        # that inserts a Tag row - so their presence is a reliable "have we
+        # already seeded" marker. Checking for *any* User instead (the old
+        # guard) meant one stray manual signup permanently blocked the real
+        # dataset from ever loading, with no error to say why.
+        if db.query(Tag).first():
             print("Database already seeded, skipping.")
             return
 
@@ -915,13 +1225,21 @@ def seed() -> None:
         print(f"Seeded {len(TAGS)} tags")
 
         # Badges
-        for slug, name, description in BADGES:
-            db.add(Badge(slug=slug, name=name, description=description))
+        for slug, name, description, rarity in BADGES:
+            db.add(Badge(slug=slug, name=name, description=description, rarity=BadgeRarity(rarity)))
         print(f"Seeded {len(BADGES)} badges")
 
         # Users + bikes
         users: list[User] = []
         for ud in USERS:
+            existing = db.query(User).filter(User.email == ud["email"]).first()
+            if existing:
+                # A real signup (e.g. someone testing the running app) beat
+                # the seed to this email - keep their account rather than
+                # crashing on a duplicate-email constraint, just skip
+                # re-creating the demo bike/profile for this one slot.
+                users.append(existing)
+                continue
             user = User(
                 name=ud["name"],
                 email=ud["email"],
@@ -932,6 +1250,10 @@ def seed() -> None:
                 home_latitude=ud["home_latitude"],
                 home_longitude=ud["home_longitude"],
                 password_hash=hash_password("password123"),
+                # First seeded account doubles as the dev admin - otherwise
+                # the moderation queue has no way to be exercised at all
+                # (no signup flow grants is_admin; it has to start somewhere).
+                is_admin=(ud["email"] == "alex@ryder.com"),
             )
             db.add(user)
             db.flush()
@@ -950,6 +1272,25 @@ def seed() -> None:
                 )
             )
         print(f"Seeded {len(USERS)} users + bikes")
+
+        # Follow graph: every user follows 3-6 others. Run twice with
+        # different shuffles so a decent number of pairs end up mutual
+        # (needed for DMs, which only unlock between mutual followers) -
+        # a single one-directional pass would make almost every pair
+        # one-way and leave DMs untestable.
+        follow_rng = random.Random(20260826)
+        follow_pairs: set[tuple] = set()
+        for _pass in range(2):
+            for u in users:
+                others = [o for o in users if o.id != u.id]
+                follow_rng.shuffle(others)
+                for o in others[: follow_rng.randint(3, 6)]:
+                    follow_pairs.add((u.id, o.id))
+        for follower_id, followed_id in follow_pairs:
+            db.add(Follow(follower_id=follower_id, followed_id=followed_id))
+        db.flush()
+        mutual_count = sum(1 for a, b in follow_pairs if (b, a) in follow_pairs) // 2
+        print(f"Seeded {len(follow_pairs)} follows ({mutual_count} mutual pairs)")
 
         # Destinations + tags + gallery
         destinations: list[Destination] = []
@@ -994,6 +1335,19 @@ def seed() -> None:
             f"Seeded {ride_log_count} ride logs, {post_count} posts, "
             f"{like_count} likes, {comment_count} comments"
         )
+
+        # Upcoming joinable group rides + their chat groups - what /rides
+        # and /chat actually render; the feed activity above is all
+        # already-completed history.
+        _build_upcoming_group_rides(db, users, destinations)
+        db.flush()
+        upcoming_count = (
+            db.query(RidePlan)
+            .filter(RidePlan.status == RidePlanStatus.planned, RidePlan.visibility == RidePlanVisibility.group)
+            .count()
+        )
+        chat_group_count = db.query(ChatGroup).count()
+        print(f"Seeded {upcoming_count} upcoming group rides with {chat_group_count} chat groups")
 
         db.commit()
         print("Seed complete.")

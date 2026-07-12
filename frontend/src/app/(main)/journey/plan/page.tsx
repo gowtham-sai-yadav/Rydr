@@ -12,6 +12,7 @@ function JourneyPlanContent() {
 
   const [destination, setDestination] = useState<DestinationOut | null>(null);
   const [initialWaypoints, setInitialWaypoints] = useState<Waypoint[] | null>(null);
+  const [savedRouteId, setSavedRouteId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!destinationId) {
@@ -29,33 +30,33 @@ function JourneyPlanContent() {
       .catch(() => setInitialWaypoints([]));
   }, [destinationId]);
 
+  const continueHref = destinationId
+    ? `/rides/create?destination=${destinationId}${savedRouteId ? `&route_id=${savedRouteId}` : ""}`
+    : "/rides/create";
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
       <div>
         <h1 className="text-2xl font-bold text-ink">Plan a journey</h1>
         <p className="text-mute text-sm mt-1">
           Drop waypoints for your route{destination ? ` to ${destination.name}` : ""} - start,
-          stops, and the destination. Drag pins to fine-tune, add a note to any stop, and
-          reorder as needed.
+          stops, and the destination. Drag pins to fine-tune, add a note to any stop, check
+          &quot;return to start&quot; for a loop, and save it to attach to your ride.
         </p>
-      </div>
-
-      <div className="bg-accent-gold/10 border border-accent-gold/20 text-accent-gold px-4 py-3 rounded-lg text-sm">
-        Saving a route to the backend isn&apos;t wired up yet - the API only has a model for
-        it, no endpoint. Your waypoints stay in this session; capture them manually (or via
-        the ride description) for now.
       </div>
 
       {initialWaypoints !== null && (
         <JourneyPlanner
           initialWaypoints={initialWaypoints}
           center={destination ? [destination.latitude, destination.longitude] : undefined}
+          destinationId={destinationId || undefined}
+          onSaved={setSavedRouteId}
         />
       )}
 
       <div className="flex justify-end">
         <Link
-          href={destinationId ? `/rides/create?destination=${destinationId}` : "/rides/create"}
+          href={continueHref}
           className="bg-accent-gold text-canvas hover:bg-accent-gold/90 px-6 py-3 rounded-lg font-medium"
         >
           Continue to ride details

@@ -1,7 +1,7 @@
 """Pydantic schemas for the leaderboard endpoints (Phase 4 W5)."""
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -28,3 +28,22 @@ class DestinationLeaderboardEntry(BaseModel):
 
 class DestinationLeaderboardResponse(BaseModel):
     entries: List[DestinationLeaderboardEntry] = []
+
+
+class LocalLegendOut(BaseModel):
+    destination_id: UUID
+    user: Optional[UserBrief] = None
+    ride_count: int = 0
+    window_days: int = 90
+
+
+class WeeklyLeagueTier(BaseModel):
+    tier: str  # "gold" | "silver" | "bronze"
+    rank: int
+    user: UserBrief
+    distance_km: float
+
+
+class WeeklyLeagueResponse(BaseModel):
+    week_start: str
+    tiers: List[WeeklyLeagueTier] = []

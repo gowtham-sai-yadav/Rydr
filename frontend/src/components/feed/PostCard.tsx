@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import type { PostCommentOut, PostOut } from "@/lib/api.types";
 import { ReportButton } from "@/components/moderation/ReportButton";
@@ -20,6 +21,7 @@ function timeAgo(iso: string): string {
 export function PostCard({ post: initialPost }: { post: PostOut }) {
   const [post, setPost] = useState(initialPost);
   const [liking, setLiking] = useState(false);
+  const [justRevved, setJustRevved] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<PostCommentOut[]>([]);
   const [commentsLoaded, setCommentsLoaded] = useState(false);
@@ -35,11 +37,16 @@ export function PostCard({ post: initialPost }: { post: PostOut }) {
     // Optimistic update — like/unlike return 204 with no body, so this
     // client-computed state is the only source of truth; reverted on failure.
     const prev = post;
+    const wasLiked = prev.liked_by_me;
     setPost((p) => ({
       ...p,
       liked_by_me: !p.liked_by_me,
       like_count: p.liked_by_me ? p.like_count - 1 : p.like_count + 1,
     }));
+    if (!wasLiked) {
+      setJustRevved(true);
+      setTimeout(() => setJustRevved(false), 500);
+    }
     try {
       if (prev.liked_by_me) {
         await api.unlikePost(prev.id);
@@ -125,28 +132,49 @@ export function PostCard({ post: initialPost }: { post: PostOut }) {
       {error && <p className="text-accent-red text-xs">{error}</p>}
 
       <div className="flex items-center gap-4 pt-1 border-t border-hairline text-sm">
-        <button
-          type="button"
-          onClick={toggleLike}
-          disabled={liking}
-          className={`flex items-center gap-1.5 mt-3 transition-colors ${
-            post.liked_by_me ? "text-accent-red" : "text-charcoal hover:text-ink"
-          }`}
-        >
-          <svg className="w-4 h-4" fill={post.liked_by_me ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-          </svg>
-          {post.like_count}
-        </button>
+        <div className="relative mt-3">
+          <motion.button
+            type="button"
+            onClick={toggleLike}
+            disabled={liking}
+            aria-pressed={post.liked_by_me}
+            aria-label={post.liked_by_me ? "Remove rev" : "Rev this post"}
+            whileTap={{ scale: 0.85 }}
+            animate={justRevved ? { scale: [1, 1.35, 1] } : { scale: 1 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className={`flex items-center gap-1.5 transition-colors ${
+              post.liked_by_me ? "text-accent-orange" : "text-charcoal hover:text-ink"
+            }`}
+          >
+            <svg className="w-4 h-4" fill={post.liked_by_me ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            <span aria-hidden="true">{post.like_count}</span>
+          </motion.button>
+          <AnimatePresence>
+            {justRevved && (
+              <motion.span
+                initial={{ opacity: 1, scale: 0.4, y: 0 }}
+                animate={{ opacity: 0, scale: 1.6, y: -14 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="pointer-events-none absolute -top-1 left-0 text-accent-orange text-xs font-semibold"
+              >
+                +1 rev
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
         <button
           type="button"
           onClick={loadComments}
+          aria-label={showComments ? "Hide comments" : "Show comments"}
           className="flex items-center gap-1.5 mt-3 text-charcoal hover:text-ink transition-colors"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
-          {post.comment_count}
+          <span aria-hidden="true">{post.comment_count}</span>
         </button>
         <ReportButton targetType="post" targetId={post.id} className="mt-3 ml-auto" />
       </div>

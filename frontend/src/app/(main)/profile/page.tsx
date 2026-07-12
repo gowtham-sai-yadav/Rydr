@@ -1,10 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import type { BadgeOut, BikeType, UserBadgeOut, UserStatsOut } from "@/lib/api.types";
+import type { BadgeOut, BikeType, FollowEdgeOut, UserBadgeOut, UserStatsOut } from "@/lib/api.types";
 import { BadgeShelf } from "@/components/badges/BadgeShelf";
 import { RideStatsPanel } from "@/components/profile/RideStatsPanel";
+import { PersonalRecordsPanel } from "@/components/profile/PersonalRecordsPanel";
+import { BestEffortsPanel } from "@/components/profile/BestEffortsPanel";
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
@@ -23,6 +26,9 @@ export default function ProfilePage() {
   const [homeCity, setHomeCity] = useState("");
   const [homeLat, setHomeLat] = useState("");
   const [homeLng, setHomeLng] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [privacyRadius, setPrivacyRadius] = useState("");
+  const [followRequests, setFollowRequests] = useState<FollowEdgeOut[]>([]);
 
   // Bike form state (now includes mileage_kmpl + engine_cc + type — feed cost calc)
   const [bikeName, setBikeName] = useState("");
@@ -31,6 +37,8 @@ export default function ProfilePage() {
   const [bikeEngineCc, setBikeEngineCc] = useState("");
   const [bikeMileage, setBikeMileage] = useState("");
   const [bikeType, setBikeType] = useState<BikeType>("any");
+  const [bikeServiceInterval, setBikeServiceInterval] = useState("");
+  const [markingServiced, setMarkingServiced] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -39,7 +47,19 @@ export default function ProfilePage() {
     api.getMyStats().then(setStats).catch(() => {});
     api.listMyBadges().then(setBadges).catch(() => {});
     api.listBadgeCatalog().then(setBadgeCatalog).catch(() => {});
+    api.listFollowRequests().then((res) => setFollowRequests(res.edges)).catch(() => {});
   }, []);
+
+  const handleFollowRequest = async (followerId: string, action: "accept" | "reject") => {
+    setFollowRequests((prev) => prev.filter((e) => e.user.id !== followerId));
+    try {
+      if (action === "accept") await api.acceptFollowRequest(followerId);
+      else await api.rejectFollowRequest(followerId);
+    } catch {
+      // Best-effort — a failed accept/reject just leaves the request for
+      // a retry; re-fetching would flicker it back in, not worth it here.
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -49,12 +69,15 @@ export default function ProfilePage() {
       setHomeCity(user.home_city || "");
       setHomeLat(user.home_latitude?.toString() || "");
       setHomeLng(user.home_longitude?.toString() || "");
+      setIsPrivate(user.is_private);
+      setPrivacyRadius(user.privacy_zone_radius_km != null ? String(user.privacy_zone_radius_km) : "");
       setBikeName(user.bike?.name || "");
       setBikeModel(user.bike?.model || "");
       setBikeYear(user.bike?.year?.toString() || "");
       setBikeEngineCc(user.bike?.engine_cc?.toString() || "");
       setBikeMileage(user.bike?.mileage_kmpl?.toString() || "");
       setBikeType((user.bike?.type as BikeType) || "any");
+      setBikeServiceInterval(user.bike?.service_interval_km?.toString() || "3000");
     }
   }, [user]);
 
@@ -83,6 +106,8 @@ export default function ProfilePage() {
         home_city: homeCity || null,
         home_latitude: lat,
         home_longitude: lng,
+        is_private: isPrivate,
+        privacy_zone_radius_km: privacyRadius === "" ? null : parseFloat(privacyRadius),
       });
       await refreshUser();
       setEditing(false);
@@ -104,6 +129,7 @@ export default function ProfilePage() {
         engine_cc: bikeEngineCc ? parseInt(bikeEngineCc) : null,
         mileage_kmpl: bikeMileage ? parseFloat(bikeMileage) : null,
         type: bikeType,
+        service_interval_km: bikeServiceInterval ? parseInt(bikeServiceInterval) : undefined,
       });
       await refreshUser();
       setEditBike(false);
@@ -114,301 +140,533 @@ export default function ProfilePage() {
     }
   };
 
+  const handleMarkServiced = async () => {
+    setMarkingServiced(true);
+    setError("");
+    try {
+      await api.markBikeServiced();
+      await refreshUser();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to mark serviced");
+    } finally {
+      setMarkingServiced(false);
+    }
+  };
+
   if (!user) return null;
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6 pb-12">
-      <h1 className="text-2xl font-bold text-ink">Profile</h1>
+    <div className="max-w-5xl mx-auto space-y-8 pb-16 relative">
+      {/* 1. Header Hero Banner */}
+      <div className="h-44 sm:h-56 rounded-2xl overflow-hidden relative border border-hairline-strong shadow-lg select-none">
+        <div 
+          className="absolute inset-0 bg-cover bg-center brightness-[0.6] filter saturate-[0.8]"
+          style={{ backgroundImage: "url('/images/scenic_ride.jpg')" }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/40 to-transparent" />
+        <div className="absolute bottom-6 left-6 right-6 flex flex-col sm:flex-row items-center sm:items-end gap-4 z-10">
+          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-accent-gold via-accent-orange to-accent-blue p-[3px] shadow-xl">
+            <div className="w-full h-full rounded-full bg-surface-deep flex items-center justify-center text-3xl font-bold font-display text-ink uppercase">
+              {user.name.charAt(0)}
+            </div>
+          </div>
+          <div className="text-center sm:text-left flex-1 space-y-1">
+            <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-ink uppercase">{user.name}</h1>
+            <p className="text-xs text-mute font-semibold tracking-wider uppercase">{user.email}</p>
+          </div>
+        </div>
+      </div>
 
       {error && (
-        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg text-sm">
+        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-xl text-xs font-semibold uppercase tracking-wider shadow-lg">
           {error}
         </div>
       )}
 
-      {/* Profile */}
-      <div className="bg-surface-card rounded-xl p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-ink text-canvas flex items-center justify-center text-2xl font-bold">
-              {user.name.charAt(0)}
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-ink">{user.name}</h2>
-              <p className="text-mute text-sm">{user.email}</p>
-              {user.phone && <p className="text-mute text-sm">{user.phone}</p>}
-              {user.home_city && (
-                <p className="text-mute text-sm">📍 {user.home_city}</p>
-              )}
-            </div>
-          </div>
-          <button
-            onClick={() => setEditing(!editing)}
-            className="text-accent-gold hover:text-accent-gold text-sm font-medium"
-          >
-            {editing ? "Cancel" : "Edit"}
-          </button>
-        </div>
+      <AnniversaryBanner createdAt={user.created_at} />
 
-        {user.bio && !editing && <p className="text-body text-sm">{user.bio}</p>}
-
-        {editing && (
-          <div className="space-y-3 mt-4 border-t border-hairline-strong pt-4">
-            <div>
-              <label className="block text-sm text-mute mb-1">Name</label>
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-mute mb-1">Phone</label>
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-mute mb-1">Bio</label>
-              <textarea
-                value={bio}
-                onChange={(e) => setBio(e.target.value)}
-                rows={3}
-                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
-              />
-            </div>
-
-            <div className="border-t border-hairline-strong pt-3">
-              <p className="text-xs text-mute uppercase mb-2">
-                Home location · powers cost estimates &amp; distance sort
-              </p>
-              <div>
-                <label className="block text-sm text-mute mb-1">City</label>
-                <input
-                  value={homeCity}
-                  onChange={(e) => setHomeCity(e.target.value)}
-                  className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
-                  placeholder="e.g. Bangalore"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3 mt-2">
-                <div>
-                  <label className="block text-sm text-mute mb-1">Latitude</label>
-                  <input
-                    value={homeLat}
-                    onChange={(e) => setHomeLat(e.target.value)}
-                    placeholder="12.97"
-                    className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
-                  />
+      {followRequests.length > 0 && (
+        <div className="card-bordered p-5 bg-surface-card/30 backdrop-blur-md rounded-2xl space-y-3">
+          <h3 className="text-xs font-bold text-accent-gold tracking-widest uppercase">
+            Follow Requests
+          </h3>
+          <div className="space-y-2">
+            {followRequests.map((edge) => (
+              <div key={edge.user.id} className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-ink text-canvas flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden">
+                  {edge.user.avatar_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={edge.user.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    edge.user.name.charAt(0)
+                  )}
                 </div>
-                <div>
-                  <label className="block text-sm text-mute mb-1">Longitude</label>
-                  <input
-                    value={homeLng}
-                    onChange={(e) => setHomeLng(e.target.value)}
-                    placeholder="77.59"
-                    className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-stone mt-1">
-                Right-click on Google Maps to copy lat/lng. Both fields together — leave both blank to remove.
-              </p>
-            </div>
-
-            <button
-              onClick={handleSaveProfile}
-              disabled={saving}
-              className="bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 px-6 py-2 rounded-lg text-sm font-medium"
-            >
-              {saving ? "Saving…" : "Save changes"}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Bike */}
-      <div className="bg-surface-card rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-ink">My Bike</h3>
-          <button
-            onClick={() => setEditBike(!editBike)}
-            className="text-accent-gold hover:text-accent-gold text-sm font-medium"
-          >
-            {editBike ? "Cancel" : "Edit"}
-          </button>
-        </div>
-
-        {!editBike ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            <div>
-              <p className="text-xs text-mute uppercase">Name</p>
-              <p className="text-ink font-medium">{user.bike?.name || "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-mute uppercase">Model</p>
-              <p className="text-ink font-medium">{user.bike?.model || "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-mute uppercase">Year</p>
-              <p className="text-ink font-medium">{user.bike?.year || "—"}</p>
-            </div>
-            <div>
-              <p className="text-xs text-mute uppercase">Engine</p>
-              <p className="text-ink font-medium">
-                {user.bike?.engine_cc ? `${user.bike.engine_cc} cc` : "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-mute uppercase">Mileage</p>
-              <p className="text-ink font-medium">
-                {user.bike?.mileage_kmpl ? `${user.bike.mileage_kmpl} kmpl` : "—"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-mute uppercase">Type</p>
-              <p className="text-ink font-medium capitalize">{user.bike?.type ?? "any"}</p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-mute mb-1">Name</label>
-                <input
-                  value={bikeName}
-                  onChange={(e) => setBikeName(e.target.value)}
-                  className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
-                  placeholder="Shadow"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-mute mb-1">Model</label>
-                <input
-                  value={bikeModel}
-                  onChange={(e) => setBikeModel(e.target.value)}
-                  className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
-                  placeholder="Honda CB650R"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-mute mb-1">Year</label>
-                <input
-                  type="number"
-                  value={bikeYear}
-                  onChange={(e) => setBikeYear(e.target.value)}
-                  className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-mute mb-1">Type</label>
-                <select
-                  value={bikeType}
-                  onChange={(e) => setBikeType(e.target.value as BikeType)}
-                  className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+                <p className="flex-1 text-sm text-ink font-medium truncate">{edge.user.name}</p>
+                <button
+                  onClick={() => handleFollowRequest(edge.user.id, "accept")}
+                  className="bg-accent-gold text-canvas hover:bg-accent-gold/90 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider"
                 >
-                  <option value="any">Any</option>
-                  <option value="commuter">Commuter</option>
-                  <option value="sport">Sport</option>
-                  <option value="adventure">Adventure</option>
-                  <option value="cruiser">Cruiser</option>
-                </select>
+                  Accept
+                </button>
+                <button
+                  onClick={() => handleFollowRequest(edge.user.id, "reject")}
+                  className="bg-surface-elevated text-mute hover:text-ink px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider"
+                >
+                  Decline
+                </button>
               </div>
-              <div>
-                <label className="block text-sm text-mute mb-1">Engine (cc)</label>
-                <input
-                  type="number"
-                  value={bikeEngineCc}
-                  onChange={(e) => setBikeEngineCc(e.target.value)}
-                  className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
-                />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 2. Dual-Column Grid Dashboard */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        {/* Left Column - Stats & Gamification Badges */}
+        <div className="space-y-6 md:col-span-1">
+          {/* Stats count */}
+          <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg">
+            <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
+            <h3 className="text-xs font-bold text-accent-gold tracking-widest uppercase mb-4 select-none">Ride stats</h3>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="text-center">
+                <p className="text-2xl font-bold font-display text-ink">{stats?.rides_captained ?? 0}</p>
+                <p className="text-[9px] text-mute uppercase font-semibold tracking-wider mt-1 select-none">Lead</p>
               </div>
-              <div>
-                <label className="block text-sm text-mute mb-1">Mileage (kmpl) *</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={bikeMileage}
-                  onChange={(e) => setBikeMileage(e.target.value)}
-                  className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
-                  placeholder="21"
-                />
+              <div className="text-center border-x border-hairline">
+                <p className="text-2xl font-bold font-display text-ink">{stats?.rides_joined ?? 0}</p>
+                <p className="text-[9px] text-mute uppercase font-semibold tracking-wider mt-1 select-none">Joined</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-bold font-display text-ink">{stats?.rides_completed ?? 0}</p>
+                <p className="text-[9px] text-mute uppercase font-semibold tracking-wider mt-1 select-none">Done</p>
               </div>
             </div>
-            <p className="text-xs text-stone">
-              Mileage powers the fuel cost estimate on destinations.
-            </p>
-            <button
-              onClick={handleSaveBike}
-              disabled={saving}
-              className="bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 px-6 py-2 rounded-lg text-sm font-medium"
-            >
-              {saving ? "Saving…" : "Save bike"}
-            </button>
           </div>
-        )}
-      </div>
 
-      {/* Badges — M8. Show locked tiles on /profile so the user can see
-          what they're working toward; /users/[id] hides locked. */}
-      <div className="bg-surface-card rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-ink mb-4">Badges</h3>
-        <BadgeShelf
-          earned={badges}
-          catalog={badgeCatalog}
-          showLocked
-        />
-      </div>
+          {/* Social followers */}
+          <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg">
+            <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-blue/20 to-transparent" />
+            <h3 className="text-xs font-bold text-accent-blue tracking-widest uppercase mb-4 select-none">Social</h3>
+            <div className="flex justify-around text-xs font-semibold uppercase tracking-wider">
+              <a
+                href={`/users/${user.id}/followers`}
+                className="text-mute hover:text-accent-gold transition-colors duration-200"
+              >
+                <span className="text-ink font-bold font-display mr-1">{user.followers_count}</span> followers
+              </a>
+              <div className="w-[1px] bg-hairline h-4" />
+              <a
+                href={`/users/${user.id}/following`}
+                className="text-mute hover:text-accent-gold transition-colors duration-200"
+              >
+                <span className="text-ink font-bold font-display mr-1">{user.following_count}</span> following
+              </a>
+            </div>
+          </div>
 
-      {/* Stats */}
-      <div className="bg-surface-card rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-ink mb-4">Ride stats</h3>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="text-center">
-            <p className="text-3xl font-bold text-accent-gold">{stats?.rides_captained ?? 0}</p>
-            <p className="text-xs text-mute uppercase mt-1">Captained</p>
+        </div>
+
+        {/* Right Column - Profile Info & Biker Garage */}
+        <div className="space-y-6 md:col-span-2">
+          {/* Profile details */}
+          <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg">
+            <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-ink uppercase tracking-wider select-none">Profile Info</h3>
+              <button
+                onClick={() => setEditing(!editing)}
+                className="text-xs font-bold uppercase tracking-widest text-accent-gold hover:underline transition-colors duration-200"
+              >
+                {editing ? "Cancel" : "Edit Profile"}
+              </button>
+            </div>
+
+            {!editing ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-[10px] text-mute uppercase font-semibold tracking-wider">Phone</p>
+                    <p className="text-ink font-semibold text-sm mt-0.5">{user.phone || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-mute uppercase font-semibold tracking-wider">Home Base</p>
+                    <p className="text-ink font-semibold text-sm mt-0.5">{user.home_city || "—"}</p>
+                  </div>
+                </div>
+                {user.bio && (
+                  <div className="pt-3 border-t border-hairline border-dashed">
+                    <p className="text-[10px] text-mute uppercase font-semibold tracking-wider mb-1">Rider Bio</p>
+                    <p className="text-body font-medium text-sm leading-relaxed">{user.bio}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4 mt-4 border-t border-hairline-strong pt-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Name</label>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Phone</label>
+                    <input
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Bio</label>
+                  <textarea
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                    rows={3}
+                    className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                  />
+                </div>
+
+                <div className="border-t border-hairline border-dashed pt-4">
+                  <p className="text-[10px] text-accent-gold font-bold uppercase tracking-widest mb-3">
+                    Home Location (powers distance sorting)
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">City</label>
+                      <input
+                        value={homeCity}
+                        onChange={(e) => setHomeCity(e.target.value)}
+                        className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                        placeholder="e.g. Bangalore"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Latitude</label>
+                      <input
+                        value={homeLat}
+                        onChange={(e) => setHomeLat(e.target.value)}
+                        placeholder="12.97"
+                        className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Longitude</label>
+                      <input
+                        value={homeLng}
+                        onChange={(e) => setHomeLng(e.target.value)}
+                        placeholder="77.59"
+                        className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-hairline border-dashed pt-4 space-y-4">
+                  <p className="text-[10px] text-accent-gold font-bold uppercase tracking-widest">
+                    Settings — Privacy &amp; Safety
+                  </p>
+                  <label className="flex items-start gap-3 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={isPrivate}
+                      onChange={(e) => setIsPrivate(e.target.checked)}
+                      className="mt-0.5 rounded border-hairline-strong text-accent-gold focus:ring-accent-gold/30"
+                    />
+                    <span>
+                      <span className="block text-sm text-ink font-medium">Private account</span>
+                      <span className="block text-xs text-mute mt-0.5">
+                        New followers need your approval before they follow you (and before they can message you).
+                      </span>
+                    </span>
+                  </label>
+
+                  <div>
+                    <label className="flex items-start gap-3 cursor-pointer select-none mb-2">
+                      <input
+                        type="checkbox"
+                        checked={privacyRadius !== ""}
+                        onChange={(e) => setPrivacyRadius(e.target.checked ? "3" : "")}
+                        className="mt-0.5 rounded border-hairline-strong text-accent-gold focus:ring-accent-gold/30"
+                      />
+                      <span>
+                        <span className="block text-sm text-ink font-medium">Privacy zone around home</span>
+                        <span className="block text-xs text-mute mt-0.5">
+                          Blurs the start/end of your rides on any public map or heatmap within this radius of your
+                          home location, so no one can pinpoint exactly where you live.
+                        </span>
+                      </span>
+                    </label>
+                    {privacyRadius !== "" && (
+                      <div className="flex items-center gap-2 pl-7">
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={privacyRadius}
+                          onChange={(e) => setPrivacyRadius(e.target.value)}
+                          className="w-24 bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-3 py-1.5 text-ink text-sm focus:outline-none"
+                        />
+                        <span className="text-xs text-mute">km radius</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSaveProfile}
+                  disabled={saving}
+                  className="btn btn-primary h-9 px-6 text-xs font-bold uppercase tracking-wider rounded-xl transition-all duration-200"
+                >
+                  {saving ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            )}
           </div>
-          <div className="text-center">
-            <p className="text-3xl font-bold text-accent-gold">{stats?.rides_joined ?? 0}</p>
-            <p className="text-xs text-mute uppercase mt-1">Joined</p>
+
+          {/* Bike card */}
+          <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg">
+            <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-blue/20 to-transparent" />
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-ink uppercase tracking-wider select-none">The Biker Garage</h3>
+              <button
+                onClick={() => setEditBike(!editBike)}
+                className="text-xs font-bold uppercase tracking-widest text-accent-gold hover:underline transition-colors duration-200"
+              >
+                {editBike ? "Cancel" : "Edit Machine"}
+              </button>
+            </div>
+
+            {!editBike ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
+                <div>
+                  <p className="text-[10px] text-mute uppercase font-semibold tracking-wider">Name</p>
+                  <p className="text-ink font-semibold text-sm mt-0.5">{user.bike?.name || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-mute uppercase font-semibold tracking-wider">Model</p>
+                  <p className="text-ink font-semibold text-sm mt-0.5">{user.bike?.model || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-mute uppercase font-semibold tracking-wider">Year</p>
+                  <p className="text-ink font-semibold text-sm mt-0.5">{user.bike?.year || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-mute uppercase font-semibold tracking-wider">Engine Capacity</p>
+                  <p className="text-ink font-semibold text-sm mt-0.5">
+                    {user.bike?.engine_cc ? `${user.bike.engine_cc} cc` : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-mute uppercase font-semibold tracking-wider">Fuel Mileage</p>
+                  <p className="text-ink font-semibold text-sm mt-0.5">
+                    {user.bike?.mileage_kmpl ? `${user.bike.mileage_kmpl} kmpl` : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-mute uppercase font-semibold tracking-wider">Machine Type</p>
+                  <p className="text-ink font-semibold text-sm mt-0.5 capitalize">{user.bike?.type ?? "any"}</p>
+                </div>
+              </div>
+            ) : null}
+
+            {user.bike && !editBike && (
+              <div className="mt-5 pt-4 border-t border-hairline-strong space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] text-mute uppercase font-semibold tracking-wider">Gear Tracking</p>
+                  <button
+                    onClick={handleMarkServiced}
+                    disabled={markingServiced}
+                    className="text-xs font-bold uppercase tracking-widest text-accent-gold hover:underline disabled:opacity-50"
+                  >
+                    {markingServiced ? "Saving…" : "Mark serviced"}
+                  </button>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-ink font-semibold">
+                    {user.bike.total_km_since_service.toFixed(0)} / {user.bike.service_interval_km} km since service
+                  </span>
+                  {user.bike.total_km_since_service >= user.bike.service_interval_km && (
+                    <span className="text-accent-red text-xs font-bold uppercase">Due for service</span>
+                  )}
+                </div>
+                <div className="w-full h-1.5 bg-surface-deep rounded-full overflow-hidden">
+                  <div
+                    className={`h-full ${
+                      user.bike.total_km_since_service >= user.bike.service_interval_km
+                        ? "bg-accent-red"
+                        : "bg-accent-gold"
+                    }`}
+                    style={{
+                      width: `${Math.min(100, (user.bike.total_km_since_service / user.bike.service_interval_km) * 100)}%`,
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-mute">
+                  {user.bike.total_km_lifetime.toFixed(0)} km lifetime
+                  {user.bike.last_serviced_at && ` · last serviced ${new Date(user.bike.last_serviced_at).toLocaleDateString()}`}
+                </p>
+              </div>
+            )}
+
+            {editBike && (
+              <div className="space-y-4 mt-4 border-t border-hairline-strong pt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Bike Name</label>
+                    <input
+                      value={bikeName}
+                      onChange={(e) => setBikeName(e.target.value)}
+                      className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                      placeholder="e.g. Shadow"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Model</label>
+                    <input
+                      value={bikeModel}
+                      onChange={(e) => setBikeModel(e.target.value)}
+                      className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                      placeholder="e.g. Honda CB650R"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Year</label>
+                    <input
+                      type="number"
+                      value={bikeYear}
+                      onChange={(e) => setBikeYear(e.target.value)}
+                      className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Type</label>
+                    <select
+                      value={bikeType}
+                      onChange={(e) => setBikeType(e.target.value as BikeType)}
+                      className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                    >
+                      <option value="any">Any</option>
+                      <option value="commuter">Commuter</option>
+                      <option value="sport">Sport</option>
+                      <option value="adventure">Adventure</option>
+                      <option value="cruiser">Cruiser</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Engine Displacement (cc)</label>
+                    <input
+                      type="number"
+                      value={bikeEngineCc}
+                      onChange={(e) => setBikeEngineCc(e.target.value)}
+                      className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Average Mileage (kmpl)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={bikeMileage}
+                      onChange={(e) => setBikeMileage(e.target.value)}
+                      className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-1">Service Interval (km)</label>
+                    <input
+                      type="number"
+                      value={bikeServiceInterval}
+                      onChange={(e) => setBikeServiceInterval(e.target.value)}
+                      className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2 text-ink text-sm focus:outline-none transition-all duration-200"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSaveBike}
+                  disabled={saving}
+                  className="btn btn-primary h-9 px-6 text-xs font-bold uppercase tracking-wider rounded-xl transition-all duration-200"
+                >
+                  {saving ? "Saving..." : "Save machine"}
+                </button>
+              </div>
+            )}
           </div>
-          <div className="text-center">
-            <p className="text-3xl font-bold text-accent-gold">{stats?.rides_completed ?? 0}</p>
-            <p className="text-xs text-mute uppercase mt-1">Completed</p>
+
+          {/* Activity Panel */}
+          <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg">
+            <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
+            <h3 className="text-sm font-bold text-ink uppercase tracking-wider mb-4 select-none">Riding Cadence</h3>
+            <RideStatsPanel />
+          </div>
+
+          {/* Personal Records */}
+          <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg">
+            <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
+            <h3 className="text-sm font-bold text-ink uppercase tracking-wider mb-4 select-none">Personal Records</h3>
+            <PersonalRecordsPanel userId={user.id} />
+          </div>
+
+          {/* Best Efforts */}
+          <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg">
+            <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
+            <h3 className="text-sm font-bold text-ink uppercase tracking-wider mb-4 select-none">Best Efforts</h3>
+            <BestEffortsPanel userId={user.id} />
+          </div>
+
+          {/* Recap / archive quick links */}
+          <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg flex flex-wrap gap-3">
+            <Link href="/profile/year-in-rydr" className="flex-1 text-center bg-surface-elevated hover:bg-surface-elevated text-ink px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider">
+              Year in Rydr
+            </Link>
+            <Link href="/trips" className="flex-1 text-center bg-surface-elevated hover:bg-surface-elevated text-ink px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider">
+              My Trips
+            </Link>
+            <Link href={`/profile/timeline`} className="flex-1 text-center bg-surface-elevated hover:bg-surface-elevated text-ink px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider">
+              Photo Timeline
+            </Link>
+            <Link href="/heatmap" className="flex-1 text-center bg-surface-elevated hover:bg-surface-elevated text-ink px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider">
+              Ridden Ground
+            </Link>
           </div>
         </div>
-      </div>
 
-      {/* Activity — computed client-side from ride history. No distance
-          field exists in the backend schema yet, so this shows ride
-          cadence instead of kilometers ridden. */}
-      <div className="bg-surface-card rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-ink mb-4">Activity</h3>
-        <RideStatsPanel />
-      </div>
-
-      {/* Follow surface */}
-      <div className="bg-surface-card rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-ink mb-3">Social</h3>
-        <div className="flex gap-6 text-sm">
-          <a
-            href={`/users/${user.id}/followers`}
-            className="text-body hover:text-accent-gold"
-          >
-            <span className="text-ink font-semibold">{user.followers_count}</span>{" "}
-            <span>followers</span>
-          </a>
-          <a
-            href={`/users/${user.id}/following`}
-            className="text-body hover:text-accent-gold"
-          >
-            <span className="text-ink font-semibold">{user.following_count}</span>{" "}
-            <span>following</span>
-          </a>
+        {/* Bottom / Full-width Badges Shelf */}
+        <div className="md:col-span-3 card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg">
+          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-green/20 to-transparent" />
+          <h3 className="text-xs font-bold text-accent-green tracking-widest uppercase mb-4 select-none">Badges</h3>
+          <BadgeShelf
+            earned={badges}
+            catalog={badgeCatalog}
+            showLocked
+          />
         </div>
       </div>
+    </div>
+  );
+}
+
+// No scheduler/cron infra exists in this stack to push a real reminder
+// notification on the actual day, so this is a lightweight computed
+// banner instead — checked against `created_at` on every profile load,
+// which is honest about what's actually achievable without new infra.
+function AnniversaryBanner({ createdAt }: { createdAt: string }) {
+  const joined = new Date(createdAt);
+  const now = new Date();
+  const isAnniversary = joined.getMonth() === now.getMonth() && joined.getDate() === now.getDate();
+  const years = now.getFullYear() - joined.getFullYear();
+
+  if (!isAnniversary || years < 1) return null;
+
+  return (
+    <div className="border border-accent-gold/30 bg-accent-gold/10 text-center px-4 py-3 rounded-xl text-sm font-semibold text-accent-gold">
+      🎉 {years} year{years === 1 ? "" : "s"} on Rydr today — happy Rydr-versary!
     </div>
   );
 }
