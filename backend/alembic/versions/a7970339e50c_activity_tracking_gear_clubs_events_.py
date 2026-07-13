@@ -1,7 +1,7 @@
 """activity tracking, gear, clubs, events, hazards, trips, comments
 
 Revision ID: a7970339e50c
-Revises: 2b8f5eeb4c1b
+Revises: d3ca57bde9d5
 Create Date: 2026-08-26 19:30:17.517015
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = 'a7970339e50c'
-down_revision: Union[str, None] = '2b8f5eeb4c1b'
+down_revision: Union[str, None] = 'd3ca57bde9d5'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

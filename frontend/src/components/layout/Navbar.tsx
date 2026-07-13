@@ -3,12 +3,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { NotificationBell } from "@/components/notifications/NotificationBell";
+import NotificationBell from "@/components/notifications/NotificationBell";
 
 const navItems = [
   { href: "/destinations", label: "Discover" },
-  { href: "/rides", label: "Rides" },
   { href: "/feed", label: "Feed" },
+  { href: "/rides", label: "Rides" },
   { href: "/clubs", label: "Clubs" },
   { href: "/events", label: "Events" },
   { href: "/leaderboard", label: "Leaderboard" },
@@ -72,7 +72,7 @@ export default function Navbar({ onSignout }: { onSignout?: () => void }) {
           </nav>
 
           <div className="flex items-center gap-4">
-            <NotificationBell />
+            {user && <NotificationBell />}
             {user && (
               <div className="flex items-center gap-2 bg-surface-elevated/40 px-3 py-1.5 rounded-full border border-hairline-strong">
                 <span className="w-1.5 h-1.5 rounded-full bg-accent-green" />

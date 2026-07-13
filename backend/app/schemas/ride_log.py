@@ -39,6 +39,7 @@ class RideMediaOut(BaseModel):
     captured_longitude: Optional[float] = None
     captured_at: Optional[datetime] = None
     created_at: datetime
+    thumbnail_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -54,12 +55,23 @@ class RideMediaConfirm(BaseModel):
     url: str = Field(min_length=1, max_length=MAX_MEDIA_URL_LEN)
     media_type: MediaType = MediaType.image
     caption: Optional[str] = Field(default=None, max_length=MAX_CAPTION_LEN)
+    # Phase 4 W3. Optional override: when omitted, the server derives a poster
+    # frame from ``url`` for Cloudinary-hosted assets. Supplying it lets a
+    # client that already has the poster — or is not using Cloudinary — set
+    # one explicitly.
+    thumbnail_url: Optional[str] = Field(default=None, max_length=MAX_MEDIA_URL_LEN)
     # Flywheel: also create a DestinationMedia row pointing at this URL.
     link_to_destination: bool = True
 
-    @field_validator("url")
+    @field_validator("url", "thumbnail_url")
     @classmethod
-    def _https_only(cls, v: str) -> str:
+    def _https_only(cls, v: Optional[str]) -> Optional[str]:
+        # Applies to thumbnail_url as well as url: the thumbnail is rendered
+        # as an <img src>, so allowing an arbitrary scheme here would let a
+        # caller smuggle in javascript: or data: through a field that looks
+        # secondary.
+        if v is None:
+            return v
         if not v.startswith("https://"):
             raise ValueError("media url must start with https://")
         return v
@@ -111,22 +123,6 @@ class RideLogOut(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-class RideLogSummary(BaseModel):
-    """Shareable-card data - Phase 4. ``distance_km`` is always ``None``
-    today: ``ride_logs`` has no distance column (route distance isn't
-    tracked anywhere in the current schema), so this is a placeholder for
-    when that lands rather than an invented field. ``duration_minutes`` is
-    derived from ``actual_end_ts - actual_start_ts`` when both are set."""
-
-    ride_log_id: UUID
-    rider_name: str
-    destination_name: Optional[str] = None
-    distance_km: Optional[float] = None
-    duration_minutes: Optional[int] = None
-    ride_date: Optional[date] = None
-    photo_url: Optional[str] = None
 
 
 class RideLogListResponse(BaseModel):
@@ -248,3 +244,39 @@ class FlybyOut(BaseModel):
 
 class FlybyListResponse(BaseModel):
     flybys: List[FlybyOut] = []
+
+
+class RideSummary(BaseModel):
+    """Everything a share card needs about one completed ride — Phase 4 W4.
+
+    Deliberately flat and pre-formatted rather than a nested object graph.
+    The consumers are a card renderer and a share sheet, both of which want
+    "the string to draw", not a model to traverse. Keeping the formatting
+    decisions server-side also means the web card and the Android card cannot
+    drift apart.
+    """
+
+    ride_log_id: UUID
+    ride_plan_id: UUID
+
+    rider_name: str
+    rider_avatar_url: Optional[str] = None
+
+    destination_id: UUID
+    destination_name: str
+    destination_region: Optional[str] = None
+
+    ride_title: str
+    ride_date: date
+
+    # Derived, not measured — see services/stats for why. Named to match.
+    estimated_distance_km: float
+    # None when the rider did not record start/end timestamps on the log.
+    duration_minutes: Optional[int] = None
+    actual_cost: Optional[int] = None
+    road_condition: Optional[RoadCondition] = None
+    recommended: Optional[bool] = None
+
+    rider_count: int
+    photo_count: int
+    stars: Optional[int] = None

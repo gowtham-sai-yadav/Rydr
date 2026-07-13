@@ -1,150 +1,155 @@
-from tests.conftest import auth_headers, create_destination, signup
+"""Notification feed, delivery rules and triggers — Phase 4 W5."""
+from __future__ import annotations
+
+import datetime as dt
+
+import pytest
+
+FUTURE = (dt.date.today() + dt.timedelta(days=21)).isoformat()
 
 
-def _make_ride(client, captain_token, dest_id, max_riders=10):
-    resp = client.post(
+def _types(client, auth, token):
+    body = client.get("/api/notifications", headers=auth(token)).json()
+    return [n["type"] for n in body["notifications"]]
+
+
+def test_follow_notifies_once_even_on_repeat(client, auth, make_user):
+    followee_token, followee_id, _ = make_user("followee")
+    follower_token, _, _ = make_user("follower")
+
+    client.post(f"/api/users/{followee_id}/follow", headers=auth(follower_token))
+    client.post(f"/api/users/{followee_id}/follow", headers=auth(follower_token))
+
+    assert _types(client, auth, followee_token).count("new_follower") == 1
+
+
+def test_you_are_never_notified_of_your_own_action(client, auth, make_user):
+    token, user_id, _ = make_user("solo")
+    post_id = client.post(
+        "/api/posts", headers=auth(token), json={"body": "mine"}
+    ).json()["id"]
+    client.post(f"/api/posts/{post_id}/like", headers=auth(token))
+
+    assert "post_liked" not in _types(client, auth, token)
+
+
+def test_ride_lifecycle_notifies_seated_riders(
+    client, auth, make_user, make_destination
+):
+    captain_token, _, _ = make_user("cap")
+    rider_token, rider_id, _ = make_user("rider")
+    dest = make_destination("Lifecycle")
+
+    ride = client.post(
         "/api/rides",
-        headers=auth_headers(captain_token),
+        headers=auth(captain_token),
         json={
-            "destination_id": dest_id,
-            "title": "Notif test ride",
-            "planned_date": "2099-01-01",
-            "planned_start_time": "08:00:00",
-            "max_riders": max_riders,
+            "destination_id": str(dest.id),
+            "title": "Lifecycle ride",
+            "planned_date": FUTURE,
+            "planned_start_time": "07:00:00",
+            "visibility": "group",
         },
-    )
-    assert resp.status_code == 201, resp.text
-    return resp.json()["id"]
+    ).json()
+    rid = ride["id"]
 
+    client.post(f"/api/rides/{rid}/join", headers=auth(rider_token))
+    assert "ride_join_requested" in _types(client, auth, captain_token)
 
-def test_join_request_notifies_captain(client):
-    captain = signup(client, "captain-notif@test.com", "Captain")
-    rider = signup(client, "rider-notif@test.com", "Rider")
-    dest = create_destination(client, captain["access_token"])
-    ride_id = _make_ride(client, captain["access_token"], dest["id"])
-
-    resp = client.post(
-        f"/api/rides/{ride_id}/join", headers=auth_headers(rider["access_token"])
-    )
-    assert resp.status_code == 201
-
-    resp = client.get(
-        "/api/notifications", headers=auth_headers(captain["access_token"])
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["total"] == 1
-    assert body["unread_count"] == 1
-    note = body["notifications"][0]
-    assert note["type"] == "ride_join_requested"
-    assert note["read_at"] is None
-
-    # Re-requesting while still pending is idempotent - no duplicate notification.
-    resp = client.post(
-        f"/api/rides/{ride_id}/join", headers=auth_headers(rider["access_token"])
-    )
-    assert resp.status_code == 201
-    resp = client.get(
-        "/api/notifications", headers=auth_headers(captain["access_token"])
-    )
-    assert resp.json()["total"] == 1
-
-
-def test_approval_notifies_participant(client):
-    captain = signup(client, "captain-notif2@test.com", "Captain")
-    rider = signup(client, "rider-notif2@test.com", "Rider")
-    dest = create_destination(client, captain["access_token"])
-    ride_id = _make_ride(client, captain["access_token"], dest["id"])
-
-    client.post(f"/api/rides/{ride_id}/join", headers=auth_headers(rider["access_token"]))
-
-    resp = client.put(
-        f"/api/rides/{ride_id}/participants/{rider['user']['id']}",
-        headers=auth_headers(captain["access_token"]),
+    client.put(
+        f"/api/rides/{rid}/participants/{rider_id}",
+        headers=auth(captain_token),
         json={"status": "approved"},
     )
-    assert resp.status_code == 200
+    assert "ride_join_approved" in _types(client, auth, rider_token)
 
-    resp = client.get(
-        "/api/notifications", headers=auth_headers(rider["access_token"])
+    client.post(f"/api/rides/{rid}/start", headers=auth(captain_token))
+    client.post(f"/api/rides/{rid}/complete", headers=auth(captain_token))
+    kinds = _types(client, auth, rider_token)
+    assert "ride_starting" in kinds
+    assert "ride_completed" in kinds
+
+
+def test_unread_count_and_mark_read(client, auth, make_user):
+    reader_token, reader_id, _ = make_user("reader")
+    actor_token, _, _ = make_user("actor")
+    client.post(f"/api/users/{reader_id}/follow", headers=auth(actor_token))
+
+    before = client.get(
+        "/api/notifications/unread-count", headers=auth(reader_token)
+    ).json()["unread"]
+    assert before >= 1
+
+    first = client.get("/api/notifications", headers=auth(reader_token)).json()[
+        "notifications"
+    ][0]["id"]
+    client.post(f"/api/notifications/{first}/read", headers=auth(reader_token))
+    after = client.get(
+        "/api/notifications/unread-count", headers=auth(reader_token)
+    ).json()["unread"]
+    assert after == before - 1
+
+    client.post("/api/notifications/read-all", headers=auth(reader_token))
+    assert (
+        client.get(
+            "/api/notifications/unread-count", headers=auth(reader_token)
+        ).json()["unread"]
+        == 0
     )
-    assert resp.status_code == 200
-    notes = resp.json()["notifications"]
-    assert any(n["type"] == "ride_join_approved" for n in notes)
 
 
-def test_list_pagination(client):
-    captain = signup(client, "captain-notif3@test.com", "Captain")
-    dest = create_destination(client, captain["access_token"])
+def test_marking_read_is_idempotent(client, auth, make_user):
+    reader_token, reader_id, _ = make_user("reader")
+    actor_token, _, _ = make_user("actor")
+    client.post(f"/api/users/{reader_id}/follow", headers=auth(actor_token))
 
-    # Three separate rides, each joined by a distinct rider, generates
-    # three ride_join_requested notifications for the captain.
-    for i in range(3):
-        rider = signup(client, f"rider-notif3-{i}@test.com", f"Rider {i}")
-        ride_id = _make_ride(client, captain["access_token"], dest["id"], max_riders=10)
-        resp = client.post(
-            f"/api/rides/{ride_id}/join", headers=auth_headers(rider["access_token"])
-        )
-        assert resp.status_code == 201
+    nid = client.get("/api/notifications", headers=auth(reader_token)).json()[
+        "notifications"
+    ][0]["id"]
+    first = client.post(
+        f"/api/notifications/{nid}/read", headers=auth(reader_token)
+    ).json()["read_at"]
+    second = client.post(
+        f"/api/notifications/{nid}/read", headers=auth(reader_token)
+    ).json()["read_at"]
+    # The original "seen at" survives a double tap.
+    assert first == second
 
-    resp = client.get(
-        "/api/notifications?page=1&limit=2",
-        headers=auth_headers(captain["access_token"]),
+
+def test_another_users_notification_is_a_404_not_a_403(
+    client, auth, make_user
+):
+    """404, not 403 — a 403 would confirm the notification exists."""
+    reader_token, reader_id, _ = make_user("reader")
+    actor_token, _, _ = make_user("actor")
+    stranger_token, _, _ = make_user("stranger")
+    client.post(f"/api/users/{reader_id}/follow", headers=auth(actor_token))
+
+    nid = client.get("/api/notifications", headers=auth(reader_token)).json()[
+        "notifications"
+    ][0]["id"]
+    res = client.post(
+        f"/api/notifications/{nid}/read", headers=auth(stranger_token)
     )
-    body = resp.json()
-    assert body["total"] == 3
-    assert len(body["notifications"]) == 2
-    assert body["unread_count"] == 3
-
-    resp = client.get(
-        "/api/notifications?page=2&limit=2",
-        headers=auth_headers(captain["access_token"]),
-    )
-    assert len(resp.json()["notifications"]) == 1
+    assert res.status_code == 404
 
 
-def test_mark_one_read(client):
-    captain = signup(client, "captain-notif4@test.com", "Captain")
-    rider = signup(client, "rider-notif4@test.com", "Rider")
-    dest = create_destination(client, captain["access_token"])
-    ride_id = _make_ride(client, captain["access_token"], dest["id"])
-    client.post(f"/api/rides/{ride_id}/join", headers=auth_headers(rider["access_token"]))
+def test_unread_only_filter(client, auth, make_user):
+    reader_token, reader_id, _ = make_user("reader")
+    a_token, _, _ = make_user("a")
+    b_token, _, _ = make_user("b")
+    client.post(f"/api/users/{reader_id}/follow", headers=auth(a_token))
+    client.post(f"/api/users/{reader_id}/follow", headers=auth(b_token))
 
-    resp = client.get("/api/notifications", headers=auth_headers(captain["access_token"]))
-    note_id = resp.json()["notifications"][0]["id"]
+    nid = client.get("/api/notifications", headers=auth(reader_token)).json()[
+        "notifications"
+    ][0]["id"]
+    client.post(f"/api/notifications/{nid}/read", headers=auth(reader_token))
 
-    resp = client.post(
-        f"/api/notifications/{note_id}/read",
-        headers=auth_headers(captain["access_token"]),
-    )
-    assert resp.status_code == 200
-    assert resp.json()["read_at"] is not None
-
-    resp = client.get("/api/notifications", headers=auth_headers(captain["access_token"]))
-    assert resp.json()["unread_count"] == 0
-
-    # Reading someone else's (or a nonexistent) notification 404s.
-    resp = client.post(
-        f"/api/notifications/{note_id}/read",
-        headers=auth_headers(rider["access_token"]),
-    )
-    assert resp.status_code == 404
-
-
-def test_mark_all_read(client):
-    captain = signup(client, "captain-notif5@test.com", "Captain")
-    dest = create_destination(client, captain["access_token"])
-
-    for i in range(2):
-        rider = signup(client, f"rider-notif5-{i}@test.com", f"Rider {i}")
-        ride_id = _make_ride(client, captain["access_token"], dest["id"])
-        client.post(f"/api/rides/{ride_id}/join", headers=auth_headers(rider["access_token"]))
-
-    resp = client.post(
-        "/api/notifications/read-all", headers=auth_headers(captain["access_token"])
-    )
-    assert resp.status_code == 200
-    assert resp.json()["updated"] == 2
-
-    resp = client.get("/api/notifications", headers=auth_headers(captain["access_token"]))
-    assert resp.json()["unread_count"] == 0
+    unread = client.get(
+        "/api/notifications",
+        headers=auth(reader_token),
+        params={"unread_only": True},
+    ).json()
+    assert all(n["read_at"] is None for n in unread["notifications"])
+    assert nid not in [n["id"] for n in unread["notifications"]]

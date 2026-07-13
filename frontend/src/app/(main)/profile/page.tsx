@@ -3,15 +3,18 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import type { BadgeOut, BikeType, FollowEdgeOut, UserBadgeOut, UserStatsOut } from "@/lib/api.types";
+import type { BadgeOut, BikeType, FollowEdgeOut, PersonalStatsOut, UserBadgeOut } from "@/lib/api.types";
 import { BadgeShelf } from "@/components/badges/BadgeShelf";
-import { RideStatsPanel } from "@/components/profile/RideStatsPanel";
 import { PersonalRecordsPanel } from "@/components/profile/PersonalRecordsPanel";
 import { BestEffortsPanel } from "@/components/profile/BestEffortsPanel";
+import { routes } from "@/lib/routes";
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
-  const [stats, setStats] = useState<UserStatsOut | null>(null);
+  // Phase 4 W5: widened from three ride counters to weekly/monthly
+  // distance, streaks and personal bests; the original three fields kept
+  // their names. See lib/api.ts getMyStats().
+  const [stats, setStats] = useState<PersonalStatsOut | null>(null);
   // Earned awards + the full catalog so the shelf can render locked tiles.
   // Loaded in parallel — neither blocks first paint of the rest of the page.
   const [badges, setBadges] = useState<UserBadgeOut[]>([]);
@@ -228,7 +231,12 @@ export default function ProfilePage() {
           {/* Stats count */}
           <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg">
             <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
-            <h3 className="text-xs font-bold text-accent-gold tracking-widest uppercase mb-4 select-none">Ride stats</h3>
+            <div className="flex items-baseline justify-between mb-4">
+              <h3 className="text-xs font-bold text-accent-gold tracking-widest uppercase select-none">Ride stats</h3>
+              <Link href={routes.leaderboard} className="text-[10px] font-bold uppercase tracking-widest text-accent-gold hover:underline">
+                Leaderboard →
+              </Link>
+            </div>
             <div className="grid grid-cols-3 gap-2">
               <div className="text-center">
                 <p className="text-2xl font-bold font-display text-ink">{stats?.rides_captained ?? 0}</p>
@@ -243,6 +251,58 @@ export default function ProfilePage() {
                 <p className="text-[9px] text-mute uppercase font-semibold tracking-wider mt-1 select-none">Done</p>
               </div>
             </div>
+
+            {/* Distance is derived from home -> destination -> home, not
+                measured, so with no home location every figure below is
+                zero. Prompting is the only honest thing to show in that
+                case — a dashboard of zeros reads as "you have ridden
+                nothing". */}
+            {stats && !stats.has_home_location ? (
+              <p className="text-[11px] text-accent-orange mt-4 pt-4 border-t border-hairline border-dashed leading-relaxed">
+                Set your home location below to see distance ridden, streaks and personal bests.
+              </p>
+            ) : (
+              stats && (
+                <>
+                  <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-hairline border-dashed">
+                    <div>
+                      <p className="text-[9px] text-mute uppercase font-semibold tracking-wider select-none">This week</p>
+                      <p className="text-ink font-bold text-sm mt-0.5">{stats.distance_this_week_km} km</p>
+                      <p className="text-[9px] text-stone mt-0.5">{stats.rides_this_week} ride{stats.rides_this_week === 1 ? "" : "s"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-mute uppercase font-semibold tracking-wider select-none">This month</p>
+                      <p className="text-ink font-bold text-sm mt-0.5">{stats.distance_this_month_km} km</p>
+                      <p className="text-[9px] text-stone mt-0.5">{stats.rides_this_month} ride{stats.rides_this_month === 1 ? "" : "s"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-mute uppercase font-semibold tracking-wider select-none">All time</p>
+                      <p className="text-ink font-bold text-sm mt-0.5">{stats.total_distance_km} km</p>
+                      <p className="text-[9px] text-stone mt-0.5">{stats.destinations_visited} spot{stats.destinations_visited === 1 ? "" : "s"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-mute uppercase font-semibold tracking-wider select-none">Longest</p>
+                      <p className="text-ink font-bold text-sm mt-0.5">{stats.longest_ride_km} km</p>
+                      <p className="text-[9px] text-stone mt-0.5">personal best</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-6 mt-4 pt-4 border-t border-hairline border-dashed">
+                    <div>
+                      <p className="text-[9px] text-mute uppercase font-semibold tracking-wider select-none">Current streak</p>
+                      <p className="text-accent-orange font-bold text-sm mt-0.5">
+                        {stats.current_streak_weeks} week{stats.current_streak_weeks === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-mute uppercase font-semibold tracking-wider select-none">Best streak</p>
+                      <p className="text-ink font-bold text-sm mt-0.5">
+                        {stats.longest_streak_weeks} week{stats.longest_streak_weeks === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )
+            )}
           </div>
 
           {/* Social followers */}
@@ -251,14 +311,14 @@ export default function ProfilePage() {
             <h3 className="text-xs font-bold text-accent-blue tracking-widest uppercase mb-4 select-none">Social</h3>
             <div className="flex justify-around text-xs font-semibold uppercase tracking-wider">
               <a
-                href={`/users/${user.id}/followers`}
+                href={routes.userFollowers(user.id)}
                 className="text-mute hover:text-accent-gold transition-colors duration-200"
               >
                 <span className="text-ink font-bold font-display mr-1">{user.followers_count}</span> followers
               </a>
               <div className="w-[1px] bg-hairline h-4" />
               <a
-                href={`/users/${user.id}/following`}
+                href={routes.userFollowing(user.id)}
                 className="text-mute hover:text-accent-gold transition-colors duration-200"
               >
                 <span className="text-ink font-bold font-display mr-1">{user.following_count}</span> following
@@ -597,13 +657,6 @@ export default function ProfilePage() {
                 </button>
               </div>
             )}
-          </div>
-
-          {/* Activity Panel */}
-          <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg">
-            <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
-            <h3 className="text-sm font-bold text-ink uppercase tracking-wider mb-4 select-none">Riding Cadence</h3>
-            <RideStatsPanel />
           </div>
 
           {/* Personal Records */}

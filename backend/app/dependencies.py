@@ -19,11 +19,17 @@ optional_security = HTTPBearer(auto_error=False)
 _JWT_DECODE_OPTIONS = {"require": ["exp", "sub", "iss"]}
 
 
-def _decode_token(token: str) -> Optional[str]:
+def decode_token(token: str) -> Optional[str]:
     """Decode a JWT and return the subject (user id) or None on failure.
 
     Centralises the decode path so ``get_current_user`` and
     ``get_optional_user`` can't drift apart on hardening rules.
+
+    Public as of Phase 4 W6: the chat WebSocket authenticates from a query
+    parameter rather than an Authorization header, so it cannot go through the
+    ``Depends(security)`` path and needs the decode step directly. Sharing this
+    function is what keeps the socket's hardening rules — required claims,
+    pinned issuer — identical to the REST API's.
     """
     try:
         payload = jwt.decode(
@@ -51,7 +57,7 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
-    user_id = _decode_token(credentials.credentials)
+    user_id = decode_token(credentials.credentials)
     if user_id is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
@@ -91,7 +97,24 @@ def get_optional_user(
     """
     if credentials is None:
         return None
-    user_id = _decode_token(credentials.credentials)
+    user_id = decode_token(credentials.credentials)
     if user_id is None:
         return None
     return db.query(User).filter(User.id == user_id).first()
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    """Gate a route behind the admin flag — Phase 4 W7.
+
+    Returns 403 rather than 404. The 404-to-hide-existence pattern used
+    elsewhere in this codebase protects *user content* whose existence is
+    itself private; the admin surface is a fixed, documented set of routes
+    whose existence is not a secret, and a 403 tells an admin who forgot to
+    log in as themselves what actually went wrong.
+    """
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint requires an administrator account",
+        )
+    return user

@@ -1,5 +1,7 @@
 import { API_BASE_URL, TOKEN_KEY } from "./constants";
 import type {
+  AdminReportListResponse,
+  AdminReportOut,
   AuthResponse,
   BadgeOut,
   BestEffortListResponse,
@@ -17,10 +19,12 @@ import type {
   ClubOut,
   CloudinarySignature,
   CostEstimate,
+  DestinationLeaderboardResponse,
+  DestinationPin,
   DestinationListResponse,
   DestinationMediaListResponse,
   DestinationOut,
-  DestinationLeaderboardResponse,
+  DirectionsOut,
   DirectMessageListResponse,
   DirectMessageOut,
   DMThreadListResponse,
@@ -42,20 +46,30 @@ import type {
   RouteListResponse,
   RouteOut,
   RSVPStatus,
-  FeedListResponse,
   FollowListResponse,
   FollowOut,
+  GeocodeResponse,
+  LeaderboardPeriod,
+  LikeResponse,
+  MapConfigOut,
+  MapPinsResponse,
   MineRidesResponse,
   NotificationListResponse,
+  NotificationOut,
   ParticipantListResponse,
+  PersonalStatsOut,
+  PostCommentListResponse,
   PostCommentOut,
+  PostListResponse,
   PostOut,
   RatingListResponse,
   RatingOut,
   ReportListResponse,
   ReportOut,
+  ReportReason,
   ReportStatus,
-  ReportTargetType,
+  ReportedContentType,
+  RideSummary,
   RiderLeaderboardResponse,
   RideLogCommentListResponse,
   RideLogCommentOut,
@@ -71,7 +85,6 @@ import type {
   TripOut,
   UserBadgeOut,
   UserOut,
-  UserStatsOut,
   WeeklyLeagueResponse,
   YearInRydrOut,
 } from "./api.types";
@@ -204,8 +217,13 @@ class ApiClient {
     });
   }
 
+  /**
+   * Personal stats dashboard. Widened in Phase 4 W5 from three ride
+   * counters to weekly/monthly distance, streaks and personal bests; the
+   * original three fields kept their names.
+   */
   getMyStats() {
-    return this.request<UserStatsOut>("/api/users/me/stats", {
+    return this.request<PersonalStatsOut>("/api/users/me/stats", {
       headers: this.headers(),
     });
   }
@@ -386,7 +404,16 @@ class ApiClient {
     );
   }
 
-  updateParticipant(rideId: string, userId: string, status: "approved" | "rejected") {
+  /**
+   * Captain sets a participant's status. Phase 4 W6 added "waitlisted",
+   * for accepting a rider into the queue of a full ride; approving into a
+   * full ride returns 409 rather than silently waitlisting them.
+   */
+  updateParticipant(
+    rideId: string,
+    userId: string,
+    status: "approved" | "rejected" | "waitlisted",
+  ) {
     return this.request<RidePlanParticipantOut>(
       `/api/rides/${rideId}/participants/${userId}`,
       {
@@ -786,7 +813,6 @@ class ApiClient {
       headers: this.headers(),
     });
   }
-
   getBadgeCardImage(userBadgeId: string) {
     return this.requestBlob(`/api/badges/${userBadgeId}/card`, {
       headers: this.headers(),
@@ -803,81 +829,38 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
-  // Social feed (Phase 4 W4). POST /api/feed wraps an optional ride_log_id
-  // so a completed ride's photos surface as the post's media without a
-  // separate upload; like/unlike are 204-no-body and idempotent.
+  // Notifications (Phase 4 W5)
   // ---------------------------------------------------------------------------
-  getFeed(params: { page?: number; limit?: number } = {}) {
+  listNotifications(params: { unread_only?: boolean; page?: number; limit?: number } = {}) {
     const qs = new URLSearchParams();
+    if (params.unread_only) qs.set("unread_only", "true");
     if (params.page) qs.set("page", String(params.page));
     if (params.limit) qs.set("limit", String(params.limit));
-    const suffix = qs.toString() ? `?${qs.toString()}` : "";
-    return this.request<FeedListResponse>(`/api/feed${suffix}`, {
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return this.request<NotificationListResponse>(`/api/notifications${suffix}`, {
       headers: this.headers(),
     });
   }
 
-  createPost(data: { caption: string; ride_log_id?: string }) {
-    return this.request<PostOut>("/api/feed", {
-      method: "POST",
+  getUnreadCount() {
+    return this.request<{ unread: number }>("/api/notifications/unread-count", {
       headers: this.headers(),
-      body: JSON.stringify(data),
-    });
-  }
-
-  likePost(postId: string) {
-    return this.request<void>(`/api/feed/${postId}/like`, {
-      method: "POST",
-      headers: this.headers(),
-    });
-  }
-
-  unlikePost(postId: string) {
-    return this.request<void>(`/api/feed/${postId}/like`, {
-      method: "DELETE",
-      headers: this.headers(),
-    });
-  }
-
-  getPostComments(postId: string) {
-    return this.request<PostCommentOut[]>(`/api/feed/${postId}/comments`, {
-      headers: this.headers(),
-    });
-  }
-
-  addPostComment(postId: string, body: string) {
-    return this.request<PostCommentOut>(`/api/feed/${postId}/comments`, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({ body }),
     });
   }
 
   // ---------------------------------------------------------------------------
-  // Leaderboard (Phase 4 W5), two independent endpoints, no combined route.
+  // Local Legend / Weekly League — the two leaderboard companions that
+  // aren't part of the plural /api/leaderboards/{riders,destinations}
+  // period-filtered pair defined further below.
   // ---------------------------------------------------------------------------
-  getRiderLeaderboard(limit = 20) {
-    return this.request<RiderLeaderboardResponse>(
-      `/api/leaderboard/riders?limit=${limit}`,
-      { headers: this.headers() },
-    );
-  }
-
-  getDestinationLeaderboard(limit = 20) {
-    return this.request<DestinationLeaderboardResponse>(
-      `/api/leaderboard/destinations?limit=${limit}`,
-      { headers: this.headers() },
-    );
-  }
-
   getLocalLegend(destinationId: string) {
-    return this.request<LocalLegendOut>(`/api/leaderboard/destinations/${destinationId}/local-legend`, {
+    return this.request<LocalLegendOut>(`/api/leaderboards/destinations/${destinationId}/local-legend`, {
       headers: this.headers(),
     });
   }
 
   getWeeklyLeague() {
-    return this.request<WeeklyLeagueResponse>("/api/leaderboard/weekly-league", {
+    return this.request<WeeklyLeagueResponse>("/api/leaderboards/weekly-league", {
       headers: this.headers(),
     });
   }
@@ -941,60 +924,273 @@ class ApiClient {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Notifications (Phase 4)
-  // ---------------------------------------------------------------------------
-  getNotifications(params: { page?: number; limit?: number } = {}) {
-    const qs = new URLSearchParams();
-    if (params.page) qs.set("page", String(params.page));
-    if (params.limit) qs.set("limit", String(params.limit));
-    const suffix = qs.toString() ? `?${qs.toString()}` : "";
-    return this.request<NotificationListResponse>(
-      `/api/notifications${suffix}`,
-      { headers: this.headers() },
-    );
-  }
-
   markNotificationRead(id: string) {
-    return this.request<void>(`/api/notifications/${id}/read`, {
+    return this.request<NotificationOut>(`/api/notifications/${id}/read`, {
       method: "POST",
       headers: this.headers(),
     });
   }
 
   markAllNotificationsRead() {
-    return this.request<void>("/api/notifications/read-all", {
+    return this.request<{ marked: number }>("/api/notifications/read-all", {
       method: "POST",
       headers: this.headers(),
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // Moderation (Phase 4). Filing a report only requires auth; reading and
-  // actioning the queue is admin-gated server-side (403 for non-admins).
-  // ---------------------------------------------------------------------------
-  listReports(params: { status?: ReportStatus; page?: number; limit?: number } = {}) {
-    const qs = new URLSearchParams();
-    if (params.status) qs.set("status", params.status);
-    if (params.page) qs.set("page", String(params.page));
-    if (params.limit) qs.set("limit", String(params.limit));
-    const suffix = qs.toString() ? `?${qs.toString()}` : "";
-    return this.request<ReportListResponse>(`/api/moderation/reports${suffix}`, {
+  dismissNotification(id: string) {
+    return this.request<void>(`/api/notifications/${id}`, {
+      method: "DELETE",
       headers: this.headers(),
     });
   }
 
-  updateReport(id: string, data: { status: ReportStatus }) {
-    return this.request<ReportOut>(`/api/moderation/reports/${id}`, {
-      method: "PATCH",
+  // ---------------------------------------------------------------------------
+  // Community feed (Phase 4 W4)
+  // ---------------------------------------------------------------------------
+  listPosts(params: {
+    following_only?: boolean;
+    author_id?: string;
+    page?: number;
+    limit?: number;
+  } = {}) {
+    const qs = new URLSearchParams();
+    if (params.following_only) qs.set("following_only", "true");
+    if (params.author_id) qs.set("author_id", params.author_id);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return this.request<PostListResponse>(`/api/posts${suffix}`, {
+      headers: this.headers(),
+    });
+  }
+
+  createPost(data: {
+    body: string;
+    ride_log_id?: string | null;
+    destination_id?: string | null;
+    media?: { url: string; media_type?: string; thumbnail_url?: string | null }[];
+  }) {
+    return this.request<PostOut>("/api/posts", {
+      method: "POST",
       headers: this.headers(),
       body: JSON.stringify(data),
     });
   }
 
-  createReport(data: { target_type: ReportTargetType; target_id: string; reason: string }) {
-    return this.request<ReportOut>("/api/moderation/reports", {
+  getPost(id: string) {
+    return this.request<PostOut>(`/api/posts/${id}`, { headers: this.headers() });
+  }
+
+  updatePost(id: string, body: string) {
+    return this.request<PostOut>(`/api/posts/${id}`, {
+      method: "PATCH",
+      headers: this.headers(),
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  deletePost(id: string) {
+    return this.request<void>(`/api/posts/${id}`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+  }
+
+  likePost(id: string) {
+    return this.request<LikeResponse>(`/api/posts/${id}/like`, {
       method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  unlikePost(id: string) {
+    return this.request<LikeResponse>(`/api/posts/${id}/like`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+  }
+
+  listComments(postId: string, params: { page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return this.request<PostCommentListResponse>(
+      `/api/posts/${postId}/comments${suffix}`,
+      { headers: this.headers() }
+    );
+  }
+
+  createComment(postId: string, body: string) {
+    return this.request<PostCommentOut>(`/api/posts/${postId}/comments`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  deleteComment(commentId: string) {
+    return this.request<void>(`/api/posts/comments/${commentId}`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Leaderboards (Phase 4 W5)
+  // ---------------------------------------------------------------------------
+  getRiderLeaderboard(period: LeaderboardPeriod = "month", limit = 20) {
+    return this.request<RiderLeaderboardResponse>(
+      `/api/leaderboards/riders?period=${period}&limit=${limit}`,
+      { headers: this.headers() }
+    );
+  }
+
+  getDestinationLeaderboard(period: LeaderboardPeriod = "month", limit = 20) {
+    return this.request<DestinationLeaderboardResponse>(
+      `/api/leaderboards/destinations?period=${period}&limit=${limit}`,
+      { headers: this.headers() }
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Maps + routing (Phase 4 W2)
+  // ---------------------------------------------------------------------------
+  getMapConfig() {
+    // No auth: the map is browsable logged out, and the config carries the
+    // attribution string the tile licence requires.
+    return this.request<MapConfigOut>("/api/maps/config", {
+      headers: this.headers(false),
+    });
+  }
+
+  // Named getDirections (not getRoute) — collides on both name and meaning
+  // with the routes-domain getRoute(routeId) above otherwise. See the
+  // DirectionsOut note in api.types.ts.
+  getDirections(from: [number, number], to: [number, number]) {
+    const qs = new URLSearchParams({
+      from_lat: String(from[0]),
+      from_lng: String(from[1]),
+      to_lat: String(to[0]),
+      to_lng: String(to[1]),
+    });
+    return this.request<DirectionsOut>(`/api/maps/route?${qs}`, {
+      headers: this.headers(false),
+    });
+  }
+
+  getRouteToDestination(destinationId: string, from: [number, number]) {
+    const qs = new URLSearchParams({
+      from_lat: String(from[0]),
+      from_lng: String(from[1]),
+    });
+    return this.request<DirectionsOut>(
+      `/api/maps/destinations/${destinationId}/route?${qs}`,
+      { headers: this.headers(false) }
+    );
+  }
+
+  geocode(query: string, limit = 5) {
+    const qs = new URLSearchParams({ q: query, limit: String(limit) });
+    return this.request<GeocodeResponse>(`/api/maps/geocode?${qs}`, {
+      headers: this.headers(false),
+    });
+  }
+
+  getMapPins(bounds?: {
+    north: number;
+    south: number;
+    east: number;
+    west: number;
+  }, limit = 500) {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    if (bounds) {
+      // All four or none — the API rejects a partial box rather than
+      // silently returning the whole world.
+      qs.set("north", String(bounds.north));
+      qs.set("south", String(bounds.south));
+      qs.set("east", String(bounds.east));
+      qs.set("west", String(bounds.west));
+    }
+    return this.request<MapPinsResponse>(`/api/maps/pins?${qs}`, {
+      headers: this.headers(false),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ride summary + share cards (Phase 4 W4)
+  // ---------------------------------------------------------------------------
+  getRideSummary(logId: string) {
+    return this.request<RideSummary>(`/api/ride-logs/${logId}/summary`, {
+      headers: this.headers(false),
+    });
+  }
+
+  /**
+   * URL of a share card. Not fetched through `request` — this is an image
+   * source, handed straight to an <img> or a download link, and the endpoint
+   * is public so no Authorization header is involved.
+   */
+  rideCardUrl(logId: string, opts: { download?: boolean } = {}) {
+    const suffix = opts.download ? "?download=1" : "";
+    return `${API_BASE_URL}/api/share-cards/rides/${logId}.svg${suffix}`;
+  }
+
+  badgeCardUrl(userBadgeId: string, opts: { download?: boolean } = {}) {
+    const suffix = opts.download ? "?download=1" : "";
+    return `${API_BASE_URL}/api/share-cards/badges/${userBadgeId}.svg${suffix}`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Moderation (Phase 4 W7)
+  // ---------------------------------------------------------------------------
+  createReport(data: {
+    content_type: ReportedContentType;
+    content_id: string;
+    reason: ReportReason;
+    details?: string | null;
+  }) {
+    return this.request<ReportOut>("/api/reports", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  listMyReports(params: { page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return this.request<ReportListResponse>(`/api/reports/mine${suffix}`, {
+      headers: this.headers(),
+    });
+  }
+
+  listReportQueue(params: {
+    status?: ReportStatus;
+    content_type?: ReportedContentType;
+    page?: number;
+    limit?: number;
+  } = {}) {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.content_type) qs.set("content_type", params.content_type);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs}` : "";
+    return this.request<AdminReportListResponse>(`/api/reports/admin${suffix}`, {
+      headers: this.headers(),
+    });
+  }
+
+  resolveReport(
+    id: string,
+    data: { status: ReportStatus; resolution_note?: string | null }
+  ) {
+    return this.request<AdminReportOut>(`/api/reports/admin/${id}`, {
+      method: "PATCH",
       headers: this.headers(),
       body: JSON.stringify(data),
     });

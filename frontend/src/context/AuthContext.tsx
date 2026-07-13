@@ -3,10 +3,13 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { TOKEN_KEY } from "@/lib/constants";
-import { User } from "@/lib/types";
+// Imported from api.types directly rather than through the old lib/types
+// re-export shim, which is what that shim's own header recommended for
+// new code. UserOut is the canonical name; the shim aliased it to `User`.
+import type { UserOut } from "@/lib/api.types";
 
 interface AuthContextType {
-  user: User | null;
+  user: UserOut | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (data: Record<string, unknown>) => Promise<void>;
@@ -17,7 +20,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserOut | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
@@ -30,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       const data = await api.getMe();
-      setUser(data as User);
+      setUser(data as UserOut);
     } catch {
       localStorage.removeItem(TOKEN_KEY);
       setUser(null);
@@ -46,14 +49,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     const res = await api.login(email, password);
     localStorage.setItem(TOKEN_KEY, res.access_token);
-    setUser(res.user as User);
+    setUser(res.user as UserOut);
     router.push("/rides");
   };
 
   const signup = async (data: Record<string, unknown>) => {
     const res = await api.signup(data);
     localStorage.setItem(TOKEN_KEY, res.access_token);
-    setUser(res.user as User);
+    setUser(res.user as UserOut);
     router.push("/rides");
   };
 

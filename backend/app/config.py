@@ -46,6 +46,40 @@ class Settings(BaseSettings):
     CLOUDINARY_MAX_IMAGE_BYTES: int = 10 * 1024 * 1024  # 10 MB
     CLOUDINARY_MAX_VIDEO_BYTES: int = 100 * 1024 * 1024  # 100 MB
 
+    # ---------------------------------------------------------------
+    # Phase 4 W2 — maps & routing.
+    #
+    # OpenStreetMap is the shipped default: no account, no key, no usage
+    # ceiling. The Phase 4 plan named Mapbox primary with OSM "kept in
+    # reserve"; the reconciliation inverted that (see
+    # docs/plan/phase4-web-and-android.md §4.1) and routed everything
+    # through a provider interface so switching is config, not a rewrite.
+    #
+    # Setting MAPBOX_TOKEN is the switch: non-empty selects the Mapbox
+    # provider, empty keeps OSM. Same feature-flag-by-empty-string pattern
+    # the Cloudinary settings above already use.
+    # ---------------------------------------------------------------
+    # Phase 4 W8 — log verbosity for the JSON access log.
+    LOG_LEVEL: str = "INFO"
+
+    MAPBOX_TOKEN: str = ""
+
+    # Public demo endpoints. Both ask for courteous use and rate-limit
+    # accordingly, which is why routes are cached in-process and every call
+    # has a hard timeout with a graceful fallback. Point these at a
+    # self-hosted OSRM / Nominatim for staging.
+    OSRM_BASE_URL: str = "https://router.project-osrm.org"
+    NOMINATIM_BASE_URL: str = "https://nominatim.openstreetmap.org"
+
+    # Nominatim's usage policy requires a real identifying User-Agent.
+    # Requests without one are refused.
+    MAP_USER_AGENT: str = "Rydr/1.0 (academic project; contact via repo)"
+
+    # Seconds before an upstream map call is abandoned. Deliberately short:
+    # a slow router must degrade to the straight-line estimate rather than
+    # holding a request open.
+    MAP_HTTP_TIMEOUT_SECONDS: float = 6.0
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @field_validator("SECRET_KEY")
@@ -67,6 +101,11 @@ class Settings(BaseSettings):
                 "it in the environment before starting in this mode."
             )
         return v
+
+    @property
+    def maps_provider(self) -> str:
+        """Which map provider is active. See MAPBOX_TOKEN above."""
+        return "mapbox" if self.MAPBOX_TOKEN.strip() else "osm"
 
     @property
     def allowed_origins_list(self) -> list[str]:

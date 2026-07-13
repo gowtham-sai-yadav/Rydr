@@ -138,6 +138,10 @@ class RideMedia(Base):
     captured_latitude = Column(Float, nullable=True)
     captured_longitude = Column(Float, nullable=True)
     captured_at = Column(DateTime(timezone=True), nullable=True)
+    # Phase 4 W3. Derived from ``url`` for Cloudinary-hosted assets — the
+    # first frame for video, a resized variant for images. Null for media
+    # stored elsewhere, which means "render the original", not "missing".
+    thumbnail_url = Column(String(500), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     ride_log = relationship("RideLog", back_populates="media")

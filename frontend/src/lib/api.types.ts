@@ -21,7 +21,14 @@ export type RidePlanStatus =
   | "cancelled";
 export type RidePlanVisibility = "solo" | "group";
 export type DifficultyLevel = "easy" | "moderate" | "hard" | "expert";
-export type ParticipantStatus = "pending" | "approved" | "rejected" | "left" | "waitlisted";
+export type ParticipantStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "left"
+  // Phase 4 W6: captain approved but the ride was full. Promoted
+  // automatically, oldest first, when a seat frees.
+  | "waitlisted";
 export type RoadCondition = "good" | "ok" | "rough" | "bad";
 export type MediaType = "image" | "video";
 
@@ -71,9 +78,8 @@ export interface UserOut {
   has_pending_follow_request: boolean;
   privacy_zone_radius_km: number | null;
   is_verified_rider: boolean;
-  // Moderation surface: being added to the User model in parallel. Read
-  // defensively, absent/false both mean "not an admin".
-  is_admin?: boolean;
+  /** Phase 4 W7. Granted from the server only (scripts/grant_admin.py) — UI hint, not access control. */
+  is_admin: boolean;
 }
 
 export interface UserStatsOut {
@@ -107,6 +113,11 @@ export interface DestinationMediaOut {
   id: string;
   destination_id: string;
   url: string;
+  /**
+   * Phase 4 W3 — poster frame for video, resized variant for images.
+   * Null means the asset is not Cloudinary-hosted: render `url`.
+   */
+  thumbnail_url: string | null;
   caption: string | null;
   uploaded_by_user_id: string | null;
   ride_log_id: string | null;
@@ -280,6 +291,10 @@ export interface RidePlanOut {
   captain: UserBrief | null;
   participants: RidePlanParticipantOut[];
   participant_count: number;
+  // Phase 4 W6. participant_count is seats taken; these save the
+  // client from knowing that max_riders includes the captain.
+  seats_available: number;
+  waitlist_count: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -296,6 +311,8 @@ export interface RideMediaOut {
   captured_longitude: number | null;
   captured_at: string | null;
   created_at: string;
+  /** Poster frame for video; null means render `url`. */
+  thumbnail_url: string | null;
 }
 
 export interface RatingBrief {
@@ -486,69 +503,11 @@ export interface UserBadgeOut {
 }
 
 // ---------------------------------------------------------------------------
-// Social feed (new, written against the documented contract; backend
-// routes live at backend/app/routers/feed.py on main, not yet present in
-// this worktree, so field names are our best-effort match to the rest of
-// the API's conventions and should be reconciled against the real schema
-// once merged).
+// Leaderboard companions — LocalLegendOut / WeeklyLeague. PostOut,
+// RiderLeaderboardEntry/Response and DestinationLeaderboardEntry/Response
+// now live under the "Phase 4" sections below, matching the real
+// backend/app/schemas/{post,leaderboard}.py shapes.
 // ---------------------------------------------------------------------------
-export interface PostMediaOut {
-  url: string;
-  media_type: string;
-}
-
-export interface PostOut {
-  id: string;
-  author: UserBrief;
-  ride_log_id: string | null;
-  caption: string;
-  media: PostMediaOut[];
-  like_count: number;
-  comment_count: number;
-  liked_by_me: boolean;
-  created_at: string;
-}
-
-export interface FeedListResponse {
-  posts: PostOut[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
-export interface PostCommentOut {
-  id: string;
-  post_id: string;
-  author: UserBrief;
-  body: string;
-  created_at: string;
-}
-
-// ---------------------------------------------------------------------------
-// Leaderboard (two independent endpoints, riders by all-time ride-log
-// count, destinations by completed-ride count this calendar month)
-// ---------------------------------------------------------------------------
-export interface RiderLeaderboardEntry {
-  rank: number;
-  user: UserBrief;
-  rides_logged: number;
-}
-
-export interface RiderLeaderboardResponse {
-  entries: RiderLeaderboardEntry[];
-}
-
-export interface DestinationLeaderboardEntry {
-  rank: number;
-  destination_id: string;
-  destination_name: string;
-  ride_count: number;
-}
-
-export interface DestinationLeaderboardResponse {
-  entries: DestinationLeaderboardEntry[];
-}
-
 export interface LocalLegendOut {
   destination_id: string;
   user: UserBrief | null;
@@ -593,64 +552,10 @@ export interface PersonalRecordsOut {
   most_destinations_in_a_week: BestWeekOut | null;
 }
 
-// ---------------------------------------------------------------------------
-// Notifications
-// ---------------------------------------------------------------------------
-export type NotificationType =
-  | "ride_join_requested"
-  | "ride_join_approved"
-  | "ride_join_rejected"
-  | "post_liked"
-  | "post_commented"
-  | "badge_earned"
-  | "dm_received"
-  | "follow_requested"
-  | "follow_accepted";
-
-export interface NotificationOut {
-  id: string;
-  type: NotificationType;
-  actor_id: string | null;
-  ride_plan_id: string | null;
-  post_id: string | null;
-  badge_id: string | null;
-  message: string;
-  read_at: string | null;
-  created_at: string;
-}
-
-export interface NotificationListResponse {
-  notifications: NotificationOut[];
-  total: number;
-  page: number;
-  limit: number;
-  unread_count: number;
-}
-
-// ---------------------------------------------------------------------------
-// Moderation
-// ---------------------------------------------------------------------------
-export type ReportTargetType = "post" | "comment" | "rating" | "chat_message" | "user";
-export type ReportStatus = "open" | "reviewed" | "dismissed" | "actioned";
-
-export interface ReportOut {
-  id: string;
-  reporter_id: string;
-  target_type: ReportTargetType;
-  target_id: string;
-  reason: string;
-  status: ReportStatus;
-  reviewed_by: string | null;
-  reviewed_at: string | null;
-  created_at: string;
-}
-
-export interface ReportListResponse {
-  reports: ReportOut[];
-  total: number;
-  page: number;
-  limit: number;
-}
+// Notifications and Moderation types now live under the "Phase 4" sections
+// below (NotificationType/NotificationOut/NotificationListResponse and
+// ReportedContentType/ReportOut/ReportListResponse), matching the real
+// backend/app/schemas/{notification,report}.py shapes.
 
 // ---------------------------------------------------------------------------
 // Routes (planned waypoints — distinct from a ride log's recorded_track)
@@ -989,4 +894,301 @@ export interface FastApiValidationError {
   loc?: unknown[];
   msg: string;
   type: string;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 — notifications (W5)
+// ---------------------------------------------------------------------------
+export type NotificationType =
+  | "ride_join_requested"
+  | "ride_join_approved"
+  | "ride_join_rejected"
+  | "ride_waitlisted"
+  | "ride_waitlist_promoted"
+  | "ride_cancelled"
+  | "ride_starting"
+  | "ride_completed"
+  | "chat_message"
+  | "badge_earned"
+  | "new_follower"
+  | "post_liked"
+  | "post_commented"
+  | "destination_rated"
+  | "report_resolved";
+
+export type NotificationEntityType =
+  | "ride"
+  | "chat_group"
+  | "destination"
+  | "post"
+  | "badge"
+  | "user"
+  | "report";
+
+export interface NotificationOut {
+  id: string;
+  type: NotificationType;
+  title: string;
+  body: string | null;
+  entity_type: NotificationEntityType | null;
+  entity_id: string | null;
+  read_at: string | null;
+  created_at: string;
+  actor: UserBrief | null;
+}
+
+export interface NotificationListResponse {
+  notifications: NotificationOut[];
+  total: number;
+  unread: number;
+  page: number;
+  limit: number;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 — community feed (W4)
+// ---------------------------------------------------------------------------
+export interface PostMediaOut {
+  id: string;
+  url: string;
+  media_type: MediaType;
+  thumbnail_url: string | null;
+}
+
+export interface PostDestinationBrief {
+  id: string;
+  name: string;
+}
+
+export interface PostOut {
+  id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  author: UserBrief | null;
+  media: PostMediaOut[];
+  ride_log_id: string | null;
+  destination: PostDestinationBrief | null;
+  like_count: number;
+  comment_count: number;
+  /** null for anonymous readers — render a neutral control, not an unliked one. */
+  liked_by_me: boolean | null;
+}
+
+export interface PostListResponse {
+  posts: PostOut[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface PostCommentOut {
+  id: string;
+  post_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  author: UserBrief | null;
+}
+
+export interface PostCommentListResponse {
+  comments: PostCommentOut[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface LikeResponse {
+  post_id: string;
+  liked: boolean;
+  like_count: number;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 — leaderboards + personal stats (W5)
+// ---------------------------------------------------------------------------
+export type LeaderboardPeriod = "week" | "month" | "year" | "all";
+
+export interface RiderLeaderboardEntry {
+  rank: number;
+  user_id: string;
+  name: string;
+  avatar_url: string | null;
+  rides: number;
+  /** Derived from home -> destination -> home, not measured. Label it. */
+  estimated_distance_km: number;
+}
+
+export interface RiderLeaderboardResponse {
+  period: string;
+  entries: RiderLeaderboardEntry[];
+  my_rank: number | null;
+}
+
+export interface DestinationLeaderboardEntry {
+  rank: number;
+  destination_id: string;
+  name: string;
+  region: string | null;
+  hero_media_url: string | null;
+  avg_rating: number;
+  ride_count: number;
+  unique_riders: number;
+}
+
+export interface DestinationLeaderboardResponse {
+  period: string;
+  entries: DestinationLeaderboardEntry[];
+}
+
+export interface PersonalStatsOut {
+  rides_captained: number;
+  rides_joined: number;
+  rides_completed: number;
+  total_distance_km: number;
+  distance_this_week_km: number;
+  distance_this_month_km: number;
+  rides_this_week: number;
+  rides_this_month: number;
+  longest_ride_km: number;
+  current_streak_weeks: number;
+  longest_streak_weeks: number;
+  destinations_visited: number;
+  /** False means every distance above is zero for lack of an origin. */
+  has_home_location: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 — maps (W2)
+// ---------------------------------------------------------------------------
+export interface MapConfigOut {
+  provider: string;
+  tile_url: string;
+  /** A licence obligation for OSM. Render it. */
+  attribution: string;
+  max_zoom: number;
+  access_token: string | null;
+}
+
+// Named DirectionsOut (not RouteOut) — backend/app/schemas/maps.py names
+// this RouteOut too, but it is a genuinely different concept from
+// schemas/route.py's RouteOut (a saved, published set of waypoints for a
+// destination): this one is a computed point-to-point driving path. Python
+// can have both share a name across modules; a flat TS namespace cannot.
+export interface DirectionsOut {
+  origin: [number, number];
+  destination: [number, number];
+  distance_km: number;
+  duration_minutes: number | null;
+  /** [lat, lng] pairs. Empty when is_estimate is true. */
+  geometry: [number, number][];
+  /** True when the router was unreachable; label the number as approximate. */
+  is_estimate: boolean;
+  provider: string;
+}
+
+export interface GeocodeHit {
+  name: string;
+  latitude: number;
+  longitude: number;
+  kind: string | null;
+}
+
+export interface GeocodeResponse {
+  query: string;
+  results: GeocodeHit[];
+}
+
+export interface DestinationPin {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  avg_rating: number;
+  rating_count: number;
+  terrain_difficulty: TerrainDifficulty | null;
+}
+
+export interface MapPinsResponse {
+  pins: DestinationPin[];
+  total: number;
+  /** True when the cap was hit — tell the user to zoom in. */
+  truncated: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 — ride summary / share cards (W4)
+// ---------------------------------------------------------------------------
+export interface RideSummary {
+  ride_log_id: string;
+  ride_plan_id: string;
+  rider_name: string;
+  rider_avatar_url: string | null;
+  destination_id: string;
+  destination_name: string;
+  destination_region: string | null;
+  ride_title: string;
+  ride_date: string;
+  estimated_distance_km: number;
+  duration_minutes: number | null;
+  actual_cost: number | null;
+  road_condition: RoadCondition | null;
+  recommended: boolean | null;
+  rider_count: number;
+  stars: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 — moderation (W7)
+// ---------------------------------------------------------------------------
+export type ReportedContentType =
+  | "post"
+  | "post_comment"
+  | "destination"
+  | "ride_plan"
+  | "chat_message"
+  | "user";
+
+export type ReportReason =
+  | "spam"
+  | "harassment"
+  | "misinformation"
+  | "unsafe"
+  | "inappropriate"
+  | "other";
+
+export type ReportStatus = "open" | "reviewing" | "actioned" | "dismissed";
+
+export interface ReportOut {
+  id: string;
+  content_type: ReportedContentType;
+  content_id: string;
+  reason: ReportReason;
+  details: string | null;
+  status: ReportStatus;
+  created_at: string;
+  resolved_at: string | null;
+  resolution_note: string | null;
+}
+
+export interface AdminReportOut extends ReportOut {
+  reporter: UserBrief | null;
+  resolver: UserBrief | null;
+  /** How many distinct people reported this content. */
+  report_count: number;
+}
+
+export interface AdminReportListResponse {
+  reports: AdminReportOut[];
+  total: number;
+  open_count: number;
+  page: number;
+  limit: number;
+}
+
+export interface ReportListResponse {
+  reports: ReportOut[];
+  total: number;
+  page: number;
+  limit: number;
 }

@@ -21,7 +21,7 @@ from app.dependencies import get_current_user, get_db
 from app.models.direct_message import DMThread, DirectMessage
 from app.models.social import Follow, FollowStatus
 from app.models.user import User
-from app.models.notification import NotificationType
+from app.models.notification import EntityType, NotificationType
 from app.schemas.direct_message import (
     DirectMessageCreate,
     DirectMessageListResponse,
@@ -29,7 +29,7 @@ from app.schemas.direct_message import (
     DMThreadListResponse,
     DMThreadOut,
 )
-from app.services.notification_service import create_notification as _notify
+from app.services import notifications as notification_service
 
 router = APIRouter()
 
@@ -189,12 +189,14 @@ def send_message(
     db.flush()
 
     recipient_id = _other_user_id(thread, user.id)
-    _notify(
+    notification_service.safe_notify(
         db,
         user_id=recipient_id,
         type=NotificationType.dm_received,
-        message=f"{user.name} sent you a message",
+        title=f"{user.name} sent you a message",
         actor_id=user.id,
+        entity_type=EntityType.user,
+        entity_id=user.id,
     )
 
     db.commit()
