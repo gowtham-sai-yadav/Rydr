@@ -1,11 +1,17 @@
-"""m8 badges + user_badges
+"""m8 badge lookup indexes
 
-Creates the badge catalog and the user-award table for M8.
+Adds the two badge lookup indexes M8 needs.
 
-The ``badges`` table is a fixed catalog (8 rows seeded by
-``scripts/seed_badges.py``). The ``user_badges`` table records who has
-earned which catalog entry and when. The ``uq_user_badge`` constraint is
-what lets ``services/badge_engine.evaluate_user_badges`` use
+The ``badges`` and ``user_badges`` tables themselves are created by the
+M1 destination-schema revision (``b4e6c8f2a1d3``), not here — this
+revision originally re-declared them, which made ``alembic upgrade head``
+fail on a fresh database with "relation already exists". It now only adds
+what M1 left out.
+
+``badges`` is a fixed catalog (8 rows seeded by
+``scripts/seed_badges.py``). ``user_badges`` records who has earned which
+catalog entry and when. The ``uq_user_badge`` constraint (from M1) is what
+lets ``services/badge_engine.evaluate_user_badges`` use
 ``ON CONFLICT DO NOTHING`` — the engine is safe to re-run without
 producing duplicates.
 
@@ -21,7 +27,6 @@ from typing import Sequence, Union
 
 import sqlalchemy as sa
 from alembic import op
-from sqlalchemy.dialects.postgresql import UUID
 
 
 revision: str = "d4e7b9f1c8a3"
@@ -31,49 +36,30 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "badges",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column("slug", sa.String(length=50), nullable=False),
-        sa.Column("name", sa.String(length=100), nullable=False),
-        sa.Column("description", sa.String(length=255), nullable=False),
-        sa.Column("icon_url", sa.String(length=500), nullable=True),
-        sa.UniqueConstraint("slug", name="uq_badges_slug"),
-    )
+    # Both tables were introduced by the earlier M1 destination-schema
+    # migration.  This revision only adds the lookup indexes that M1 omitted.
+    inspector = sa.inspect(op.get_bind())
+    existing_indexes = {
+        index["name"] for index in inspector.get_indexes("user_badges")
+    }
 
-    op.create_table(
-        "user_badges",
-        sa.Column("id", UUID(as_uuid=True), primary_key=True),
-        sa.Column(
-            "user_id",
-            UUID(as_uuid=True),
-            sa.ForeignKey("users.id", ondelete="CASCADE"),
-            nullable=False,
-        ),
-        sa.Column(
-            "badge_id",
-            UUID(as_uuid=True),
-            sa.ForeignKey("badges.id", ondelete="CASCADE"),
-            nullable=False,
-        ),
-        sa.Column(
-            "earned_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-        sa.UniqueConstraint("user_id", "badge_id", name="uq_user_badge"),
-    )
-    op.create_index(
-        "idx_user_badges_user_id", "user_badges", ["user_id"]
-    )
-    op.create_index(
-        "idx_user_badges_badge_id", "user_badges", ["badge_id"]
-    )
+    if "idx_user_badges_user_id" not in existing_indexes:
+        op.create_index(
+            "idx_user_badges_user_id", "user_badges", ["user_id"]
+        )
+    if "idx_user_badges_badge_id" not in existing_indexes:
+        op.create_index(
+            "idx_user_badges_badge_id", "user_badges", ["badge_id"]
+        )
 
 
 def downgrade() -> None:
-    op.drop_index("idx_user_badges_badge_id", table_name="user_badges")
-    op.drop_index("idx_user_badges_user_id", table_name="user_badges")
-    op.drop_table("user_badges")
-    op.drop_table("badges")
+    inspector = sa.inspect(op.get_bind())
+    existing_indexes = {
+        index["name"] for index in inspector.get_indexes("user_badges")
+    }
+
+    if "idx_user_badges_badge_id" in existing_indexes:
+        op.drop_index("idx_user_badges_badge_id", table_name="user_badges")
+    if "idx_user_badges_user_id" in existing_indexes:
+        op.drop_index("idx_user_badges_user_id", table_name="user_badges")
