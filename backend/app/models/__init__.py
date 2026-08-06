@@ -29,3 +29,8 @@ from app.models.ride_log import MediaType, RideLog, RideMedia, RoadCondition  # 
 from app.models.social import Discussion, DiscussionComment, Follow  # noqa: F401
 from app.models.badge import Badge, UserBadge  # noqa: F401
 from app.models.chat import ChatGroup, ChatMessage  # noqa: F401
+from app.models.notification import (  # noqa: F401
+    EntityType,
+    Notification,
+    NotificationType,
+)
