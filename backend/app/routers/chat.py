@@ -7,6 +7,7 @@ Surface (all under ``/api/chat``):
   GET    /api/chat/groups/{id}/messages     — since-polling, ASC chronological
   POST   /api/chat/groups/{id}/messages     — send (1–2000 chars, trimmed)
   DELETE /api/chat/messages/{id}            — author or captain only, hard delete
+  WS     /api/chat/groups/{id}/ws           — live message stream (Phase 4 W6)
 
 Authorization is strict — captain OR participant with ``status=approved``.
 Pending / rejected / left users get **404** (not 403) so the existence of
@@ -22,17 +23,37 @@ Patterns reused from M2/M3/M4 audits:
   - ``selectinload`` for author/ride_plan/destination to avoid N+1.
   - Stable ``.id.asc()`` tiebreaker on every paginated query.
   - 404-on-membership-miss vs 403-on-known-member-wrong-action.
+
+Phase 4 W6 — the WebSocket endpoint does not replace the REST surface, it
+sits alongside it. Clients fetch history over ``GET /messages`` and then open
+the socket for live updates; a client that cannot hold a socket open (or a
+mobile client backgrounded by the OS) falls back to since-polling with no
+loss of function. Messages sent over the socket are persisted through the same
+path as ``POST /messages``, so the two cannot diverge.
 """
 from __future__ import annotations
 
+import logging
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
+from fastapi.encoders import jsonable_encoder
+from pydantic import ValidationError
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.dependencies import get_current_user, get_db
+from app.database import SessionLocal
+from app.dependencies import decode_token, get_current_user, get_db
 from app.models.chat import ChatGroup, ChatMessage
 from app.models.notification import EntityType, NotificationType
 from app.models.ride import (
@@ -51,7 +72,10 @@ from app.schemas.chat import (
     ChatMessageOut,
 )
 from app.services import notifications as notification_service
+from app.services import ws_manager
 from app.services.ride_helpers import approved_counts_for as _approved_counts_for
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -375,29 +399,6 @@ def send_message(
         body=payload.body,
     )
     db.add(msg)
-
-    # Everyone holding a seat except the author. notify_many drops the actor,
-    # so the author is filtered out even though they are in this list.
-    audience = [
-        row[0]
-        for row in db.query(RidePlanParticipant.user_id).filter(
-            RidePlanParticipant.ride_plan_id == group.ride_plan_id,
-            RidePlanParticipant.status == ParticipantStatus.approved,
-        )
-    ]
-    # Body is truncated for the preview — the notification is a pointer to the
-    # room, not a copy of the conversation.
-    preview = payload.body if len(payload.body) <= 140 else payload.body[:137] + "..."
-    notification_service.safe_notify_many(
-        db,
-        user_ids=audience,
-        type=NotificationType.chat_message,
-        title=f"{user.name} in {group.ride_plan.title}",
-        body=preview,
-        actor_id=user.id,
-        entity_type=EntityType.chat_group,
-        entity_id=group.id,
-    )
     db.commit()
 
     # Re-fetch with the author relationship eager-loaded so the response build
@@ -408,7 +409,17 @@ def send_message(
         .filter(ChatMessage.id == msg.id)
         .one()
     )
-    return ChatMessageOut.model_validate(fresh)
+    out = ChatMessageOut.model_validate(fresh)
+
+    # Phase 4 W6: push to anyone holding a socket on this room, so a message
+    # sent over REST (a mobile client on a flaky connection, say) still
+    # arrives live for everyone else. Scheduled rather than awaited because
+    # this handler is sync; see _push_to_sockets.
+    _push_to_sockets(group_id, out)
+
+    _notify_room(db, group, user, payload.body)
+
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -461,3 +472,210 @@ def delete_message(
     # TODO M6: optionally notify the room (e.g. "message deleted by captain").
     db.commit()
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Live message stream (Phase 4 W6)
+# ---------------------------------------------------------------------------
+def _authorize_socket(db: Session, group_id: UUID, token: str) -> tuple[User, ChatGroup]:
+    """Resolve the token to a user and confirm they may listen to this room.
+
+    Raises :class:`_SocketDenied` with the close code to send. Kept separate
+    from the endpoint so the auth decision is testable without a socket.
+    """
+    user_id = decode_token(token)
+    if user_id is None:
+        raise _SocketDenied(status.WS_1008_POLICY_VIOLATION, "Invalid token")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise _SocketDenied(status.WS_1008_POLICY_VIOLATION, "User not found")
+
+    try:
+        # Reuses the single-query membership check the REST endpoints use, so
+        # the socket cannot drift from them on who is allowed in.
+        group = _load_group_or_404(db, group_id, user)
+    except HTTPException:
+        # _load_group_or_404 raises 404 both for "no such group" and "not a
+        # member", deliberately. Preserve that: the close reason is identical
+        # either way, so the socket leaks no more than the REST route does.
+        raise _SocketDenied(status.WS_1008_POLICY_VIOLATION, "Chat group not found")
+
+    return user, group
+
+
+class _SocketDenied(Exception):
+    def __init__(self, code: int, reason: str) -> None:
+        super().__init__(reason)
+        self.code = code
+        self.reason = reason
+
+
+@router.websocket("/groups/{group_id}/ws")
+async def chat_stream(
+    websocket: WebSocket,
+    group_id: UUID,
+    token: str = Query(...),
+) -> None:
+    """Live chat stream for one ride.
+
+    Auth travels in the ``token`` query parameter rather than an
+    Authorization header. This is not a preference — the browser WebSocket
+    constructor has no API for custom headers, so a query parameter (or a
+    cookie, which this API does not use) is the only channel available. The
+    exposure is that the token can appear in server access logs; it is the
+    same short-lived access token the REST API already uses, and the
+    deployment's log configuration is where that gets addressed.
+
+    Protocol, client to server:
+        {"type": "message", "body": "..."}   -> persist + fan out
+        {"type": "ping"}                     -> {"type": "pong"}
+
+    Protocol, server to client:
+        {"type": "message", "message": {...}}  -> a ChatMessageOut payload
+        {"type": "pong"}
+        {"type": "error", "detail": "..."}     -> non-fatal; socket stays open
+
+    The socket is closed with 1008 for auth and membership failures, and 1011
+    if the server hits an unexpected error.
+    """
+    db = SessionLocal()
+    try:
+        try:
+            user, group = _authorize_socket(db, group_id, token)
+        except _SocketDenied as denied:
+            # Accept first, then close with a reason. Closing without
+            # accepting gives the browser an opaque failure with no code,
+            # which makes an auth problem indistinguishable from the server
+            # being down.
+            await websocket.accept()
+            await websocket.close(code=denied.code, reason=denied.reason)
+            return
+
+        ride_plan_id = group.ride_plan_id
+
+        await websocket.accept()
+        await ws_manager.manager.connect(group_id, websocket)
+
+        try:
+            while True:
+                raw = await websocket.receive_json()
+                kind = raw.get("type") if isinstance(raw, dict) else None
+
+                if kind == "ping":
+                    await websocket.send_json({"type": "pong"})
+                    continue
+
+                if kind != "message":
+                    await websocket.send_json(
+                        {"type": "error", "detail": f"Unknown frame type: {kind!r}"}
+                    )
+                    continue
+
+                # Cancelled rides are read-only, matching POST /messages.
+                # Re-read the status rather than trusting the value captured
+                # at connect time: a socket can outlive the cancellation.
+                current_status = (
+                    db.query(RidePlan.status)
+                    .filter(RidePlan.id == ride_plan_id)
+                    .scalar()
+                )
+                if current_status == RidePlanStatus.cancelled:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "detail": "This ride was cancelled — its chat is read-only",
+                        }
+                    )
+                    continue
+
+                try:
+                    # Validate through the same Pydantic model the REST
+                    # endpoint uses, so length limits and trimming are
+                    # identical across both paths.
+                    payload = ChatMessageCreate(body=raw.get("body") or "")
+                except ValidationError as exc:
+                    await websocket.send_json(
+                        {"type": "error", "detail": _first_validation_message(exc)}
+                    )
+                    continue
+
+                msg = ChatMessage(
+                    chat_group_id=group_id,
+                    author_id=user.id,
+                    body=payload.body,
+                )
+                db.add(msg)
+                db.commit()
+
+                fresh = (
+                    db.query(ChatMessage)
+                    .options(selectinload(ChatMessage.author))
+                    .filter(ChatMessage.id == msg.id)
+                    .one()
+                )
+                frame = {
+                    "type": "message",
+                    "message": jsonable_encoder(ChatMessageOut.model_validate(fresh)),
+                }
+
+                # Echo to the sender too. The alternative — excluding them and
+                # letting the client render optimistically — means the sender's
+                # copy has a client-generated id and timestamp that disagree
+                # with everyone else's. Echoing keeps one source of truth.
+                await ws_manager.manager.broadcast(group_id, frame)
+
+                # Same notification fan-out as the REST path, so a rider who
+                # is offline still gets told about a message sent over the
+                # socket.
+                _notify_room(db, group, user, payload.body)
+
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await ws_manager.manager.disconnect(group_id, websocket)
+    finally:
+        db.close()
+
+
+def _first_validation_message(exc: ValidationError) -> str:
+    errors = exc.errors()
+    return errors[0].get("msg", "Invalid message") if errors else "Invalid message"
+
+
+def _notify_room(
+    db: Session, group: ChatGroup, author: User, body: str
+) -> None:
+    """Notification fan-out shared by the REST and WebSocket send paths."""
+    audience = [
+        row[0]
+        for row in db.query(RidePlanParticipant.user_id).filter(
+            RidePlanParticipant.ride_plan_id == group.ride_plan_id,
+            RidePlanParticipant.status == ParticipantStatus.approved,
+        )
+    ]
+    preview = body if len(body) <= 140 else body[:137] + "..."
+    title = group.ride_plan.title if group.ride_plan else group.name
+    notification_service.safe_notify_many(
+        db,
+        user_ids=audience,
+        type=NotificationType.chat_message,
+        title=f"{author.name} in {title}",
+        body=preview,
+        actor_id=author.id,
+        entity_type=EntityType.chat_group,
+        entity_id=group.id,
+    )
+    db.commit()
+
+
+def _push_to_sockets(group_id: UUID, message: ChatMessageOut) -> None:
+    """Fan a REST-posted message out to the room's live sockets.
+
+    ``send_message`` is a sync def, so it runs in a threadpool worker where
+    ``asyncio.get_event_loop()`` does not return the server's loop. The
+    manager holds a reference to the real loop and schedules onto it; see
+    ``ws_manager.ChatConnectionManager.schedule_broadcast``.
+    """
+    frame = {"type": "message", "message": jsonable_encoder(message)}
+    ws_manager.manager.schedule_broadcast(group_id, frame)
