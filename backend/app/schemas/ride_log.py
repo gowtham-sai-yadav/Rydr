@@ -13,7 +13,7 @@ Extended in M4 with:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -134,3 +134,39 @@ class CloudinarySignature(BaseModel):
     # Mirror the assumption surface from M2 CostEstimate: anything not in
     # the strict types above gets stuffed in here for forward-compat.
     extras: Dict[str, Any] = {}
+
+
+class RideSummary(BaseModel):
+    """Everything a share card needs about one completed ride — Phase 4 W4.
+
+    Deliberately flat and pre-formatted rather than a nested object graph.
+    The consumers are a card renderer and a share sheet, both of which want
+    "the string to draw", not a model to traverse. Keeping the formatting
+    decisions server-side also means the web card and the Android card cannot
+    drift apart.
+    """
+
+    ride_log_id: UUID
+    ride_plan_id: UUID
+
+    rider_name: str
+    rider_avatar_url: Optional[str] = None
+
+    destination_id: UUID
+    destination_name: str
+    destination_region: Optional[str] = None
+
+    ride_title: str
+    ride_date: date
+
+    # Derived, not measured — see services/stats for why. Named to match.
+    estimated_distance_km: float
+    # None when the rider did not record start/end timestamps on the log.
+    duration_minutes: Optional[int] = None
+    actual_cost: Optional[int] = None
+    road_condition: Optional[RoadCondition] = None
+    recommended: Optional[bool] = None
+
+    rider_count: int
+    photo_count: int
+    stars: Optional[int] = None
