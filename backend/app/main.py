@@ -12,6 +12,7 @@ from app.routers import (
     posts,
     ride_logs,
     rides,
+    share_cards,
     tags,
     users,
 )
@@ -43,6 +44,9 @@ app.include_router(
 app.include_router(posts.router, prefix="/api/posts", tags=["Feed"])
 app.include_router(
     leaderboards.router, prefix="/api/leaderboards", tags=["Leaderboards"]
+)
+app.include_router(
+    share_cards.router, prefix="/api/share-cards", tags=["ShareCards"]
 )
 
 
