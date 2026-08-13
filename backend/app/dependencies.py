@@ -87,3 +87,20 @@ def get_optional_user(
     if user_id is None:
         return None
     return db.query(User).filter(User.id == user_id).first()
+
+
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    """Gate a route behind the admin flag — Phase 4 W7.
+
+    Returns 403 rather than 404. The 404-to-hide-existence pattern used
+    elsewhere in this codebase protects *user content* whose existence is
+    itself private; the admin surface is a fixed, documented set of routes
+    whose existence is not a secret, and a 403 tells an admin who forgot to
+    log in as themselves what actually went wrong.
+    """
+    if not user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This endpoint requires an administrator account",
+        )
+    return user
