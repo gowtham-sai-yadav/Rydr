@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     # provider, empty keeps OSM. Same feature-flag-by-empty-string pattern
     # the Cloudinary settings above already use.
     # ---------------------------------------------------------------
+    # Phase 4 W8 — log verbosity for the JSON access log.
+    LOG_LEVEL: str = "INFO"
+
     MAPBOX_TOKEN: str = ""
 
     # Public demo endpoints. Both ask for courteous use and rate-limit
