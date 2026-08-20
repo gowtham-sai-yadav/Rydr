@@ -327,7 +327,16 @@ class ApiClient {
     );
   }
 
-  updateParticipant(rideId: string, userId: string, status: "approved" | "rejected") {
+  /**
+   * Captain sets a participant's status. Phase 4 W6 added "waitlisted",
+   * for accepting a rider into the queue of a full ride; approving into a
+   * full ride returns 409 rather than silently waitlisting them.
+   */
+  updateParticipant(
+    rideId: string,
+    userId: string,
+    status: "approved" | "rejected" | "waitlisted",
+  ) {
     return this.request<RidePlanParticipantOut>(
       `/api/rides/${rideId}/participants/${userId}`,
       {
