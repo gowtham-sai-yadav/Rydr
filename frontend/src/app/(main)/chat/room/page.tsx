@@ -1,10 +1,12 @@
 "use client";
-import { useState, useEffect, use, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { useChatSocket } from "@/lib/hooks/useChatSocket";
 import type { ChatGroupOut, ChatMessageOut } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 
 // Phase 4 W6: the socket carries messages when it is up. This poll is the
@@ -13,8 +15,11 @@ import type { ChatGroupOut, ChatMessageOut } from "@/lib/api.types";
 const POLL_INTERVAL_MS = 5000;
 
 
-export default function ChatRoomPage({ params }: { params: Promise<{ groupId: string }> }) {
-  const { groupId } = use(params);
+function ChatRoomPageInner() {
+  // Phase 4 W9: the record id arrives as a query parameter rather than a
+  // path segment, so this route is one file that Next can statically
+  // export for the Capacitor build. See lib/routes.ts for why.
+  const groupId = useSearchParams().get("id") ?? "";
   const { user } = useAuth();
 
   const [group, setGroup] = useState<ChatGroupOut | null>(null);
@@ -234,7 +239,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
           )}
         </div>
         {ride && (
-          <Link href={`/rides/${ride.id}`} className="link text-sm font-medium">
+          <Link href={routes.ride(ride.id)} className="link text-sm font-medium">
             Ride →
           </Link>
         )}
@@ -314,5 +319,26 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
         </form>
       )}
     </div>
+  );
+}
+
+
+/**
+ * Suspense boundary around ChatRoomPageInner.
+ *
+ * `useSearchParams` suspends during prerender, and the static export fails
+ * with a missing-suspense-boundary error without this wrapper.
+ */
+export default function ChatRoomPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
+        </div>
+      }
+    >
+      <ChatRoomPageInner />
+    </Suspense>
   );
 }
