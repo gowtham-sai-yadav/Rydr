@@ -53,6 +53,17 @@ class User(Base):
     )
     uploaded_ride_media = relationship("RideMedia", back_populates="uploader")
 
+    # Feed
+    posts = relationship(
+        "Post", back_populates="author", cascade="all, delete-orphan"
+    )
+    post_likes = relationship(
+        "PostLike", back_populates="user", cascade="all, delete-orphan"
+    )
+    post_comments = relationship(
+        "PostComment", back_populates="author", cascade="all, delete-orphan"
+    )
+
     # Destinations
     submitted_destinations = relationship("Destination", back_populates="submitter")
     uploaded_destination_media = relationship(

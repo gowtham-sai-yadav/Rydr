@@ -77,6 +77,7 @@ class RideLog(Base):
     destination_media_links = relationship(
         "DestinationMedia", back_populates="ride_log"
     )
+    posts = relationship("Post", back_populates="ride_log")
 
 
 class RideMedia(Base):
