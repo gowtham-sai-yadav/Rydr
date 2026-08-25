@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import type { DestinationSummary } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 
 function CreateRideForm() {
@@ -64,7 +65,7 @@ function CreateRideForm() {
         break_schedule: breakSchedule || null,
         max_riders: parseInt(maxRiders) || 10,
       });
-      router.push(`/rides/${ride.id}`);
+      router.push(routes.ride(ride.id));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to create ride");
     } finally {

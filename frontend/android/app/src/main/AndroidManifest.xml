@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      Phase 4 W10 — declared explicitly rather than relying only on the
+      Capacitor plugin manifests to merge them in. The merged result is the
+      same, but the Play Console data-safety form and any reviewer read *this*
+      file, and a permission that appears only inside a dependency's AAR is
+      one nobody can audit here.
+    -->
+
+    <!-- Camera plugin: capturing a photo for a ride log. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Picking an existing photo or video. READ_MEDIA_* are the Android 13+
+         scoped replacements for READ_EXTERNAL_STORAGE, which is kept with a
+         maxSdkVersion so older devices still work without asking newer ones
+         for the broad permission. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- FCM push. Runtime-prompted from Android 13; declining is a normal
+         outcome and the in-app notification feed keeps working. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- The camera is optional: a rider can use the gallery or paste a URL, so
+         the app must not be filtered out of the store for camera-less
+         devices. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+</manifest>

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Column, DateTime, Float, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -26,6 +26,12 @@ class User(Base):
     home_city = Column(String(100), nullable=True)
     home_latitude = Column(Float, nullable=True)
     home_longitude = Column(Float, nullable=True)
+
+    # Phase 4 W7 — moderation. A plain flag rather than a role table: the
+    # product has exactly two roles (rider, admin) and no plan for more, so a
+    # roles/permissions schema would be structure without a use. Revisit if a
+    # third role appears.
+    is_admin = Column(Boolean, nullable=False, server_default="false", default=False)
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(
@@ -86,4 +92,19 @@ class User(Base):
     # Badges
     user_badges = relationship(
         "UserBadge", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    # Feed posts (Phase 4 W4).
+    posts = relationship(
+        "Post", back_populates="author", cascade="all, delete-orphan"
+    )
+
+    # Notifications (Phase 4 W5). foreign_keys is required because
+    # Notification has two FKs to users — recipient and actor — and the
+    # feed relationship is the recipient one.
+    notifications = relationship(
+        "Notification",
+        foreign_keys="Notification.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )

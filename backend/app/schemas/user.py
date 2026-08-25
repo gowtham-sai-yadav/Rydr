@@ -60,6 +60,11 @@ class UserOut(BaseModel):
     followers_count: int = 0
     following_count: int = 0
     is_followed_by_me: bool = False
+    # Phase 4 W7. Exposed so the client can show or hide the moderation
+    # surface; the admin endpoints enforce it themselves regardless, so this
+    # is a UI hint and not the access control. Granted only by
+    # ``scripts/grant_admin.py`` — there is no endpoint that sets it.
+    is_admin: bool = False
 
     class Config:
         from_attributes = True
@@ -88,6 +93,13 @@ class BikeUpdate(BaseModel):
 
 
 class UserStatsOut(BaseModel):
+    """Superseded by ``schemas/leaderboard.PersonalStatsOut`` in Phase 4 W5.
+
+    Kept as the documented shape of the three counters that endpoint still
+    returns under the same names. Nothing imports it; delete once no client
+    is pinned to the M3 response.
+    """
+
     rides_captained: int
     rides_joined: int
     rides_completed: int
