@@ -715,6 +715,14 @@ def update_participant_status(
 
     # Schema validator already restricts payload.status to {approved, rejected}.
     if participant.status != payload.status:
+        if (
+            payload.status == ParticipantStatus.approved
+            and _participant_count(db, ride_id) >= ride.max_riders
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Ride is at capacity — reject or wait for a spot to open up",
+            )
         participant.status = payload.status
         # TODO M6: notify the participant of approval / rejection.
         db.commit()
