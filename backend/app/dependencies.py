@@ -64,6 +64,20 @@ def get_current_user(
     return user
 
 
+def get_current_admin_user(
+    user: User = Depends(get_current_user),
+) -> User:
+    """Admin-gated dependency for ``/api/moderation`` write/list endpoints.
+
+    Reuses ``get_current_user`` for the auth check, then adds the
+    ``is_admin`` gate. 403 (not 404) since the resource — the moderation
+    queue — isn't per-user data whose existence needs hiding.
+    """
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
 def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
     db: Session = Depends(get_db),

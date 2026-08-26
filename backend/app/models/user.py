@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import Column, DateTime, Float, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -21,6 +21,9 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     avatar_url = Column(String(500), nullable=True)
     bio = Column(Text, nullable=True)
+
+    # Moderation — grants access to /api/moderation admin-only endpoints.
+    is_admin = Column(Boolean, nullable=False, server_default="false", default=False)
 
     # Home location — used by M2 radius filter + cost calculator
     home_city = Column(String(100), nullable=True)
@@ -97,4 +100,12 @@ class User(Base):
     # Badges
     user_badges = relationship(
         "UserBadge", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    # Notifications
+    notifications = relationship(
+        "Notification",
+        foreign_keys="Notification.user_id",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )

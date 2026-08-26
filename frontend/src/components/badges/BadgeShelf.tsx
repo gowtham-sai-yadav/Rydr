@@ -1,5 +1,7 @@
 "use client";
+import { api } from "@/lib/api";
 import type { BadgeOut, UserBadgeOut } from "@/lib/api.types";
+import { ShareCardButton } from "@/components/share/ShareCardButton";
 
 
 /**
@@ -32,10 +34,13 @@ function BadgeTile({
   badge,
   earnedAt,
   locked,
+  userBadgeId,
 }: {
   badge: BadgeOut;
   earnedAt?: string;
   locked?: boolean;
+  /** Present only for earned badges — the id the share-card endpoint keys on. */
+  userBadgeId?: string;
 }) {
   return (
     <div
@@ -67,6 +72,16 @@ function BadgeTile({
         <p className="text-stone text-[10px] mt-2 uppercase tracking-wide">
           {formatEarnedDate(earnedAt)}
         </p>
+      )}
+      {!locked && userBadgeId && (
+        <ShareCardButton
+          fetchImage={() => api.getBadgeCardImage(userBadgeId)}
+          fileName={`rydr-badge-${badge.slug}`}
+          shareTitle={badge.name}
+          shareText={`I earned the ${badge.name} badge on Rydr`}
+          label="Share"
+          className="mt-3 w-full text-xs"
+        />
       )}
     </div>
   );
@@ -101,6 +116,7 @@ export function BadgeShelf({ earned, catalog, showLocked }: Props) {
                 key={ub.id}
                 badge={ub.badge}
                 earnedAt={ub.earned_at}
+                userBadgeId={ub.id}
               />
             ) : null,
           )}

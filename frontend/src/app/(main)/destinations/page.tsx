@@ -7,9 +7,11 @@ import type {
   DestinationSummary,
   TagListResponse,
 } from "@/lib/api.types";
+import { DestinationMap } from "@/components/destinations/DestinationMap";
 
 
 type SortMode = "rating" | "distance" | "popularity";
+type ViewMode = "grid" | "map";
 
 
 export default function DestinationsPage() {
@@ -19,6 +21,7 @@ export default function DestinationsPage() {
   const [tags, setTags] = useState<TagListResponse>({ vibe: [], vehicle_fit: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [view, setView] = useState<ViewMode>("grid");
 
   // Filter state
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
@@ -85,14 +88,34 @@ export default function DestinationsPage() {
     <div className="max-w-5xl mx-auto space-y-6 pb-12 glow-orange">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-ink">Destinations</h1>
-        {user && (
-          <Link
-            href="/destinations/new"
-            className="bg-ink text-canvas hover:bg-surface-light text-sm font-medium px-4 py-2 rounded-lg"
-          >
-            Add destination
-          </Link>
-        )}
+        <div className="flex items-center gap-2">
+          <div className="flex bg-surface-elevated rounded-lg p-1">
+            <button
+              onClick={() => setView("grid")}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                view === "grid" ? "bg-ink text-canvas" : "text-body hover:text-ink"
+              }`}
+            >
+              Grid
+            </button>
+            <button
+              onClick={() => setView("map")}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                view === "map" ? "bg-ink text-canvas" : "text-body hover:text-ink"
+              }`}
+            >
+              Map
+            </button>
+          </div>
+          {user && (
+            <Link
+              href="/destinations/new"
+              className="bg-ink text-canvas hover:bg-surface-light text-sm font-medium px-4 py-2 rounded-lg"
+            >
+              Add destination
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -202,6 +225,8 @@ export default function DestinationsPage() {
           </Link>
           .
         </div>
+      ) : view === "map" ? (
+        <DestinationMap destinations={destinations} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {destinations.map((d) => (

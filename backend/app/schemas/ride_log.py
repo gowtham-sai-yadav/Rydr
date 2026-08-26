@@ -13,7 +13,7 @@ Extended in M4 with:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -93,6 +93,22 @@ class RideLogOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class RideLogSummary(BaseModel):
+    """Shareable-card data - Phase 4. ``distance_km`` is always ``None``
+    today: ``ride_logs`` has no distance column (route distance isn't
+    tracked anywhere in the current schema), so this is a placeholder for
+    when that lands rather than an invented field. ``duration_minutes`` is
+    derived from ``actual_end_ts - actual_start_ts`` when both are set."""
+
+    ride_log_id: UUID
+    rider_name: str
+    destination_name: Optional[str] = None
+    distance_km: Optional[float] = None
+    duration_minutes: Optional[int] = None
+    ride_date: Optional[date] = None
+    photo_url: Optional[str] = None
 
 
 class RideLogListResponse(BaseModel):
