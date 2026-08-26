@@ -1,0 +1,1 @@
+def share_card_key(ride_id: int, template_version: str) -> str:\n    return f"share-cards/ride-{ride_id}/{template_version}"\n\n\ndef share_card_meta(width: int = 1200, height: int = 628) -> dict:\n    return {"width": width, "height": height, "format": "png"}\n
