@@ -12,13 +12,23 @@ import type {
   DestinationListResponse,
   DestinationMediaListResponse,
   DestinationOut,
+  DestinationLeaderboardResponse,
   FastApiValidationError,
+  FeedListResponse,
   FollowListResponse,
   FollowOut,
   MineRidesResponse,
+  NotificationListResponse,
   ParticipantListResponse,
+  PostCommentOut,
+  PostOut,
   RatingListResponse,
   RatingOut,
+  ReportListResponse,
+  ReportOut,
+  ReportStatus,
+  ReportTargetType,
+  RiderLeaderboardResponse,
   RideLogListResponse,
   RideLogOut,
   RideMediaOut,
@@ -80,6 +90,16 @@ class ApiClient {
       return undefined as T;
     }
     return res.json();
+  }
+
+  // Binary (image/png) response — used by the shareable-card endpoints.
+  private async requestBlob(path: string, options: RequestInit = {}): Promise<Blob> {
+    const res = await fetch(`${API_BASE_URL}${path}`, options);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(formatErrorDetail(body?.detail, res.status));
+    }
+    return res.blob();
   }
 
   // ---------------------------------------------------------------------------
@@ -583,6 +603,148 @@ class ApiClient {
   listUserBadges(userId: string) {
     return this.request<UserBadgeOut[]>(`/api/badges/users/${userId}`, {
       headers: this.headers(),
+    });
+  }
+
+  getBadgeCardImage(userBadgeId: string) {
+    return this.requestBlob(`/api/badges/${userBadgeId}/card`, {
+      headers: this.headers(),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ride log shareable card
+  // ---------------------------------------------------------------------------
+  getRideLogCardImage(rideLogId: string) {
+    return this.requestBlob(`/api/ride-logs/${rideLogId}/card`, {
+      headers: this.headers(),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Social feed (Phase 4 W4) — POST /api/feed wraps an optional ride_log_id
+  // so a completed ride's photos surface as the post's media without a
+  // separate upload; like/unlike are 204-no-body and idempotent.
+  // ---------------------------------------------------------------------------
+  getFeed(params: { page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<FeedListResponse>(`/api/feed${suffix}`, {
+      headers: this.headers(),
+    });
+  }
+
+  createPost(data: { caption: string; ride_log_id?: string }) {
+    return this.request<PostOut>("/api/feed", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  likePost(postId: string) {
+    return this.request<void>(`/api/feed/${postId}/like`, {
+      method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  unlikePost(postId: string) {
+    return this.request<void>(`/api/feed/${postId}/like`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+  }
+
+  getPostComments(postId: string) {
+    return this.request<PostCommentOut[]>(`/api/feed/${postId}/comments`, {
+      headers: this.headers(),
+    });
+  }
+
+  addPostComment(postId: string, body: string) {
+    return this.request<PostCommentOut>(`/api/feed/${postId}/comments`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Leaderboard (Phase 4 W5) — two independent endpoints, no combined route.
+  // ---------------------------------------------------------------------------
+  getRiderLeaderboard(limit = 20) {
+    return this.request<RiderLeaderboardResponse>(
+      `/api/leaderboard/riders?limit=${limit}`,
+      { headers: this.headers() },
+    );
+  }
+
+  getDestinationLeaderboard(limit = 20) {
+    return this.request<DestinationLeaderboardResponse>(
+      `/api/leaderboard/destinations?limit=${limit}`,
+      { headers: this.headers() },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Notifications (Phase 4)
+  // ---------------------------------------------------------------------------
+  getNotifications(params: { page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<NotificationListResponse>(
+      `/api/notifications${suffix}`,
+      { headers: this.headers() },
+    );
+  }
+
+  markNotificationRead(id: string) {
+    return this.request<void>(`/api/notifications/${id}/read`, {
+      method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  markAllNotificationsRead() {
+    return this.request<void>("/api/notifications/read-all", {
+      method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Moderation (Phase 4) — filing a report only requires auth; reading and
+  // actioning the queue is admin-gated server-side (403 for non-admins).
+  // ---------------------------------------------------------------------------
+  listReports(params: { status?: ReportStatus; page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set("status", params.status);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<ReportListResponse>(`/api/moderation/reports${suffix}`, {
+      headers: this.headers(),
+    });
+  }
+
+  updateReport(id: string, data: { status: ReportStatus }) {
+    return this.request<ReportOut>(`/api/moderation/reports/${id}`, {
+      method: "PATCH",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  createReport(data: { target_type: ReportTargetType; target_id: string; reason: string }) {
+    return this.request<ReportOut>("/api/moderation/reports", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
     });
   }
 }

@@ -8,6 +8,7 @@ import type {
   RideLogOut,
   RidePlanOut,
 } from "@/lib/api.types";
+import { ShareCardButton } from "@/components/share/ShareCardButton";
 
 
 export default function RideLogPage({ params }: { params: Promise<{ id: string }> }) {
@@ -211,7 +212,15 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
         <Link href={`/rides/${ride.id}`} className="text-accent-blue hover:text-accent-blue text-sm">
           ← {ride.title}
         </Link>
-        <h1 className="text-2xl font-bold text-ink mt-1">Log this ride</h1>
+        <div className="flex items-center justify-between mt-1">
+          <h1 className="text-2xl font-bold text-ink">Log this ride</h1>
+          <ShareCardButton
+            fetchImage={() => api.getRideLogCardImage(log.id)}
+            fileName={`rydr-ride-${ride.id}`}
+            shareTitle={ride.title}
+            shareText={`Check out my ride to ${ride.destination?.name ?? "somewhere great"} on Rydr`}
+          />
+        </div>
         {ride.destination && (
           <p className="text-mute text-sm">at {ride.destination.name}</p>
         )}
