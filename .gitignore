@@ -27,3 +27,8 @@ venv/
 
 # Dev server logs from run.sh --dev
 .logs/
+
+# Local-only git history replay artifacts (never push)
+local_replay/
+*replay*.sh
+*history*rewrite*.sh
