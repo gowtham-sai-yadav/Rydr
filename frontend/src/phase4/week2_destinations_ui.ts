@@ -1,0 +1,1 @@
+export type DestinationCardView = {\n  id: number;\n  name: string;\n  region?: string;\n  avgRating: number;\n  reviewCount: number;\n  heroMediaUrl?: string;\n};\n\nexport type DestinationFilterView = {\n  query?: string;\n  vibes: string[];\n  vehicleFit: string[];\n  maxCost?: "low" | "mid" | "high";\n};\n

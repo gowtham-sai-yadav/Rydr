@@ -1,0 +1,1 @@
+export const qaChecklist = [\n  "Navigation is keyboard reachable",\n  "Color contrast passes minimum thresholds",\n  "Core pages render on narrow mobile viewports",\n  "Loading and error states are visible and actionable",\n] as const;\n

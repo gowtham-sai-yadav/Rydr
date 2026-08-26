@@ -1,0 +1,1 @@
+def map_pin(lat: float, lng: float, label: str) -> dict:\n    return {"lat": lat, "lng": lng, "label": label}\n\n\ndef route_preview(origin: tuple[float, float], destination: tuple[float, float]) -> dict:\n    return {"origin": origin, "destination": destination, "provider": "mapbox-directions"}\n
