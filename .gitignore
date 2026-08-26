@@ -27,3 +27,8 @@ venv/
 
 # Dev server logs from run.sh --dev
 .logs/
+
+# Local AI tooling (not part of the project)
+.claude/
+CLAUDE.md
+.mcp.json
