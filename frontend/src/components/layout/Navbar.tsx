@@ -34,7 +34,7 @@ export default function Navbar() {
                   href={item.href}
                   className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
                     active
-                      ? "bg-surface-elevated text-ink"
+                      ? "bg-surface-elevated text-accent-gold"
                       : "text-charcoal hover:text-ink"
                   }`}
                 >

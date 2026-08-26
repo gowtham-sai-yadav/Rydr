@@ -44,7 +44,7 @@ export default function ChatPage() {
           </p>
           <Link
             href="/rides"
-            className="text-accent-blue hover:text-accent-blue text-sm mt-2 inline-block"
+            className="text-accent-gold hover:text-accent-gold text-sm mt-2 inline-block"
           >
             Browse rides →
           </Link>
@@ -55,7 +55,7 @@ export default function ChatPage() {
             <Link key={group.id} href={`/chat/${group.id}`}>
               <div className="bg-surface-card rounded-xl p-4 hover:bg-surface-elevated hover:ring-1 hover:ring-hairline-strong transition-all cursor-pointer flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-surface-elevated flex items-center justify-center">
-                  <svg className="w-6 h-6 text-accent-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-6 h-6 text-accent-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                           d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
