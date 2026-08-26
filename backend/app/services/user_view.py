@@ -22,7 +22,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_, func, literal, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.social import Follow
+from app.models.social import Follow, FollowStatus
 from app.models.user import User
 
 
@@ -48,15 +48,18 @@ def load_user_with_social(
     """
     viewer_id = viewer.id if viewer is not None else None
 
+    # All three counts/flags below only count ACCEPTED follows - a pending
+    # request into a private account isn't a real follow yet, so it
+    # shouldn't inflate followers_count or unlock is_followed_by_me/DMs.
     followers_count_q = (
         select(func.count(Follow.follower_id))
-        .where(Follow.followed_id == User.id)
+        .where(Follow.followed_id == User.id, Follow.status == FollowStatus.accepted)
         .correlate(User)
         .scalar_subquery()
     )
     following_count_q = (
         select(func.count(Follow.followed_id))
-        .where(Follow.follower_id == User.id)
+        .where(Follow.follower_id == User.id, Follow.status == FollowStatus.accepted)
         .correlate(User)
         .scalar_subquery()
     )
@@ -67,6 +70,37 @@ def load_user_with_social(
                 and_(
                     Follow.follower_id == viewer_id,
                     Follow.followed_id == User.id,
+                    Follow.status == FollowStatus.accepted,
+                )
+            )
+            .correlate(User)
+            .exists()
+        )
+        # Reverse direction — does this profile follow the viewer back.
+        # Informational only now; DM eligibility is one-directional
+        # (is_followed_by_me alone), not mutual.
+        follows_me_q = (
+            select(literal(1))
+            .where(
+                and_(
+                    Follow.follower_id == User.id,
+                    Follow.followed_id == viewer_id,
+                    Follow.status == FollowStatus.accepted,
+                )
+            )
+            .correlate(User)
+            .exists()
+        )
+        # A follow request I sent to this (private) profile that's still
+        # awaiting their acceptance - lets the frontend show "Requested"
+        # instead of "Follow" without a second round trip.
+        has_pending_request_q = (
+            select(literal(1))
+            .where(
+                and_(
+                    Follow.follower_id == viewer_id,
+                    Follow.followed_id == User.id,
+                    Follow.status == FollowStatus.pending,
                 )
             )
             .correlate(User)
@@ -74,6 +108,8 @@ def load_user_with_social(
         )
     else:
         is_followed_q = literal(False)
+        follows_me_q = literal(False)
+        has_pending_request_q = literal(False)
 
     result = (
         db.query(
@@ -81,6 +117,8 @@ def load_user_with_social(
             followers_count_q.label("followers_count"),
             following_count_q.label("following_count"),
             is_followed_q.label("is_followed_by_me"),
+            follows_me_q.label("follows_me"),
+            has_pending_request_q.label("has_pending_follow_request"),
         )
         .options(selectinload(User.bike))
         .filter(User.id == target_user_id)
@@ -89,8 +127,10 @@ def load_user_with_social(
     if result is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    user, followers_count, following_count, is_followed_by_me = result
+    user, followers_count, following_count, is_followed_by_me, follows_me, has_pending = result
     user.followers_count = int(followers_count or 0)
     user.following_count = int(following_count or 0)
     user.is_followed_by_me = bool(is_followed_by_me)
+    user.follows_me = bool(follows_me)
+    user.has_pending_follow_request = bool(has_pending)
     return user

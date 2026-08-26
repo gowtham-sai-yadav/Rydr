@@ -12,16 +12,24 @@ from app.routers import (
     auth,
     badges,
     chat,
+    clubs,
     destinations,
+    direct_messages,
+    events,
+    hazards,
+    heatmap,
     leaderboards,
+    live,
     maps,
     notifications,
     posts,
     reports,
     ride_logs,
     rides,
+    routes,
     share_cards,
     tags,
+    trips,
     users,
 )
 
@@ -50,19 +58,21 @@ app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(destinations.router, prefix="/api/destinations", tags=["Destinations"])
 app.include_router(tags.router, prefix="/api/tags", tags=["Tags"])
 app.include_router(rides.router, prefix="/api/rides", tags=["Rides"])
+app.include_router(routes.router, prefix="/api/routes", tags=["Routes"])
 app.include_router(ride_logs.router, prefix="/api/ride-logs", tags=["RideLogs"])
+app.include_router(trips.router, prefix="/api/trips", tags=["Trips"])
 app.include_router(chat.router, prefix="/api/chat", tags=["Chat"])
+app.include_router(direct_messages.router, prefix="/api/dm", tags=["DirectMessages"])
+app.include_router(live.router, prefix="/api", tags=["Live"])
+app.include_router(hazards.router, prefix="/api/hazards", tags=["Hazards"])
+app.include_router(heatmap.router, prefix="/api/heatmap", tags=["Heatmap"])
+app.include_router(clubs.router, prefix="/api/clubs", tags=["Clubs"])
+app.include_router(events.router, prefix="/api/events", tags=["Events"])
 app.include_router(badges.router, prefix="/api/badges", tags=["Badges"])
-app.include_router(
-    notifications.router, prefix="/api/notifications", tags=["Notifications"]
-)
 app.include_router(posts.router, prefix="/api/posts", tags=["Feed"])
-app.include_router(
-    leaderboards.router, prefix="/api/leaderboards", tags=["Leaderboards"]
-)
-app.include_router(
-    share_cards.router, prefix="/api/share-cards", tags=["ShareCards"]
-)
+app.include_router(notifications.router, prefix="/api/notifications", tags=["Notifications"])
+app.include_router(leaderboards.router, prefix="/api/leaderboards", tags=["Leaderboards"])
+app.include_router(share_cards.router, prefix="/api/share-cards", tags=["ShareCards"])
 app.include_router(maps.router, prefix="/api/maps", tags=["Maps"])
 app.include_router(reports.router, prefix="/api/reports", tags=["Moderation"])
 

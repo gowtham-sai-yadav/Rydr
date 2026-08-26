@@ -5,7 +5,7 @@ Surface (all under ``/api/chat``):
   GET    /api/chat/groups                   — list groups the caller can access
   GET    /api/chat/groups/{id}              — detail w/ slim ride summary
   GET    /api/chat/groups/{id}/messages     — since-polling, ASC chronological
-  POST   /api/chat/groups/{id}/messages     — send (1–2000 chars, trimmed)
+  POST   /api/chat/groups/{id}/messages     - send (1-2000 chars, trimmed)
   DELETE /api/chat/messages/{id}            — author or captain only, hard delete
   WS     /api/chat/groups/{id}/ws           — live message stream (Phase 4 W6)
 
@@ -81,6 +81,12 @@ router = APIRouter()
 
 # ---------------------------------------------------------------------------
 # Helpers
+#
+# The live-socket connection registry itself lives in services/ws_manager.py
+# (single-process in-memory map; see that module's docstring for the same
+# would-need-Redis-to-scale caveat) rather than here, so a REST-posted
+# message (_push_to_sockets, below) can reach it without importing this
+# router module.
 # ---------------------------------------------------------------------------
 def _user_is_approved_member(
     db: Session, ride_plan_id: UUID, user_id: UUID
@@ -100,10 +106,14 @@ def _user_is_approved_member(
     )
 
 
-def _load_group_or_404(
+def _find_group_if_member(
     db: Session, group_id: UUID, user: User
-) -> ChatGroup:
-    """Load the group + check membership in a SINGLE SQL statement.
+) -> Optional[ChatGroup]:
+    """Load the group + check membership in a SINGLE SQL statement, or
+    return ``None`` if the group doesn't exist or the caller isn't a
+    member. No exception raised - the WebSocket route needs to close with
+    a WS-specific code instead of an HTTPException, so the raising variant
+    (``_load_group_or_404``) wraps this rather than duplicating the query.
 
     Audit #10: the previous two-query implementation (group lookup, then
     participant lookup) had a measurable timing difference between
@@ -136,7 +146,7 @@ def _load_group_or_404(
         .first()
     )
     if result is None:
-        raise HTTPException(status_code=404, detail="Chat group not found")
+        return None
 
     group, membership_id = result
     ride = group.ride_plan
@@ -144,12 +154,40 @@ def _load_group_or_404(
         # Audit #16 — defensive; ride_plan_id is NOT NULL + CASCADE so this
         # branch is unreachable today. Kept as belt-and-braces against future
         # schema changes that loosen the FK.
-        raise HTTPException(status_code=404, detail="Chat group not found")
+        return None
 
     if ride.captain_id == user.id or membership_id is not None:
         return group
 
-    raise HTTPException(status_code=404, detail="Chat group not found")
+    return None
+
+
+def _load_group_or_404(
+    db: Session, group_id: UUID, user: User
+) -> ChatGroup:
+    group = _find_group_if_member(db, group_id, user)
+    if group is None:
+        raise HTTPException(status_code=404, detail="Chat group not found")
+    return group
+
+
+def _create_message(db: Session, group_id: UUID, user: User, body: str) -> ChatMessage:
+    """Persist a chat message and return it with ``author`` eager-loaded.
+
+    Shared by the HTTP POST route and the WebSocket route so both surfaces
+    validate and write messages identically. Caller is responsible for the
+    membership + cancelled-ride checks; this just does the write.
+    """
+    msg = ChatMessage(chat_group_id=group_id, author_id=user.id, body=body)
+    db.add(msg)
+    db.commit()
+
+    return (
+        db.query(ChatMessage)
+        .options(selectinload(ChatMessage.author))
+        .filter(ChatMessage.id == msg.id)
+        .one()
+    )
 
 
 def _build_group_out(

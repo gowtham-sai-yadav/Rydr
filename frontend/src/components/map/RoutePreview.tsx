@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
-import type { RouteOut } from "@/lib/api.types";
+import type { DirectionsOut } from "@/lib/api.types";
 
 type Props = {
   destinationId: string;
@@ -33,7 +33,7 @@ export default function RoutePreview({
   origin,
   destinationName,
 }: Props) {
-  const [route, setRoute] = useState<RouteOut | null>(null);
+  const [route, setRoute] = useState<DirectionsOut | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 

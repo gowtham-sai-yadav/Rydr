@@ -25,9 +25,10 @@ type Props = {
   contentType: ReportedContentType;
   contentId: string;
   label?: string;
+  className?: string;
 };
 
-export default function ReportButton({ contentType, contentId, label = "Report" }: Props) {
+export default function ReportButton({ contentType, contentId, label = "Report", className }: Props) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState<ReportReason>("spam");
   const [details, setDetails] = useState("");
@@ -54,14 +55,15 @@ export default function ReportButton({ contentType, contentId, label = "Report" 
   }
 
   if (state === "sent") {
-    return <p className="text-[12px] text-accent-green max-w-xs">{message}</p>;
+    return <p className={`text-[12px] text-accent-green max-w-xs ${className ?? ""}`}>{message}</p>;
   }
 
   if (!open) {
     return (
       <button
+        type="button"
         onClick={() => setOpen(true)}
-        className="text-[12px] text-stone hover:text-mute transition-colors"
+        className={`text-[12px] text-stone hover:text-mute transition-colors ${className ?? ""}`}
       >
         {label}
       </button>
@@ -69,7 +71,7 @@ export default function ReportButton({ contentType, contentId, label = "Report" 
   }
 
   return (
-    <div className="bg-surface-elevated border border-hairline rounded-lg p-3 space-y-2 w-full max-w-xs">
+    <div className={`bg-surface-elevated border border-hairline rounded-lg p-3 space-y-2 w-full max-w-xs ${className ?? ""}`}>
       <p className="text-[12px] text-ink font-medium">Why are you reporting this?</p>
       <select
         value={reason}
@@ -95,6 +97,7 @@ export default function ReportButton({ contentType, contentId, label = "Report" 
       )}
       <div className="flex gap-2">
         <button
+          type="button"
           onClick={submit}
           disabled={state === "sending"}
           className="bg-ink text-canvas text-[12px] font-medium px-3 py-1.5 rounded disabled:opacity-40"
@@ -102,6 +105,7 @@ export default function ReportButton({ contentType, contentId, label = "Report" 
           {state === "sending" ? "Sending…" : "Send report"}
         </button>
         <button
+          type="button"
           onClick={() => setOpen(false)}
           className="text-[12px] text-charcoal hover:text-ink px-2"
         >

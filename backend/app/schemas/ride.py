@@ -62,7 +62,10 @@ class RidePlanCreate(BaseModel):
     difficulty_level: DifficultyLevel = DifficultyLevel.moderate
     recommended_bike_type: Optional[str] = Field(default=None, max_length=100)
     break_schedule: Optional[str] = Field(default=None, max_length=2000)
-    max_riders: int = Field(default=10, ge=1, le=50)
+    # None = no cap on riders.
+    max_riders: Optional[int] = Field(default=10, ge=1, le=200)
+    # False = join requests auto-approve instead of sitting pending.
+    requires_approval: bool = True
 
     @field_validator("planned_date")
     @classmethod
@@ -83,7 +86,8 @@ class RidePlanUpdate(BaseModel):
     difficulty_level: Optional[DifficultyLevel] = None
     recommended_bike_type: Optional[str] = Field(default=None, max_length=100)
     break_schedule: Optional[str] = Field(default=None, max_length=2000)
-    max_riders: Optional[int] = Field(default=None, ge=1, le=50)
+    max_riders: Optional[int] = Field(default=None, ge=1, le=200)
+    requires_approval: Optional[bool] = None
 
     @field_validator("planned_date")
     @classmethod
@@ -106,7 +110,8 @@ class RidePlanSummary(BaseModel):
     visibility: RidePlanVisibility
     difficulty_level: DifficultyLevel
     status: RidePlanStatus
-    max_riders: int
+    max_riders: Optional[int] = None
+    requires_approval: bool = True
     participant_count: int = 0
 
 
@@ -144,7 +149,8 @@ class RidePlanOut(BaseModel):
     difficulty_level: DifficultyLevel
     recommended_bike_type: Optional[str] = None
     break_schedule: Optional[str] = None
-    max_riders: int
+    max_riders: Optional[int] = None
+    requires_approval: bool = True
     status: RidePlanStatus
     created_at: datetime
     updated_at: datetime

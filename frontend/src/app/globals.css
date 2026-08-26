@@ -4,8 +4,12 @@
  * Design tokens — adapted from docs/design/resend-DESIGN.md
  *
  * Pure-black canvas, surface-card / surface-elevated / surface-deep tiers,
- * translucent-white hairlines (no drop shadows), white-pill primary CTA,
- * orange/blue/green/red/yellow as atmospheric accents only.
+ * translucent-white hairlines (no drop shadows). Gold-pill primary CTA:
+ * gold is the dominant accent (primary actions, active states, links,
+ * headings/highlights, star ratings). Green is reserved for small
+ * secondary/positive indicators only (status dots, small badges), never
+ * a primary color or a full surface. Orange stays as an atmospheric
+ * radial-wash glow. Red stays semantic for errors.
  *
  * Substitutes for proprietary fonts: Inter (UI + body), Inter Tight
  * (display headlines — Domaine Display substitute), Geist Mono (code).
@@ -13,43 +17,52 @@
  * ------------------------------------------------------------------------- */
 @theme inline {
   /* surfaces */
-  --color-canvas: #000000;
-  --color-surface-card: #0a0a0c;
-  --color-surface-elevated: #101012;
-  --color-surface-deep: #06060a;
-  --color-surface-light: #f1f7fe;
+  --color-canvas: #070709;
+  --color-surface-card: rgba(13, 13, 17, 0.65);
+  --color-surface-elevated: rgba(22, 22, 28, 0.8);
+  --color-surface-deep: #030304;
+  --color-surface-light: #f5f9ff;
 
   /* text */
-  --color-ink: #fcfdff;
-  --color-body: rgba(252, 253, 255, 0.86);
-  --color-charcoal: rgba(252, 253, 255, 0.7);
-  --color-mute: #a1a4a5;
-  --color-ash: #888e90;
-  --color-stone: #464a4d;
+  --color-ink: #f8fafc;
+  --color-body: rgba(248, 250, 252, 0.9);
+  --color-charcoal: rgba(248, 250, 252, 0.7);
+  --color-mute: #94a3b8;
+  --color-ash: #64748b;
+  --color-stone: #475569;
 
-  /* hairlines (translucent white — replaces drop shadows) */
-  --color-hairline: rgba(255, 255, 255, 0.06);
-  --color-hairline-strong: rgba(255, 255, 255, 0.14);
-  --color-divider-soft: rgba(255, 255, 255, 0.04);
+  /* hairlines (translucent white for premium glass borders) */
+  --color-hairline: rgba(255, 255, 255, 0.05);
+  --color-hairline-strong: rgba(255, 255, 255, 0.12);
+  --color-divider-soft: rgba(255, 255, 255, 0.03);
 
-  /* atmospheric accents (use glow variants as low-opacity radial washes) */
-  --color-accent-orange: #ff801f;
-  --color-accent-orange-glow: rgba(255, 89, 0, 0.22);
-  --color-accent-yellow: #ffc53d;
-  --color-accent-blue: #3b9eff;
-  --color-accent-blue-glow: rgba(0, 117, 255, 0.34);
-  --color-accent-green: #11ff99;
-  --color-accent-green-glow: rgba(34, 255, 153, 0.18);
-  --color-accent-red: #ff2047;
-  --color-accent-red-glow: rgba(255, 32, 71, 0.34);
-  --color-link: #3b9eff;
+  /* atmospheric accents */
+  --color-accent-orange: #ff6b18;
+  --color-accent-orange-glow: rgba(255, 107, 24, 0.15);
+  --color-accent-yellow: #f59e0b;
+
+  /* gold, the dominant accent */
+  --color-accent-gold: #f59e0b;
+  --color-accent-gold-glow: rgba(245, 158, 11, 0.22);
+
+  /* green, small secondary/positive indicators */
+  --color-accent-green: #10b981;
+  --color-accent-green-glow: rgba(16, 185, 129, 0.15);
+
+  /* blue (nitrous blue) */
+  --color-accent-blue: #06b6d4;
+  --color-accent-blue-glow: rgba(6, 182, 212, 0.22);
+
+  --color-accent-red: #ef4444;
+  --color-accent-red-glow: rgba(239, 68, 68, 0.25);
+  --color-link: #f59e0b;
 
   /* radius scale */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
 
   /* fonts wired in app/layout.tsx via next/font */
   --font-sans: var(--font-inter), system-ui, sans-serif;
@@ -61,25 +74,32 @@
   html {
     background-color: var(--color-canvas);
     color: var(--color-ink);
+    scroll-behavior: smooth;
   }
   body {
     font-family: var(--font-sans);
     background-color: var(--color-canvas);
+    background-image: 
+      radial-gradient(at 0% 0%, rgba(245, 158, 11, 0.03) 0px, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(6, 182, 212, 0.02) 0px, transparent 50%),
+      linear-gradient(rgba(255, 255, 255, 0.005) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.005) 1px, transparent 1px);
+    background-size: 100% 100%, 100% 100%, 40px 40px, 40px 40px;
     color: var(--color-ink);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   ::selection {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(245, 158, 11, 0.2);
     color: var(--color-ink);
   }
-  /* Inputs / textarea / select default focus ring matches the design's
-     "thicken border to ink, no separate ring colour" pattern. */
+  /* Inputs / select focus state */
   input:focus-visible,
   textarea:focus-visible,
   select:focus-visible {
-    outline: 1px solid var(--color-ink);
-    outline-offset: -1px;
+    outline: none;
+    border-color: var(--color-accent-gold) !important;
+    box-shadow: 0 0 12px var(--color-accent-gold-glow);
   }
 }
 
@@ -103,23 +123,30 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
-  /* Primary — white pill on canvas. The brightest pixel on the page.
-     Used once per viewport for the dominant CTA. */
+  /* Primary: gold pill on canvas. The dominant accent, the brightest
+     color on the page. Used once per viewport for the dominant CTA. */
   .btn-primary {
-    background-color: var(--color-ink);
-    color: var(--color-canvas);
+    background: linear-gradient(135deg, var(--color-accent-gold) 0%, #b45309 100%);
+    color: #000;
+    box-shadow: 0 4px 14px 0 var(--color-accent-gold-glow);
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
   .btn-primary:hover:not(:disabled) {
-    background-color: var(--color-surface-light);
+    background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+    box-shadow: 0 4px 20px 0 rgba(245, 158, 11, 0.35);
+    transform: translateY(-1.5px);
   }
   /* Ghost — translucent elevated surface, hairline border. Paired secondary. */
   .btn-ghost {
     background-color: var(--color-surface-elevated);
+    backdrop-filter: blur(8px);
     color: var(--color-ink);
     border: 1px solid var(--color-hairline-strong);
   }
   .btn-ghost:hover:not(:disabled) {
-    background-color: #16161a;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: var(--color-accent-gold);
+    transform: translateY(-1px);
   }
   /* Outline — canvas-transparent with hairline. Tertiary. */
   .btn-outline {
@@ -128,7 +155,9 @@
     border: 1px solid var(--color-hairline-strong);
   }
   .btn-outline:hover:not(:disabled) {
-    background-color: var(--color-surface-card);
+    background-color: rgba(255, 255, 255, 0.03);
+    border-color: var(--color-accent-gold);
+    transform: translateY(-1px);
   }
   /* Danger — used sparingly. */
   .btn-danger {
@@ -138,25 +167,32 @@
   }
   .btn-danger:hover:not(:disabled) {
     background-color: color-mix(in srgb, var(--color-accent-red) 12%, transparent);
+    transform: translateY(-1px);
   }
 
   /* -------------------------- Cards & containers -------------------------- */
   .card {
-    background-color: var(--color-surface-card);
+    background: var(--color-surface-card);
+    backdrop-filter: blur(12px);
     border-radius: var(--radius-lg);
     padding: 24px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
   }
   .card-bordered {
-    background-color: var(--color-surface-card);
+    background: var(--color-surface-card);
+    backdrop-filter: blur(12px);
     border: 1px solid var(--color-hairline-strong);
     border-radius: var(--radius-lg);
     padding: 24px;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
   }
   .card-elevated {
-    background-color: var(--color-surface-elevated);
+    background: var(--color-surface-elevated);
+    backdrop-filter: blur(16px);
     border: 1px solid var(--color-hairline-strong);
     border-radius: var(--radius-lg);
     padding: 24px;
+    box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
   }
 
   /* -------------------------- Inputs -------------------------- */
@@ -180,7 +216,7 @@
   .input:hover:not(:disabled),
   .textarea:hover:not(:disabled),
   .select:hover:not(:disabled) {
-    border-color: rgba(255, 255, 255, 0.22);
+    border-color: color-mix(in srgb, var(--color-accent-gold) 45%, transparent);
   }
   .input:focus,
   .textarea:focus,
@@ -208,7 +244,7 @@
     line-height: 1.5;
   }
   .pill-active {
-    background-color: var(--color-ink);
+    background-color: var(--color-accent-gold);
     color: var(--color-canvas);
   }
   .chip {
@@ -225,66 +261,74 @@
     transition: background-color 120ms, border-color 120ms, color 120ms;
   }
   .chip:hover:not(.chip-active) {
-    border-color: var(--color-hairline-strong);
+    border-color: var(--color-accent-gold);
     color: var(--color-ink);
   }
   .chip-active {
-    background-color: var(--color-ink);
+    background-color: var(--color-accent-gold);
     color: var(--color-canvas);
-    border-color: var(--color-ink);
+    border-color: var(--color-accent-gold);
   }
 
   /* -------------------------- Typography helpers -------------------------- */
   .display-xxl {
     font-family: var(--font-display);
     font-size: clamp(44px, 7vw, 96px);
-    font-weight: 300;
+    font-weight: 800;
     line-height: 1.0;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.03em;
   }
   .display-xl {
     font-family: var(--font-display);
     font-size: clamp(36px, 5.5vw, 72px);
-    font-weight: 300;
+    font-weight: 800;
     line-height: 1.0;
-    letter-spacing: -0.025em;
+    letter-spacing: -0.03em;
   }
   .display-lg {
     font-family: var(--font-display);
     font-size: clamp(28px, 3.5vw, 48px);
-    font-weight: 400;
+    font-weight: 700;
     line-height: 1.1;
     letter-spacing: -0.02em;
   }
   .heading-md {
-    font-size: 24px;
-    font-weight: 500;
-    line-height: 1.5;
-    letter-spacing: -0.4px;
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.4;
+    letter-spacing: -0.02em;
   }
   .heading-sm {
-    font-size: 20px;
-    font-weight: 500;
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 700;
     line-height: 1.3;
-    letter-spacing: -0.3px;
+    letter-spacing: -0.01em;
   }
   .body-md {
-    font-size: 16px;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 400;
     line-height: 1.5;
   }
   .body-sm {
-    font-size: 14px;
-    line-height: 1.43;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.4;
   }
   .caption {
-    font-size: 12px;
+    font-family: var(--font-sans);
+    font-size: 11px;
     line-height: 1.5;
     color: var(--color-mute);
   }
   .label-eyebrow {
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.08em;
+    font-family: var(--font-sans);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--color-mute);
   }
@@ -296,7 +340,7 @@
   /* Used at the top of hero / section openers as a single radial wash.
      Apply like: <div class="glow-orange">…</div>  */
   .glow-orange,
-  .glow-blue,
+  .glow-gold,
   .glow-green,
   .glow-red,
   .glow-yellow {
@@ -304,7 +348,7 @@
     isolation: isolate;
   }
   .glow-orange::before,
-  .glow-blue::before,
+  .glow-gold::before,
   .glow-green::before,
   .glow-red::before,
   .glow-yellow::before {
@@ -318,8 +362,8 @@
   .glow-orange::before {
     background: radial-gradient(60% 60% at 50% 0%, var(--color-accent-orange-glow), transparent 70%);
   }
-  .glow-blue::before {
-    background: radial-gradient(60% 60% at 50% 0%, var(--color-accent-blue-glow), transparent 70%);
+  .glow-gold::before {
+    background: radial-gradient(60% 60% at 50% 0%, var(--color-accent-gold-glow), transparent 70%);
   }
   .glow-green::before {
     background: radial-gradient(60% 60% at 50% 0%, var(--color-accent-green-glow), transparent 70%);
@@ -346,7 +390,7 @@
     transition: color 120ms;
   }
   .link:hover {
-    color: var(--color-accent-blue);
+    color: color-mix(in srgb, var(--color-accent-gold) 85%, white);
     text-decoration: underline;
     text-underline-offset: 3px;
   }
