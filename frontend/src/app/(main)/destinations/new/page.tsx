@@ -174,7 +174,7 @@ export default function NewDestinationPage() {
                   onClick={() => toggle(t.slug)}
                   className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
                     selectedTags.has(t.slug)
-                      ? "bg-ink text-canvas"
+                      ? "bg-accent-gold text-canvas"
                       : "bg-surface-elevated text-body hover:bg-surface-elevated"
                   }`}
                 >
@@ -193,7 +193,7 @@ export default function NewDestinationPage() {
                   onClick={() => toggle(t.slug)}
                   className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
                     selectedTags.has(t.slug)
-                      ? "bg-ink text-canvas"
+                      ? "bg-accent-gold text-canvas"
                       : "bg-surface-elevated text-body hover:bg-surface-elevated"
                   }`}
                 >
@@ -288,7 +288,7 @@ export default function NewDestinationPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 font-semibold py-3 rounded-lg transition-colors"
+          className="w-full bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 font-semibold py-3 rounded-lg transition-colors"
         >
           {loading ? "Submitting…" : "Add destination"}
         </button>

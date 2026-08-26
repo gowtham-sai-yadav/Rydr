@@ -3,11 +3,26 @@ import { useState, useEffect, use, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import { chatGroupWsUrl } from "@/lib/ws";
 import type { ChatGroupOut, ChatMessageOut } from "@/lib/api.types";
+import { ReportButton } from "@/components/moderation/ReportButton";
 
+type ConnectionStatus = "connecting" | "live" | "disconnected";
 
-const POLL_INTERVAL_MS = 5000;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const BASE_RECONNECT_DELAY_MS = 1000;
 
+const statusLabel: Record<ConnectionStatus, string> = {
+  connecting: "Connecting…",
+  live: "Live",
+  disconnected: "Disconnected",
+};
+
+const statusDotColor: Record<ConnectionStatus, string> = {
+  connecting: "bg-accent-yellow",
+  live: "bg-accent-green",
+  disconnected: "bg-accent-red",
+};
 
 export default function ChatRoomPage({ params }: { params: Promise<{ groupId: string }> }) {
   const { groupId } = use(params);
@@ -19,17 +34,26 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState<ConnectionStatus>("connecting");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // Track the latest message id we've seen so the poll can use `after_id`.
-  const lastSeenIdRef = useRef<string | null>(null);
-  const pollHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectHandleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closedByUsRef = useRef(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Initial load — group header + last N messages.
+  const appendMessage = useCallback((msg: ChatMessageOut) => {
+    if (seenIdsRef.current.has(msg.id)) return;
+    seenIdsRef.current.add(msg.id);
+    setMessages((prev) => [...prev, msg]);
+  }, []);
+
+  // Initial load — group header + last N messages via HTTP.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -41,9 +65,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
         if (cancelled) return;
         setGroup(g);
         setMessages(m.messages);
-        if (m.messages.length > 0) {
-          lastSeenIdRef.current = m.messages[m.messages.length - 1].id;
-        }
+        seenIdsRef.current = new Set(m.messages.map((msg) => msg.id));
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : "Failed to load chat");
@@ -57,51 +79,55 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
     };
   }, [groupId]);
 
-  // Poll forward with after_id every POLL_INTERVAL_MS while page is visible.
-  const pollOnce = useCallback(async () => {
-    if (!lastSeenIdRef.current) return;
-    try {
-      const res = await api.getChatMessages(groupId, {
-        after_id: lastSeenIdRef.current,
-        limit: 50,
-      });
-      if (res.messages.length > 0) {
-        setMessages((prev) => [...prev, ...res.messages]);
-        lastSeenIdRef.current = res.messages[res.messages.length - 1].id;
-      }
-    } catch {
-      // Silent — next poll retries. The screen still shows the last good state.
-    }
-  }, [groupId]);
-
+  // Live updates over WebSocket — opened once history has loaded, with
+  // exponential-backoff reconnect on drop.
   useEffect(() => {
-    if (loading) return;
+    if (loading || !group) return;
+    closedByUsRef.current = false;
 
-    const tick = () => {
-      pollOnce();
-      pollHandleRef.current = setTimeout(tick, POLL_INTERVAL_MS);
-    };
+    const connect = () => {
+      setStatus((prev) => (prev === "live" ? prev : "connecting"));
+      const ws = new WebSocket(chatGroupWsUrl(groupId));
+      wsRef.current = ws;
 
-    // Pause polling when tab is hidden — saves battery + DB load.
-    const onVisibility = () => {
-      if (document.hidden) {
-        if (pollHandleRef.current) {
-          clearTimeout(pollHandleRef.current);
-          pollHandleRef.current = null;
+      ws.onopen = () => {
+        reconnectAttemptsRef.current = 0;
+        setStatus("live");
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as ChatMessageOut;
+          appendMessage(data);
+        } catch {
+          // Ignore malformed frames rather than crashing the connection.
         }
-      } else if (!pollHandleRef.current) {
-        pollOnce();
-        pollHandleRef.current = setTimeout(tick, POLL_INTERVAL_MS);
-      }
+      };
+
+      ws.onerror = () => {
+        // onclose fires right after — reconnect logic lives there.
+      };
+
+      ws.onclose = () => {
+        wsRef.current = null;
+        if (closedByUsRef.current) return;
+        setStatus("disconnected");
+        if (reconnectAttemptsRef.current >= MAX_RECONNECT_ATTEMPTS) return;
+        const delay = BASE_RECONNECT_DELAY_MS * Math.pow(2, reconnectAttemptsRef.current);
+        reconnectAttemptsRef.current += 1;
+        reconnectHandleRef.current = setTimeout(connect, delay);
+      };
     };
 
-    pollHandleRef.current = setTimeout(tick, POLL_INTERVAL_MS);
-    document.addEventListener("visibilitychange", onVisibility);
+    connect();
+
     return () => {
-      if (pollHandleRef.current) clearTimeout(pollHandleRef.current);
-      document.removeEventListener("visibilitychange", onVisibility);
+      closedByUsRef.current = true;
+      if (reconnectHandleRef.current) clearTimeout(reconnectHandleRef.current);
+      wsRef.current?.close();
+      wsRef.current = null;
     };
-  }, [loading, pollOnce]);
+  }, [groupId, loading, group, appendMessage]);
 
   useEffect(() => {
     scrollToBottom();
@@ -114,9 +140,15 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
     setSending(true);
     setError("");
     try {
-      const msg = await api.sendChatMessage(groupId, body);
-      setMessages((prev) => [...prev, msg]);
-      lastSeenIdRef.current = msg.id;
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        // The server pushes the ack back over the same socket, which
+        // appendMessage dedupes against — no optimistic local insert needed.
+        wsRef.current.send(JSON.stringify({ body }));
+      } else {
+        // WS not connected — fall back to HTTP so sending still works.
+        const msg = await api.sendChatMessage(groupId, body);
+        appendMessage(msg);
+      }
       setInput("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send");
@@ -166,7 +198,13 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
           earlier short-circuit return. */}
       <div className="card p-4 mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-ink font-semibold">{group.name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-ink font-semibold">{group.name}</h1>
+            <span className="flex items-center gap-1.5 text-xs text-mute" title={statusLabel[status]}>
+              <span className={`status-dot ${statusDotColor[status]}`} />
+              {statusLabel[status]}
+            </span>
+          </div>
           {ride && (
             <p className="text-mute text-xs">
               {ride.destination_name && `${ride.destination_name} · `}
@@ -208,7 +246,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
                     </div>
                   )}
                   <div
-                    className={`px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap break-words ${
+                    className={`px-4 py-2.5 rounded-2xl text-sm whitespace-pre-wrap break-words group relative ${
                       isMine
                         ? "bg-ink text-canvas rounded-br-md"
                         : "bg-surface-card text-ink rounded-bl-md"
@@ -216,9 +254,14 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
                   >
                     {msg.body}
                   </div>
-                  <p className={`text-xs text-stone mt-1 ${isMine ? "text-right" : ""}`}>
-                    {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </p>
+                  <div className={`flex items-center gap-2 mt-1 ${isMine ? "justify-end" : ""}`}>
+                    <p className="text-xs text-stone">
+                      {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                    {!isMine && (
+                      <ReportButton targetType="chat_message" targetId={msg.id} className="mt-0 text-[10px]" />
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -245,7 +288,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
           <button
             type="submit"
             disabled={sending || !input.trim()}
-            className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 w-12 h-12 rounded-full flex items-center justify-center transition-colors"
+            className="bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 w-12 h-12 rounded-full flex items-center justify-center transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}

@@ -21,7 +21,7 @@ export type RidePlanStatus =
   | "cancelled";
 export type RidePlanVisibility = "solo" | "group";
 export type DifficultyLevel = "easy" | "moderate" | "hard" | "expert";
-export type ParticipantStatus = "pending" | "approved" | "rejected" | "left";
+export type ParticipantStatus = "pending" | "approved" | "rejected" | "left" | "waitlisted";
 export type RoadCondition = "good" | "ok" | "rough" | "bad";
 export type MediaType = "image" | "video";
 
@@ -62,6 +62,9 @@ export interface UserOut {
   followers_count: number;
   following_count: number;
   is_followed_by_me: boolean;
+  // Moderation surface: being added to the User model in parallel. Read
+  // defensively, absent/false both mean "not an admin".
+  is_admin?: boolean;
 }
 
 export interface UserStatsOut {
@@ -409,6 +412,126 @@ export interface UserBadgeOut {
   badge_id: string;
   earned_at: string;
   badge: BadgeOut | null;
+}
+
+// ---------------------------------------------------------------------------
+// Social feed (new, written against the documented contract; backend
+// routes live at backend/app/routers/feed.py on main, not yet present in
+// this worktree, so field names are our best-effort match to the rest of
+// the API's conventions and should be reconciled against the real schema
+// once merged).
+// ---------------------------------------------------------------------------
+export interface PostMediaOut {
+  url: string;
+  media_type: string;
+}
+
+export interface PostOut {
+  id: string;
+  author: UserBrief;
+  ride_log_id: string | null;
+  caption: string;
+  media: PostMediaOut[];
+  like_count: number;
+  comment_count: number;
+  liked_by_me: boolean;
+  created_at: string;
+}
+
+export interface FeedListResponse {
+  posts: PostOut[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface PostCommentOut {
+  id: string;
+  post_id: string;
+  author: UserBrief;
+  body: string;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Leaderboard (two independent endpoints, riders by all-time ride-log
+// count, destinations by completed-ride count this calendar month)
+// ---------------------------------------------------------------------------
+export interface RiderLeaderboardEntry {
+  rank: number;
+  user: UserBrief;
+  rides_logged: number;
+}
+
+export interface RiderLeaderboardResponse {
+  entries: RiderLeaderboardEntry[];
+}
+
+export interface DestinationLeaderboardEntry {
+  rank: number;
+  destination_id: string;
+  destination_name: string;
+  ride_count: number;
+}
+
+export interface DestinationLeaderboardResponse {
+  entries: DestinationLeaderboardEntry[];
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+export type NotificationType =
+  | "ride_join_requested"
+  | "ride_join_approved"
+  | "ride_join_rejected"
+  | "post_liked"
+  | "post_commented"
+  | "badge_earned";
+
+export interface NotificationOut {
+  id: string;
+  type: NotificationType;
+  actor_id: string | null;
+  ride_plan_id: string | null;
+  post_id: string | null;
+  badge_id: string | null;
+  message: string;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface NotificationListResponse {
+  notifications: NotificationOut[];
+  total: number;
+  page: number;
+  limit: number;
+  unread_count: number;
+}
+
+// ---------------------------------------------------------------------------
+// Moderation
+// ---------------------------------------------------------------------------
+export type ReportTargetType = "post" | "comment" | "rating" | "chat_message" | "user";
+export type ReportStatus = "open" | "reviewed" | "dismissed" | "actioned";
+
+export interface ReportOut {
+  id: string;
+  reporter_id: string;
+  target_type: ReportTargetType;
+  target_id: string;
+  reason: string;
+  status: ReportStatus;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface ReportListResponse {
+  reports: ReportOut[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 // ---------------------------------------------------------------------------

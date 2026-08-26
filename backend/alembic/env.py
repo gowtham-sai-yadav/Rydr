@@ -8,8 +8,14 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Import the models package so every ORM class is registered with Base.metadata.
+from app.config import settings  # noqa: E402
 from app.database import Base  # noqa: E402
 import app.models  # noqa: E402,F401
+
+# alembic.ini's sqlalchemy.url is a local-dev fallback only. Always defer to
+# settings.DATABASE_URL (env var DATABASE_URL, or backend/.env) so migrations
+# target the same database the app itself connects to, in Docker or bare metal.
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 target_metadata = Base.metadata
 
