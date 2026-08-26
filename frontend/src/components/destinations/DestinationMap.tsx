@@ -1,159 +1,118 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { DestinationSummary } from "@/lib/api.types";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { goldPinIcon } from "@/lib/leafletIcons";
 
-const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
+export interface DestinationMapPoint {
+  id: string;
+  name: string;
+  latitude: number;
+  longitude: number;
+  region?: string | null;
+}
 
-type DestinationPin = Pick<
-  DestinationSummary,
-  "id" | "name" | "latitude" | "longitude" | "region"
->;
-
-type Props = {
-  destinations: DestinationPin[];
-  /** Compact mode is used on the destination detail page's location panel. */
-  compact?: boolean;
+interface DestinationMapProps {
+  destinations: DestinationMapPoint[];
+  height?: number | string;
   className?: string;
-};
-
-/**
- * Renders a real Mapbox GL map with clustered markers when
- * NEXT_PUBLIC_MAPBOX_TOKEN is configured. With no token (this environment
- * has none), falls back to a styled list of pins with lat/lng shown so the
- * page never crashes or shows a broken map.
- */
-export function DestinationMap({ destinations, compact, className }: Props) {
-  if (!MAPBOX_TOKEN) {
-    return (
-      <FallbackPanel destinations={destinations} compact={compact} className={className} />
-    );
-  }
-  return (
-    <MapboxMap destinations={destinations} compact={compact} className={className} />
-  );
 }
 
-function FallbackPanel({ destinations, compact, className }: Props) {
-  return (
-    <div
-      className={`card-bordered ${compact ? "p-4" : "p-6"} ${className ?? ""}`}
-    >
-      <div className="flex items-start gap-3 mb-4">
-        <svg className="w-5 h-5 text-stone shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
-        </svg>
-        <div>
-          <p className="text-ink text-sm font-medium">Map unavailable</p>
-          <p className="caption mt-0.5">
-            Set NEXT_PUBLIC_MAPBOX_TOKEN to enable the interactive map.
-          </p>
-        </div>
-      </div>
-      {destinations.length === 0 ? (
-        <p className="caption">No destinations to show.</p>
-      ) : (
-        <ul className={`grid ${compact ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2"} gap-2`}>
-          {destinations.map((d) => (
-            <li key={d.id}>
-              <Link
-                href={`/destinations/${d.id}`}
-                className="flex items-center justify-between gap-3 rounded-lg bg-surface-elevated/50 hover:bg-surface-elevated px-3 py-2 transition-colors"
-              >
-                <div className="min-w-0">
-                  <p className="text-ink text-sm font-medium truncate">{d.name}</p>
-                  {d.region && <p className="caption truncate">{d.region}</p>}
-                </div>
-                <span className="mono text-xs text-stone shrink-0">
-                  {d.latitude.toFixed(2)}, {d.longitude.toFixed(2)}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function MapboxMap({ destinations, compact, className }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<import("mapbox-gl").Map | null>(null);
+// Read-only browsing map - one pin per destination, click through to the
+// detail page. Built on plain Leaflet + OpenStreetMap tiles, so it needs no
+// API key or account. Falls back to a plain list only if the map library
+// fails to initialize (e.g. an SSR mismatch).
+export default function DestinationMap({
+  destinations,
+  height = 360,
+  className = "",
+}: DestinationMapProps) {
+  const router = useRouter();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    let markers: import("mapbox-gl").Marker[] = [];
+    if (!containerRef.current || destinations.length === 0) return;
 
-    (async () => {
-      try {
-        const mapboxgl = (await import("mapbox-gl")).default;
-        if (cancelled || !containerRef.current) return;
+    try {
+      const map = L.map(containerRef.current, {
+        center: [destinations[0].latitude, destinations[0].longitude],
+        zoom: 8,
+      });
+      mapRef.current = map;
 
-        mapboxgl.accessToken = MAPBOX_TOKEN;
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19,
+      }).addTo(map);
 
-        const first = destinations[0];
-        const map = new mapboxgl.Map({
-          container: containerRef.current,
-          style: "mapbox://styles/mapbox/dark-v11",
-          center: first ? [first.longitude, first.latitude] : [78.9629, 20.5937],
-          zoom: destinations.length > 0 ? 5 : 3,
-        });
-        mapRef.current = map;
-        map.addControl(new mapboxgl.NavigationControl(), "top-right");
+      const markers: L.Marker[] = [];
+      destinations.forEach((d) => {
+        const marker = L.marker([d.latitude, d.longitude], { icon: goldPinIcon() })
+          .addTo(map)
+          .bindPopup(`<strong>${escapeHtml(d.name)}</strong>`);
+        marker.on("click", () => router.push(`/destinations/${d.id}`));
+        markers.push(marker);
+      });
 
-        map.on("load", () => {
-          if (cancelled) return;
-          const bounds = new mapboxgl.LngLatBounds();
-          markers = destinations.map((d) => {
-            const el = document.createElement("a");
-            el.href = `/destinations/${d.id}`;
-            el.style.display = "block";
-            el.style.width = "14px";
-            el.style.height = "14px";
-            el.style.borderRadius = "9999px";
-            el.style.background = "#ff801f";
-            el.style.border = "2px solid #fcfdff";
-            el.style.cursor = "pointer";
-            el.title = d.name;
-
-            const marker = new mapboxgl.Marker({ element: el })
-              .setLngLat([d.longitude, d.latitude])
-              .setPopup(new mapboxgl.Popup({ offset: 12 }).setText(d.name))
-              .addTo(map);
-            bounds.extend([d.longitude, d.latitude]);
-            return marker;
-          });
-          if (destinations.length > 1) {
-            map.fitBounds(bounds, { padding: 48, maxZoom: 10 });
-          }
-        });
-
-        map.on("error", () => {
-          if (!cancelled) setFailed(true);
-        });
-      } catch {
-        if (!cancelled) setFailed(true);
+      if (destinations.length > 1) {
+        const group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds(), { padding: [48, 48], maxZoom: 12 });
       }
-    })();
+    } catch {
+      setFailed(true);
+    }
 
     return () => {
-      cancelled = true;
-      markers.forEach((m) => m.remove());
       mapRef.current?.remove();
       mapRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destinations]);
 
-  if (failed) {
-    return <FallbackPanel destinations={destinations} compact={compact} className={className} />;
+  if (destinations.length === 0 || failed) {
+    return (
+      <div
+        className={`bg-surface-card rounded-xl p-4 ${className}`}
+        style={{ minHeight: typeof height === "number" ? height : undefined }}
+      >
+        {destinations.length === 0 ? (
+          <p className="text-mute text-sm">No destinations to show on a map.</p>
+        ) : (
+          <>
+            <p className="text-xs text-mute mb-3">Map unavailable. Showing a list instead.</p>
+            <ul className="space-y-2">
+              {destinations.map((d) => (
+                <li key={d.id}>
+                  <Link href={`/destinations/${d.id}`} className="link text-sm font-medium">
+                    {d.name}
+                  </Link>
+                  {d.region && <span className="text-stone text-xs ml-2">{d.region}</span>}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    );
   }
 
   return (
     <div
       ref={containerRef}
-      className={`w-full rounded-xl overflow-hidden bg-surface-card ${compact ? "h-48" : "h-96"} ${className ?? ""}`}
+      className={`rounded-xl overflow-hidden ${className}`}
+      style={{ height }}
     />
   );
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }

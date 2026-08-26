@@ -131,7 +131,7 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
             className={`px-6 py-2 rounded-lg font-medium transition-colors ${
               profile.is_followed_by_me
                 ? "bg-surface-elevated text-ink hover:bg-surface-elevated"
-                : "bg-ink text-canvas hover:bg-surface-light"
+                : "bg-accent-gold text-canvas hover:bg-accent-gold/90"
             } disabled:opacity-50`}
           >
             {profile.is_followed_by_me ? "Following" : "Follow"}
