@@ -1,0 +1,1 @@
+RELEASE_BLOCKERS = [\n    "seed consistency failures",\n    "ride capacity edge-case regressions",\n    "chat auth mismatch",\n]\n\n\ndef release_ready(open_blockers: list[str]) -> bool:\n    return len(open_blockers) == 0\n

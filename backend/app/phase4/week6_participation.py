@@ -1,0 +1,1 @@
+def can_confirm_participant(capacity: int, confirmed_count: int) -> bool:\n    return confirmed_count < capacity\n\n\ndef should_waitlist(capacity: int, confirmed_count: int, requested_count: int = 1) -> bool:\n    return confirmed_count + requested_count > capacity\n
