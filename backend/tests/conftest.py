@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from app.database import engine
+from app.database import SessionLocal, engine
 from app.main import app
 
 _TABLES = [
@@ -55,6 +55,15 @@ def _clean_db():
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)
+
+
+@pytest.fixture
+def db_session():
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 def signup(client: TestClient, email: str, name: str = "Test Rider") -> dict:
