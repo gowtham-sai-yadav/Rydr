@@ -8,9 +8,7 @@ Rydr helps a rider — especially a new or solo one — answer *"where should I 
 
 ## Status
 
-**Phase 3 — full-scale implementation, in progress.** A PoC was shipped in `0829bdf` covering auth, ride CRUD, group ride planning, and a mocked chat. Phase 3 rewrites the data model around `Destination` as the primary entity and fills out the community + discovery feature set.
-
-For the full Phase 3 scope, milestones, and architecture, see [`PHASE3_PLAN.md`](./PHASE3_PLAN.md).
+**Phase 4 — final implementation, in progress.** Destination discovery, ride planning, ride chat, post-ride capture, badges, the social feed, and leaderboards are built. Notifications, admin moderation, ride-capacity waitlisting, real-time chat, and shareable ride/badge cards are being finished now.
 
 ---
 
@@ -55,11 +53,8 @@ P3G4SUS/
 │   ├── .env.local              Local env (gitignored) — see .env.example
 │   ├── .env.example            Template for frontend/.env.local
 │   └── package.json
-├── docker-compose.yml          Postgres (dev) container definition
+├── docker-compose.yml          Postgres, backend, frontend service definitions
 ├── run.sh                      Dev bootstrap + runner (see below)
-├── PHASE3_PLAN.md              Authoritative Phase 3 scope + milestones
-├── phase2.pdf                  Phase 2 design document (historical)
-├── file final.pdf              Phase 1 PRD (historical)
 └── README.md                   You are here
 ```
 
@@ -223,12 +218,9 @@ alembic current
 
 | Document | Purpose |
 |---|---|
-| [`PHASE3_PLAN.md`](./PHASE3_PLAN.md) | Authoritative Phase 3 scope, milestones, open decisions, code-quality backlog (Appendix B), DB choice rationale (Appendix C) |
-| [`phase2.pdf`](./phase2.pdf) | Phase 2 — system design + PoC (historical) |
-| [`file final.pdf`](./file%20final.pdf) | Phase 1 — PRD + problem identification (historical) |
-| [`CLAUDE.md`](./CLAUDE.md) | Working notes on MCP tools used in this repo |
-
-The PDFs are the original scope documents; `PHASE3_PLAN.md` is the authoritative build plan for Phase 3 and supersedes the PDFs where they differ.
+| [`docs/plan/`](./docs/plan) | Per-milestone implementation plans (destination discovery, ride planning, chat, follow system, badges, and more) |
+| [`docs/review/`](./docs/review) | Post-implementation audits per milestone |
+| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | System architecture overview |
 
 ---
 
