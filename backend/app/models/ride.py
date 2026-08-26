@@ -62,6 +62,10 @@ class ParticipantStatus(str, enum.Enum):
     approved = "approved"
     rejected = "rejected"
     left = "left"
+    # Added for capacity hardening: a join request made while the ride is
+    # already full lands here instead of "pending" so the captain can tell
+    # "waiting for a spot" apart from "needs my review."
+    waitlisted = "waitlisted"
 
 
 class Bike(Base):

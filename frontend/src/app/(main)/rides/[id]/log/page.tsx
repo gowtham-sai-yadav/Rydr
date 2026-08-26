@@ -8,6 +8,7 @@ import type {
   RideLogOut,
   RidePlanOut,
 } from "@/lib/api.types";
+import { ShareCardButton } from "@/components/share/ShareCardButton";
 
 
 export default function RideLogPage({ params }: { params: Promise<{ id: string }> }) {
@@ -200,7 +201,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
     return (
       <div className="text-center py-12 text-mute">
         Only the rider can edit their own log.{" "}
-        <Link href={`/rides/${id}`} className="text-accent-blue">Back to ride</Link>
+        <Link href={`/rides/${id}`} className="text-accent-gold">Back to ride</Link>
       </div>
     );
   }
@@ -208,10 +209,18 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-12">
       <div>
-        <Link href={`/rides/${ride.id}`} className="text-accent-blue hover:text-accent-blue text-sm">
+        <Link href={`/rides/${ride.id}`} className="text-accent-gold hover:text-accent-gold text-sm">
           ← {ride.title}
         </Link>
-        <h1 className="text-2xl font-bold text-ink mt-1">Log this ride</h1>
+        <div className="flex items-center justify-between mt-1">
+          <h1 className="text-2xl font-bold text-ink">Log this ride</h1>
+          <ShareCardButton
+            fetchImage={() => api.getRideLogCardImage(log.id)}
+            fileName={`rydr-ride-${ride.id}`}
+            shareTitle={ride.title}
+            shareText={`Check out my ride to ${ride.destination?.name ?? "somewhere great"} on Rydr`}
+          />
+        </div>
         {ride.destination && (
           <p className="text-mute text-sm">at {ride.destination.name}</p>
         )}
@@ -287,7 +296,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
         <button
           onClick={saveFeedback}
           disabled={savingPatch}
-          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 font-medium py-2.5 rounded-lg"
+          className="w-full bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 font-medium py-2.5 rounded-lg"
         >
           {savingPatch ? "Saving…" : "Save feedback"}
         </button>
@@ -366,7 +375,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
               type="button"
               onClick={() => setStars(n)}
               className={`text-3xl transition-colors ${
-                n <= stars ? "text-accent-yellow" : "text-gray-600 hover:text-stone"
+                n <= stars ? "text-accent-gold" : "text-gray-600 hover:text-stone"
               }`}
             >
               ★
@@ -388,7 +397,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
         <button
           onClick={saveRating}
           disabled={savingRating || stars < 1}
-          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 font-medium py-2.5 rounded-lg"
+          className="w-full bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 font-medium py-2.5 rounded-lg"
         >
           {savingRating
             ? "Submitting…"
@@ -400,7 +409,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
 
       <Link
         href={`/destinations/${ride.destination_id}`}
-        className="block text-center text-accent-blue hover:text-accent-blue text-sm py-2"
+        className="block text-center text-accent-gold hover:text-accent-gold text-sm py-2"
       >
         See the destination page →
       </Link>

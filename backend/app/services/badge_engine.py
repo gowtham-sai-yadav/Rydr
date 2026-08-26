@@ -43,12 +43,14 @@ from sqlalchemy.orm import Session
 
 from app.models.badge import Badge, UserBadge
 from app.models.destination import Rating
+from app.models.notification import NotificationType
 from app.models.ride import (
     ParticipantStatus,
     RidePlan,
     RidePlanParticipant,
 )
 from app.models.ride_log import RideLog
+from app.services.notification_service import create_notification as _notify
 
 
 # ---------------------------------------------------------------------------
@@ -182,13 +184,13 @@ def evaluate_user_badges(db: Session, user_id: UUID) -> int:
         return 0
 
     catalog_rows = (
-        db.query(Badge.id, Badge.slug)
+        db.query(Badge.id, Badge.slug, Badge.name)
         .filter(Badge.slug.in_(qualifying_slugs))
         .all()
     )
 
     awarded = 0
-    for badge_id, _slug in catalog_rows:
+    for badge_id, _slug, badge_name in catalog_rows:
         stmt = (
             pg_insert(UserBadge)
             .values(user_id=user_id, badge_id=badge_id)
@@ -198,6 +200,15 @@ def evaluate_user_badges(db: Session, user_id: UUID) -> int:
         inserted_id = db.execute(stmt).scalar_one_or_none()
         if inserted_id is not None:
             awarded += 1
+            # Notify on genuinely new awards only - on_conflict_do_nothing
+            # means a re-run that finds nothing new inserts nothing here.
+            _notify(
+                db,
+                user_id=user_id,
+                type=NotificationType.badge_earned,
+                message=f"You earned the \"{badge_name}\" badge",
+                badge_id=badge_id,
+            )
 
     if awarded:
         db.commit()

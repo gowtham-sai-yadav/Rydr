@@ -19,7 +19,7 @@ const difficultyColors: Record<string, string> = {
 };
 
 const statusColors: Record<string, string> = {
-  planned: "bg-accent-blue",
+  planned: "bg-accent-gold",
   in_progress: "bg-ink text-canvas",
   completed: "bg-green-700",
   cancelled: "bg-accent-red",
@@ -299,7 +299,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
         {!isCaptain && ride.status === "planned" && (
           <>
             {myStatus === "pending" && (
-              <div className="flex-1 bg-accent-yellow/10 text-accent-yellow text-center py-3 rounded-lg font-medium">
+              <div className="flex-1 bg-accent-gold/10 text-accent-gold text-center py-3 rounded-lg font-medium">
                 Request pending
               </div>
             )}
@@ -326,7 +326,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
               <button
                 onClick={handleJoin}
                 disabled={busy}
-                className="flex-1 bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 py-3 rounded-lg font-medium transition-colors"
+                className="flex-1 bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 py-3 rounded-lg font-medium transition-colors"
               >
                 {busy ? "Requesting…" : "Request to join"}
               </button>
@@ -347,7 +347,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
               <button
                 onClick={handleStart}
                 disabled={busy}
-                className="bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 px-6 py-3 rounded-lg font-medium"
+                className="bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 px-6 py-3 rounded-lg font-medium"
               >
                 Start
               </button>

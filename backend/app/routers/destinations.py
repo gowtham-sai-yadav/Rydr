@@ -78,6 +78,32 @@ SUPPORTED_CURRENCIES = {"INR"}  # cost calculator is INR-only until multi-curren
 MIN_SEARCH_LEN = 2
 LIKE_ESCAPE_CHAR = "\\"
 
+# Common Indian city abbreviations / nicknames riders actually type, mapped to
+# the full city name as it appears in destination text (name/region/
+# description). "blr" typing into search finding nothing was the reported
+# bug - riders search by nearest big city, not by state region name.
+CITY_ALIASES: dict[str, str] = {
+    "blr": "Bangalore",
+    "blore": "Bangalore",
+    "bengaluru": "Bangalore",
+    "bombay": "Mumbai",
+    "mum": "Mumbai",
+    "hyd": "Hyderabad",
+    "del": "Delhi",
+    "ncr": "Delhi",
+    "chn": "Chennai",
+    "madras": "Chennai",
+    "kol": "Kolkata",
+    "cal": "Kolkata",
+    "calcutta": "Kolkata",
+    "pn": "Pune",
+    "jpr": "Jaipur",
+    "coimb": "Coimbatore",
+    "cbe": "Coimbatore",
+    "tvm": "Thiruvananthapuram",
+    "trivandrum": "Thiruvananthapuram",
+}
+
 
 def _escape_like(s: str) -> str:
     """Escape ILIKE wildcards so user input cannot match arbitrary patterns.
@@ -316,12 +342,30 @@ def list_destinations(
         if len(q_stripped) >= MIN_SEARCH_LEN:
             escaped = _escape_like(q_stripped)
             like = f"%{escaped}%"
-            query = query.filter(
-                or_(
-                    Destination.name.ilike(like, escape=LIKE_ESCAPE_CHAR),
-                    Destination.region.ilike(like, escape=LIKE_ESCAPE_CHAR),
+            search_clauses = [
+                Destination.name.ilike(like, escape=LIKE_ESCAPE_CHAR),
+                Destination.region.ilike(like, escape=LIKE_ESCAPE_CHAR),
+                Destination.description.ilike(like, escape=LIKE_ESCAPE_CHAR),
+            ]
+
+            # Alias expansion: "blr" -> also match "Bangalore" wherever it
+            # appears (region-level filters miss it since region is
+            # state-level, e.g. "Karnataka" - the city name lives in the
+            # description text instead).
+            alias = CITY_ALIASES.get(q_stripped.lower())
+            if alias:
+                alias_like = f"%{_escape_like(alias)}%"
+                search_clauses.extend(
+                    [
+                        Destination.name.ilike(alias_like, escape=LIKE_ESCAPE_CHAR),
+                        Destination.region.ilike(alias_like, escape=LIKE_ESCAPE_CHAR),
+                        Destination.description.ilike(
+                            alias_like, escape=LIKE_ESCAPE_CHAR
+                        ),
+                    ]
                 )
-            )
+
+            query = query.filter(or_(*search_clauses))
 
     distance_expr = None
     if origin is not None:
