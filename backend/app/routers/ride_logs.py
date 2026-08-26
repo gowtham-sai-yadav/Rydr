@@ -96,7 +96,7 @@ def _build_summary(log: RideLog) -> RideLogSummary:
             if log.ride_plan and log.ride_plan.destination
             else None
         ),
-        # No distance column on ride_logs today — see RideLogSummary docstring.
+        # No distance column on ride_logs today - see RideLogSummary docstring.
         distance_km=None,
         duration_minutes=duration_minutes,
         ride_date=ride_date,
@@ -214,7 +214,7 @@ def get_ride_log(
 
 
 # ---------------------------------------------------------------------------
-# Shareable summary + card (Phase 4) — same visibility as the detail route:
+# Shareable summary + card (Phase 4) - same visibility as the detail route:
 # public, no auth required, matching "everything public" for ride logs.
 # ---------------------------------------------------------------------------
 @router.get("/{log_id}/summary", response_model=RideLogSummary)

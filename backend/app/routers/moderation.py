@@ -1,14 +1,14 @@
-"""Moderation router — Phase 4 admin surface.
+"""Moderation router - Phase 4 admin surface.
 
 Surface (all under ``/api/moderation``):
 
-  POST  /reports        — any authenticated user files a report
-  GET   /reports         — admin-only, filterable by status, paginated
-  PATCH /reports/{id}    — admin-only, update status (sets reviewed_by/reviewed_at)
+  POST  /reports        - any authenticated user files a report
+  GET   /reports         - admin-only, filterable by status, paginated
+  PATCH /reports/{id}    - admin-only, update status (sets reviewed_by/reviewed_at)
 
-Filing a report requires no special permission — it's the abuse-reporting
+Filing a report requires no special permission - it's the abuse-reporting
 entry point every user needs. Reading and actioning the queue is
-admin-gated via ``get_current_admin_user`` (403 for non-admins, not 404 —
+admin-gated via ``get_current_admin_user`` (403 for non-admins, not 404 -
 the existence of the moderation queue isn't something worth hiding).
 """
 from __future__ import annotations

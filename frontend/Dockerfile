@@ -7,7 +7,7 @@ RUN npm install
 
 COPY . .
 
-# NEXT_PUBLIC_* vars must be present at build time — they get baked into
+# NEXT_PUBLIC_* vars must be present at build time - they get baked into
 # the client bundle, not read at runtime. docker-compose passes them
 # through as build args below.
 ARG NEXT_PUBLIC_API_URL

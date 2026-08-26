@@ -1,4 +1,4 @@
-"""Notification — in-app activity feed for ride/social events.
+"""Notification - in-app activity feed for ride/social events.
 
 Rows are created as side effects of other routers (ride join requests,
 approvals/rejections, post likes/comments, badge awards) rather than

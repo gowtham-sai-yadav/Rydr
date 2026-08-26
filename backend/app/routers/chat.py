@@ -5,11 +5,11 @@ Surface (all under ``/api/chat``):
   GET    /api/chat/groups                   — list groups the caller can access
   GET    /api/chat/groups/{id}              — detail w/ slim ride summary
   GET    /api/chat/groups/{id}/messages     — since-polling, ASC chronological
-  POST   /api/chat/groups/{id}/messages     — send (1-2000 chars, trimmed)
+  POST   /api/chat/groups/{id}/messages     - send (1-2000 chars, trimmed)
   DELETE /api/chat/messages/{id}            — author or captain only, hard delete
-  WS     /api/chat/groups/{id}/ws           — live send/broadcast, auth via ?token=
+  WS     /api/chat/groups/{id}/ws           - live send/broadcast, auth via ?token=
 
-The WebSocket endpoint is additive — it reuses the same membership check,
+The WebSocket endpoint is additive - it reuses the same membership check,
 the same read-only-if-cancelled rule, and the same message-persistence path
 as the HTTP POST route (through the shared ``_create_message`` helper) so
 the two surfaces can never drift apart on validation. The HTTP GET/POST
@@ -134,7 +134,7 @@ def _find_group_if_member(
 ) -> Optional[ChatGroup]:
     """Load the group + check membership in a SINGLE SQL statement, or
     return ``None`` if the group doesn't exist or the caller isn't a
-    member. No exception raised — the WebSocket route needs to close with
+    member. No exception raised - the WebSocket route needs to close with
     a WS-specific code instead of an HTTPException, so the raising variant
     (``_load_group_or_404``) wraps this rather than duplicating the query.
 
@@ -511,7 +511,7 @@ def delete_message(
 
 
 # ---------------------------------------------------------------------------
-# Live chat — WebSocket
+# Live chat - WebSocket
 # ---------------------------------------------------------------------------
 @router.websocket("/groups/{group_id}/ws")
 async def chat_ws(websocket: WebSocket, group_id: UUID) -> None:
@@ -522,7 +522,7 @@ async def chat_ws(websocket: WebSocket, group_id: UUID) -> None:
     ``_decode_token`` helper ``get_current_user`` uses, so the two paths
     can't drift on token-validation rules. Invalid/expired token closes
     with 4401; not a member of the group closes with 4404; connecting to
-    a cancelled ride's chat closes with 4409 (its chat is read-only —
+    a cancelled ride's chat closes with 4409 (its chat is read-only -
     viewers should use the existing GET history endpoint instead).
 
     A plain ``Depends(get_db)`` doesn't work for WebSocket routes the way
@@ -560,14 +560,14 @@ async def chat_ws(websocket: WebSocket, group_id: UUID) -> None:
                     raw = await websocket.receive_json()
                     payload = ChatMessageCreate.model_validate(raw)
                 except (ValidationError, ValueError):
-                    # Malformed frame (bad JSON or failed body validation)
-                    # — ignore it and keep the connection open rather than
+                    # Malformed frame (bad JSON or failed body validation) -
+                    # ignore it and keep the connection open rather than
                     # dropping the whole socket over one bad message.
                     continue
 
                 fresh = _create_message(db, group_id, user, payload.body)
                 out = ChatMessageOut.model_validate(fresh).model_dump(mode="json")
-                # Broadcast to everyone in the group, including the sender —
+                # Broadcast to everyone in the group, including the sender -
                 # doubles as the send ack so the client doesn't need to
                 # locally echo before the server confirms persistence.
                 await manager.broadcast(group_id, out)

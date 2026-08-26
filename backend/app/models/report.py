@@ -1,6 +1,6 @@
-"""Report — user-filed moderation reports against any content type.
+"""Report - user-filed moderation reports against any content type.
 
-``target_type`` + ``target_id`` is a loose polymorphic reference (no FK —
+``target_type`` + ``target_id`` is a loose polymorphic reference (no FK -
 the target tables don't share a common parent) mirroring how ``Notification``
 handles multiple optional target kinds, except here only one type applies
 per row so a plain enum + UUID pair is enough.

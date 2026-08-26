@@ -96,7 +96,7 @@ class RideLogOut(BaseModel):
 
 
 class RideLogSummary(BaseModel):
-    """Shareable-card data — Phase 4. ``distance_km`` is always ``None``
+    """Shareable-card data - Phase 4. ``distance_km`` is always ``None``
     today: ``ride_logs`` has no distance column (route distance isn't
     tracked anywhere in the current schema), so this is a placeholder for
     when that lands rather than an invented field. ``duration_minutes`` is
