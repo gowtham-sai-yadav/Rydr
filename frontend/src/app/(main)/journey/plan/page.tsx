@@ -34,14 +34,14 @@ function JourneyPlanContent() {
       <div>
         <h1 className="text-2xl font-bold text-ink">Plan a journey</h1>
         <p className="text-mute text-sm mt-1">
-          Drop waypoints for your route{destination ? ` to ${destination.name}` : ""} — start,
+          Drop waypoints for your route{destination ? ` to ${destination.name}` : ""} - start,
           stops, and the destination. Drag pins to fine-tune, add a note to any stop, and
           reorder as needed.
         </p>
       </div>
 
       <div className="bg-accent-gold/10 border border-accent-gold/20 text-accent-gold px-4 py-3 rounded-lg text-sm">
-        Saving a route to the backend isn&apos;t wired up yet — the API only has a model for
+        Saving a route to the backend isn&apos;t wired up yet - the API only has a model for
         it, no endpoint. Your waypoints stay in this session; capture them manually (or via
         the ride description) for now.
       </div>

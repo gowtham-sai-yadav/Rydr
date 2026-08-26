@@ -22,12 +22,12 @@ function makeId() {
 }
 
 // Interactive route/waypoint editor built on plain Leaflet + OpenStreetMap
-// tiles (no API key, no react-leaflet wrapper — a useRef/useEffect
+// tiles (no API key, no react-leaflet wrapper - a useRef/useEffect
 // imperative integration, same shape as the read-only DestinationMap).
 // Click the map to drop a waypoint, drag markers to reposition, and a gold
 // polyline connects them in order. This draws a straight-line connector
 // between waypoints rather than calling a routing service for a
-// road-snapped path — that would be the natural next step but is out of
+// road-snapped path - that would be the natural next step but is out of
 // scope here.
 export default function JourneyPlanner({
   initialWaypoints = [],
@@ -191,7 +191,7 @@ export default function JourneyPlanner({
               <input
                 value={wp.label}
                 onChange={(e) => updateWaypoint(wp.id, { label: e.target.value })}
-                placeholder="Note — e.g. fuel stop, breakfast spot, scenic viewpoint"
+                placeholder="Note - e.g. fuel stop, breakfast spot, scenic viewpoint"
                 className="input text-sm py-1.5"
               />
               <p className="text-[11px] text-stone mt-1">

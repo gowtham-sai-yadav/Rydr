@@ -20,7 +20,7 @@ interface DestinationMapProps {
   className?: string;
 }
 
-// Read-only browsing map — one pin per destination, click through to the
+// Read-only browsing map - one pin per destination, click through to the
 // detail page. Built on plain Leaflet + OpenStreetMap tiles, so it needs no
 // API key or account. Falls back to a plain list only if the map library
 // fails to initialize (e.g. an SSR mismatch).
