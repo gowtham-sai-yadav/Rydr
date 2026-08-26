@@ -29,7 +29,7 @@ export function RideStatsPanel() {
 
   useEffect(() => {
     api
-      .getMyRides({ status: "completed", include_left: false, limit: 100 })
+      .getMyRides({ status: "completed", include_left: false, limit: 50 })
       .then((res) => setRides(res.rides))
       .catch((err) => setError(err instanceof Error ? err.message : "Failed to load ride history"));
   }, []);
