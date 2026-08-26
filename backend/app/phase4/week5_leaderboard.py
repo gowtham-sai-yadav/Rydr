@@ -1,1 +1,12 @@
-def leaderboard_row(user_id: int, username: str, score: float, rides: int) -> dict:\n    return {\n        "user_id": user_id,\n        "username": username,\n        "score": round(score, 2),\n        "rides": rides,\n    }\n\n\ndef is_seed_ready(total_users: int, total_destinations: int) -> bool:\n    return total_users >= 10 and total_destinations >= 20\n
+def leaderboard_row(user_id: int, username: str, score: float, rides: int) -> dict:
+    return {
+        "user_id": user_id,
+        "username": username,
+        "score": round(score, 2),
+        "rides": rides,
+    }
+
+
+def is_seed_ready(total_users: int, total_destinations: int) -> bool:
+    return total_users >= 10 and total_destinations >= 20
+

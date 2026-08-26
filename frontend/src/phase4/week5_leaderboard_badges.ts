@@ -1,1 +1,13 @@
-export type LeaderboardEntry = {\n  userId: number;\n  username: string;\n  score: number;\n  rank: number;\n};\n\nexport type BadgeTile = {\n  key: string;\n  label: string;\n  earned: boolean;\n};\n
+export type LeaderboardEntry = {
+  userId: number;
+  username: string;
+  score: number;
+  rank: number;
+};
+
+export type BadgeTile = {
+  key: string;
+  label: string;
+  earned: boolean;
+};
+
