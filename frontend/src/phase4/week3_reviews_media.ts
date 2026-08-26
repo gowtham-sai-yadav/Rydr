@@ -1,0 +1,1 @@
+export type ReviewDraft = {\n  destinationId: number;\n  rating: 1 | 2 | 3 | 4 | 5;\n  title?: string;\n  body: string;\n};\n\nexport type UploadAsset = {\n  localId: string;\n  mimeType: string;\n  previewUrl: string;\n};\n
