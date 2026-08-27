@@ -88,6 +88,11 @@ class User(Base):
         "UserBadge", back_populates="user", cascade="all, delete-orphan"
     )
 
+    # Feed posts (Phase 4 W4).
+    posts = relationship(
+        "Post", back_populates="author", cascade="all, delete-orphan"
+    )
+
     # Notifications (Phase 4 W5). foreign_keys is required because
     # Notification has two FKs to users — recipient and actor — and the
     # feed relationship is the recipient one.
