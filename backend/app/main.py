@@ -7,6 +7,7 @@ from app.routers import (
     badges,
     chat,
     destinations,
+    leaderboards,
     notifications,
     posts,
     ride_logs,
@@ -40,6 +41,9 @@ app.include_router(
     notifications.router, prefix="/api/notifications", tags=["Notifications"]
 )
 app.include_router(posts.router, prefix="/api/posts", tags=["Feed"])
+app.include_router(
+    leaderboards.router, prefix="/api/leaderboards", tags=["Leaderboards"]
+)
 
 
 @app.get("/api/health")
