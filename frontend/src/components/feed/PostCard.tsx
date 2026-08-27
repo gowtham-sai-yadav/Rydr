@@ -15,6 +15,7 @@ import { api } from "@/lib/api";
 import type { PostCommentOut, PostOut, UserOut } from "@/lib/api.types";
 import ReportButton from "@/components/moderation/ReportButton";
 import { routes } from "@/lib/routes";
+import Avatar from "@/components/ui/Avatar";
 
 type Props = {
   post: PostOut;
@@ -118,21 +119,12 @@ export default function PostCard({ post, viewer, onDeleted }: Props) {
       <header className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           {post.author && (
-            <Link
+            <Avatar
+              name={post.author.name}
+              avatarUrl={post.author.avatar_url}
+              size="md"
               href={routes.user(post.author.id)}
-              className="shrink-0 w-9 h-9 rounded-full bg-surface-elevated overflow-hidden flex items-center justify-center text-[13px] text-charcoal"
-            >
-              {post.author.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={post.author.avatar_url}
-                  alt=""
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                post.author.name.slice(0, 1).toUpperCase()
-              )}
-            </Link>
+            />
           )}
           <div className="min-w-0">
             <p className="text-[14px] text-ink font-medium truncate">

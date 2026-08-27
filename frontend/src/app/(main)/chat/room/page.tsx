@@ -8,6 +8,7 @@ import { useChatSocket } from "@/lib/hooks/useChatSocket";
 import type { ChatGroupOut, ChatMessageOut } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
 import ReportButton from "@/components/moderation/ReportButton";
+import Avatar from "@/components/ui/Avatar";
 
 
 // Phase 4 W6: the socket carries messages when it is up. This poll is the
@@ -266,9 +267,11 @@ function ChatRoomPageInner() {
                 <div className={`max-w-xs sm:max-w-md ${isMine ? "order-2" : ""}`}>
                   {!isMine && (
                     <div className="flex items-center gap-2 mb-1">
-                      <div className="w-6 h-6 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
-                        {msg.author.name.charAt(0)}
-                      </div>
+                      <Avatar
+                        name={msg.author.name}
+                        avatarUrl={msg.author.avatar_url}
+                        size="xs"
+                      />
                       <span className="text-mute text-xs">{msg.author.name}</span>
                     </div>
                   )}
