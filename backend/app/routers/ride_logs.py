@@ -51,7 +51,7 @@ from app.schemas.ride_log import (
     RideMediaConfirm,
     RideMediaOut,
 )
-from app.services import cloudinary_service, stats
+from app.services import cloudinary_service, media_urls, stats
 from app.services.badge_engine import safe_evaluate as _evaluate_badges
 
 router = APIRouter()
@@ -248,12 +248,22 @@ def confirm_media(
     log = _load_log_or_404(db, log_id)
     _require_owner(log, user)
 
+    # Phase 4 W3: derive a poster frame for video (and a resized variant for
+    # images) from the delivery URL. A client-supplied thumbnail_url wins, so
+    # a caller that already knows the poster — or is not using Cloudinary —
+    # can set it explicitly. Returns None for non-Cloudinary URLs, in which
+    # case the column stays null and the client renders the original.
+    thumbnail = payload.thumbnail_url or media_urls.derive_thumbnail(
+        payload.url, payload.media_type
+    )
+
     media = RideMedia(
         ride_log_id=log.id,
         url=payload.url,
         media_type=payload.media_type,
         uploaded_by_user_id=user.id,
         caption=payload.caption,
+        thumbnail_url=thumbnail,
     )
     db.add(media)
 
@@ -265,6 +275,7 @@ def confirm_media(
                 destination_id=log.ride_plan.destination_id,
                 url=payload.url,
                 caption=payload.caption,
+                thumbnail_url=thumbnail,
                 uploaded_by_user_id=user.id,
                 ride_log_id=log.id,
             )
