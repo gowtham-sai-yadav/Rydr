@@ -43,9 +43,12 @@ from app.models.ride import (
 from app.models.ride_log import RideLog
 from app.models.user import User
 
-# Mean Earth radius in km, matching services/geo.haversine_km so derived
-# distances agree with the distances the destination filter reports.
-EARTH_RADIUS_KM = 6371.0
+# Imported, not redeclared. A local copy rounded to 6371.0 would disagree
+# with the destination list's distance_km by roughly 0.01% — small, but the
+# two numbers appear on adjacent screens for the same journey, and "46.2 km"
+# on one page against "46.3 km" on another is the kind of inconsistency that
+# makes a user distrust both.
+from app.services.geo import EARTH_RADIUS_KM, haversine_km
 
 
 def _haversine_km_sql(lat1, lon1, lat2, lon2):
@@ -343,3 +346,26 @@ def personal_stats(db: Session, user: User) -> PersonalStats:
             user.home_latitude is not None and user.home_longitude is not None
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Single-ride distance (shared with the share-card summary)
+# ---------------------------------------------------------------------------
+def estimated_ride_km(
+    home_lat: Optional[float],
+    home_lon: Optional[float],
+    dest_lat: float,
+    dest_lon: float,
+) -> float:
+    """Round-trip estimate for one ride, in Python.
+
+    The same home -> destination -> home derivation the leaderboards compute
+    in SQL, for the single-row case where a query would be overkill. Both
+    paths must agree, so this delegates to ``services.geo.haversine_km`` — the
+    function the SQL expression above is a transcription of.
+
+    Returns 0.0 when the rider has no home location, matching the SQL CASE.
+    """
+    if home_lat is None or home_lon is None:
+        return 0.0
+    return round(haversine_km(home_lat, home_lon, dest_lat, dest_lon) * 2, 1)
