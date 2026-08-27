@@ -36,6 +36,7 @@ class RideMediaOut(BaseModel):
     uploaded_by_user_id: Optional[UUID] = None
     caption: Optional[str] = None
     created_at: datetime
+    thumbnail_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -51,12 +52,23 @@ class RideMediaConfirm(BaseModel):
     url: str = Field(min_length=1, max_length=MAX_MEDIA_URL_LEN)
     media_type: MediaType = MediaType.image
     caption: Optional[str] = Field(default=None, max_length=MAX_CAPTION_LEN)
+    # Phase 4 W3. Optional override: when omitted, the server derives a poster
+    # frame from ``url`` for Cloudinary-hosted assets. Supplying it lets a
+    # client that already has the poster — or is not using Cloudinary — set
+    # one explicitly.
+    thumbnail_url: Optional[str] = Field(default=None, max_length=MAX_MEDIA_URL_LEN)
     # Flywheel: also create a DestinationMedia row pointing at this URL.
     link_to_destination: bool = True
 
-    @field_validator("url")
+    @field_validator("url", "thumbnail_url")
     @classmethod
-    def _https_only(cls, v: str) -> str:
+    def _https_only(cls, v: Optional[str]) -> Optional[str]:
+        # Applies to thumbnail_url as well as url: the thumbnail is rendered
+        # as an <img src>, so allowing an arbitrary scheme here would let a
+        # caller smuggle in javascript: or data: through a field that looks
+        # secondary.
+        if v is None:
+            return v
         if not v.startswith("https://"):
             raise ValueError("media url must start with https://")
         return v

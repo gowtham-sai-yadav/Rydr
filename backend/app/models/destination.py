@@ -137,6 +137,8 @@ class DestinationMedia(Base):
     )
     url = Column(String(500), nullable=False)
     caption = Column(String(500), nullable=True)
+    # Phase 4 W3 — see RideMedia.thumbnail_url.
+    thumbnail_url = Column(String(500), nullable=True)
     uploaded_by_user_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
