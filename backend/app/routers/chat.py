@@ -554,81 +554,28 @@ async def chat_stream(
 
         ride_plan_id = group.ride_plan_id
 
+        # Release the transaction the authorization queries opened. A chat
+        # socket is idle for minutes at a time, and a session parked in
+        # "idle in transaction" holds its snapshot open: it blocks VACUUM from
+        # reclaiming dead tuples and blocks any DDL (an Alembic migration, for
+        # one) that needs a lock on a table the transaction touched. Committing
+        # here, and again after every frame, means the connection is only ever
+        # inside a transaction while it is actively doing work.
+        db.commit()
+
         await websocket.accept()
         await ws_manager.manager.connect(group_id, websocket)
 
         try:
             while True:
                 raw = await websocket.receive_json()
-                kind = raw.get("type") if isinstance(raw, dict) else None
-
-                if kind == "ping":
-                    await websocket.send_json({"type": "pong"})
-                    continue
-
-                if kind != "message":
-                    await websocket.send_json(
-                        {"type": "error", "detail": f"Unknown frame type: {kind!r}"}
-                    )
-                    continue
-
-                # Cancelled rides are read-only, matching POST /messages.
-                # Re-read the status rather than trusting the value captured
-                # at connect time: a socket can outlive the cancellation.
-                current_status = (
-                    db.query(RidePlan.status)
-                    .filter(RidePlan.id == ride_plan_id)
-                    .scalar()
-                )
-                if current_status == RidePlanStatus.cancelled:
-                    await websocket.send_json(
-                        {
-                            "type": "error",
-                            "detail": "This ride was cancelled — its chat is read-only",
-                        }
-                    )
-                    continue
-
                 try:
-                    # Validate through the same Pydantic model the REST
-                    # endpoint uses, so length limits and trimming are
-                    # identical across both paths.
-                    payload = ChatMessageCreate(body=raw.get("body") or "")
-                except ValidationError as exc:
-                    await websocket.send_json(
-                        {"type": "error", "detail": _first_validation_message(exc)}
-                    )
-                    continue
-
-                msg = ChatMessage(
-                    chat_group_id=group_id,
-                    author_id=user.id,
-                    body=payload.body,
-                )
-                db.add(msg)
-                db.commit()
-
-                fresh = (
-                    db.query(ChatMessage)
-                    .options(selectinload(ChatMessage.author))
-                    .filter(ChatMessage.id == msg.id)
-                    .one()
-                )
-                frame = {
-                    "type": "message",
-                    "message": jsonable_encoder(ChatMessageOut.model_validate(fresh)),
-                }
-
-                # Echo to the sender too. The alternative — excluding them and
-                # letting the client render optimistically — means the sender's
-                # copy has a client-generated id and timestamp that disagree
-                # with everyone else's. Echoing keeps one source of truth.
-                await ws_manager.manager.broadcast(group_id, frame)
-
-                # Same notification fan-out as the REST path, so a rider who
-                # is offline still gets told about a message sent over the
-                # socket.
-                _notify_room(db, group, user, payload.body)
+                    await _handle_frame(db, websocket, group, ride_plan_id, user, raw)
+                finally:
+                    # Runs on every path out of the handler, including the
+                    # early `return`s used for validation errors, so no frame
+                    # can leave a transaction open behind it.
+                    db.commit()
 
         except WebSocketDisconnect:
             pass
@@ -636,6 +583,86 @@ async def chat_stream(
             await ws_manager.manager.disconnect(group_id, websocket)
     finally:
         db.close()
+
+
+async def _handle_frame(
+    db: Session,
+    websocket: WebSocket,
+    group: ChatGroup,
+    ride_plan_id: UUID,
+    user: User,
+    raw: object,
+) -> None:
+    """Process one client frame.
+
+    Returns normally on every outcome including handled errors — the caller
+    keeps the socket open, because a malformed frame is not a reason to make
+    the client rebuild its connection. Only an unhandled exception or a
+    disconnect ends the session.
+    """
+    kind = raw.get("type") if isinstance(raw, dict) else None
+
+    if kind == "ping":
+        await websocket.send_json({"type": "pong"})
+        return
+
+    if kind != "message":
+        await websocket.send_json(
+            {"type": "error", "detail": f"Unknown frame type: {kind!r}"}
+        )
+        return
+
+    # Cancelled rides are read-only, matching POST /messages. Re-read the
+    # status rather than trusting the value captured at connect time: a socket
+    # can outlive the cancellation that closed the room.
+    current_status = (
+        db.query(RidePlan.status).filter(RidePlan.id == ride_plan_id).scalar()
+    )
+    if current_status == RidePlanStatus.cancelled:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "detail": "This ride was cancelled — its chat is read-only",
+            }
+        )
+        return
+
+    try:
+        # Validate through the same Pydantic model the REST endpoint uses, so
+        # length limits and trimming are identical across both paths.
+        payload = ChatMessageCreate(body=raw.get("body") or "")
+    except ValidationError as exc:
+        await websocket.send_json(
+            {"type": "error", "detail": _first_validation_message(exc)}
+        )
+        return
+
+    msg = ChatMessage(
+        chat_group_id=group.id, author_id=user.id, body=payload.body
+    )
+    db.add(msg)
+    db.commit()
+
+    fresh = (
+        db.query(ChatMessage)
+        .options(selectinload(ChatMessage.author))
+        .filter(ChatMessage.id == msg.id)
+        .one()
+    )
+    frame = {
+        "type": "message",
+        "message": jsonable_encoder(ChatMessageOut.model_validate(fresh)),
+    }
+
+    # Echo to the sender too. The alternative — excluding them and letting the
+    # client render optimistically — means the sender's copy carries a
+    # client-generated id and timestamp that disagree with everyone else's.
+    # Echoing keeps one source of truth for what a message is.
+    await ws_manager.manager.broadcast(group.id, frame)
+
+    # Same fan-out as the REST path, so a rider who is offline still gets told
+    # about a message sent over the socket.
+    _notify_room(db, group, user, payload.body)
 
 
 def _first_validation_message(exc: ValidationError) -> str:
