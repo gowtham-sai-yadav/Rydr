@@ -1,0 +1,80 @@
+# Rydr staging stack — Phase 4 W8.
+#
+# The full application: Postgres, the FastAPI backend, and the Next.js web
+# frontend. The base docker-compose.yml stays as it is — a bare Postgres for
+# local development, where the backend and frontend run on the host with
+# hot reload. This file is the deployable arrangement.
+#
+#   docker compose -f docker-compose.staging.yml --env-file .env.staging up -d --build
+#
+# Every secret comes from the environment with no default. A compose file that
+# defaults SECRET_KEY to something usable is a compose file that eventually
+# ships that value to production; the `:?` syntax makes the stack refuse to
+# start instead, naming the variable that is missing.
+
+services:
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env.staging}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.staging}
+      POSTGRES_DB: ${POSTGRES_DB:-rydr}
+    volumes:
+      - pgdata_staging:/var/lib/postgresql/data
+    # No published port. In the dev compose Postgres is exposed on 5432 for
+    # psql and for the host-run backend; in staging only the backend needs it,
+    # and publishing it would put the database on the host's network for no
+    # reason.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-rydr}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        # Waits for the healthcheck, not just for the container to exist.
+        # Without this the backend races Postgres on a cold start and its
+        # entrypoint burns its retry budget before Postgres has initialised.
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-rydr}
+      SECRET_KEY: ${SECRET_KEY:?generate with `openssl rand -hex 32`}
+      # Not "dev": config.py refuses to boot in staging or prod with the
+      # placeholder secret, and that guard is the point of setting this.
+      APP_ENV: ${APP_ENV:-staging}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?set to the frontend's public origin}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      # Empty keeps OpenStreetMap; setting it switches to Mapbox.
+      MAPBOX_TOKEN: ${MAPBOX_TOKEN:-}
+      OSRM_BASE_URL: ${OSRM_BASE_URL:-https://router.project-osrm.org}
+      NOMINATIM_BASE_URL: ${NOMINATIM_BASE_URL:-https://nominatim.openstreetmap.org}
+      SEED_ON_START: ${SEED_ON_START:-false}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Build-time, not runtime: Next.js inlines NEXT_PUBLIC_* during the
+        # build. Changing this needs a rebuild, not a restart.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set to the backend's public URL}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+volumes:
+  pgdata_staging:
