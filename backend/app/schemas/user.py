@@ -88,6 +88,13 @@ class BikeUpdate(BaseModel):
 
 
 class UserStatsOut(BaseModel):
+    """Superseded by ``schemas/leaderboard.PersonalStatsOut`` in Phase 4 W5.
+
+    Kept as the documented shape of the three counters that endpoint still
+    returns under the same names. Nothing imports it; delete once no client
+    is pinned to the M3 response.
+    """
+
     rides_captained: int
     rides_joined: int
     rides_completed: int
