@@ -21,6 +21,11 @@ Patterns reused from M2 audit:
 
 Status transitions handled: ``planned → cancelled`` only.
 ``in_progress`` and ``completed`` move with the post-ride capture flow in M4.
+
+Phase 4 W6 — capacity: ``max_riders`` is enforced by
+``services/ride_capacity``. Approving into a full ride returns 409; a captain
+can instead set ``waitlisted``, and the queue drains automatically (FIFO) when
+a rider leaves, an approved rider is rejected, or ``max_riders`` is raised.
 """
 from __future__ import annotations
 
@@ -63,6 +68,7 @@ from app.schemas.ride_log import RideLogListResponse, RideLogOut
 from app.schemas.user import UserBrief
 from app.services.badge_engine import safe_evaluate as _evaluate_badges
 from app.services.ride_helpers import approved_counts_for as _approved_counts_for
+from app.services import ride_capacity
 
 router = APIRouter()
 
@@ -89,20 +95,8 @@ def _load_ride_or_404(db: Session, ride_id: UUID) -> RidePlan:
     return ride
 
 
-def _participant_count(db: Session, ride_id: UUID) -> int:
-    """Approved-only count for the 'X of N riders' UI signal."""
-    return (
-        db.query(func.count(RidePlanParticipant.id))
-        .filter(
-            RidePlanParticipant.ride_plan_id == ride_id,
-            RidePlanParticipant.status == ParticipantStatus.approved,
-        )
-        .scalar()
-        or 0
-    )
-
-
 def _build_detail_response(db: Session, ride: RidePlan) -> RidePlanOut:
+    cap = ride_capacity.snapshot(db, ride)
     return RidePlanOut(
         id=ride.id,
         destination_id=ride.destination_id,
@@ -132,7 +126,9 @@ def _build_detail_response(db: Session, ride: RidePlan) -> RidePlanOut:
         participants=[
             RidePlanParticipantOut.model_validate(p) for p in ride.participants
         ],
-        participant_count=_participant_count(db, ride.id),
+        participant_count=cap.seats_taken,
+        seats_available=cap.seats_available,
+        waitlist_count=cap.waitlist_count,
     )
 
 
@@ -409,9 +405,42 @@ def update_ride(
             detail=f"Cannot update a {ride.status.value} ride",
         )
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+
+    # Phase 4 W6: max_riders became binding, so changing it has to be checked
+    # against the riders already seated. Lowering it below the approved count
+    # is rejected rather than silently bumping people who were already told
+    # they were in — un-approving a rider is a captain decision, not a
+    # side effect of editing a number.
+    new_max = changes.get("max_riders")
+    if new_max is not None and new_max != ride.max_riders:
+        ride_capacity.lock_ride(db, ride.id)
+        taken = ride_capacity.seats_taken(db, ride.id)
+        if new_max < taken:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Cannot set max_riders to {new_max}: {taken} riders are "
+                    f"already approved. Reject riders first, or pick a value "
+                    f">= {taken}."
+                ),
+            )
+
+    for field, value in changes.items():
         setattr(ride, field, value)
+
+    # Raising max_riders opens seats; fill them from the waitlist immediately
+    # rather than waiting for the captain to re-approve each queued rider.
+    promoted: list[RidePlanParticipant] = []
+    if new_max is not None:
+        db.flush()
+        promoted = ride_capacity.promote_from_waitlist(db, ride)
+
     db.commit()
+
+    for p in promoted:
+        _evaluate_badges(db, p.user_id)
+
     fresh = _load_ride_or_404(db, ride.id)
     return _build_detail_response(db, fresh)
 
@@ -629,9 +658,27 @@ def leave_ride(
         raise HTTPException(status_code=404, detail="You are not a participant of this ride")
 
     if participant.status != ParticipantStatus.left:
+        freed_a_seat = participant.status == ParticipantStatus.approved
+        promoted: list[RidePlanParticipant] = []
+
+        if freed_a_seat:
+            # Phase 4 W6: an approved rider leaving releases a seat. Lock,
+            # write the leave, then promote the head of the waitlist into the
+            # gap — all in one transaction, so there is no window where the
+            # seat is free but unclaimed.
+            ride_capacity.lock_ride(db, ride_id)
+
         participant.status = ParticipantStatus.left
+
+        if freed_a_seat:
+            db.flush()
+            promoted = ride_capacity.promote_from_waitlist(db, ride)
+
         db.commit()
         db.refresh(participant)
+
+        for p in promoted:
+            _evaluate_badges(db, p.user_id)
 
     return RidePlanParticipantOut.model_validate(participant)
 
@@ -713,18 +760,51 @@ def update_participant_status(
     if not participant:
         raise HTTPException(status_code=404, detail="Participant not found")
 
-    # Schema validator already restricts payload.status to {approved, rejected}.
-    if participant.status != payload.status:
-        participant.status = payload.status
-        # TODO M6: notify the participant of approval / rejection.
-        db.commit()
-        db.refresh(participant)
+    # Schema validator restricts payload.status to
+    # {approved, rejected, waitlisted}.
+    if participant.status == payload.status:
+        return RidePlanParticipantOut.model_validate(participant)
 
-        # M8 side effect: a fresh ``approved`` increases the
-        # participant's rides_joined count (the engine excludes their
-        # own captained rides, so captain-self-rows don't count). May
-        # unlock ``joiner-bronze``. Rejection has no badge consequence.
-        if payload.status == ParticipantStatus.approved:
-            _evaluate_badges(db, participant.user_id)
+    was_approved = participant.status == ParticipantStatus.approved
+    promoted: list[RidePlanParticipant] = []
+
+    if payload.status == ParticipantStatus.approved:
+        # Phase 4 W6: max_riders is binding. Lock the ride row first so two
+        # concurrent approvals of the last seat serialise instead of both
+        # reading the same pre-write count and overfilling the ride.
+        ride_capacity.lock_ride(db, ride_id)
+        cap = ride_capacity.snapshot(db, ride)
+        if cap.is_full:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Ride is at capacity ({cap.seats_taken} of "
+                    f"{cap.max_riders} seats taken). Raise max_riders, or set "
+                    f"this rider to 'waitlisted' to queue them for the next "
+                    f"free seat."
+                ),
+            )
+        participant.status = payload.status
+    else:
+        participant.status = payload.status
+        if was_approved:
+            # Rejecting a rider who already held a seat frees it. Fill it from
+            # the waitlist in the same transaction so the ride never sits
+            # under capacity with people queued.
+            ride_capacity.lock_ride(db, ride_id)
+            db.flush()
+            promoted = ride_capacity.promote_from_waitlist(db, ride)
+
+    db.commit()
+    db.refresh(participant)
+
+    # M8 side effect: a fresh ``approved`` increases the participant's
+    # rides_joined count (the engine excludes their own captained rides, so
+    # captain-self-rows don't count). May unlock ``joiner-bronze``.
+    # Rejection and waitlisting have no badge consequence.
+    if participant.status == ParticipantStatus.approved:
+        _evaluate_badges(db, participant.user_id)
+    for p in promoted:
+        _evaluate_badges(db, p.user_id)
 
     return RidePlanParticipantOut.model_validate(participant)
