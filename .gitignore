@@ -27,3 +27,6 @@ venv/
 
 # Dev server logs from run.sh --dev
 .logs/
+
+# Phase 4 W8 — staging secrets. Template is .env.staging.example.
+.env.staging
