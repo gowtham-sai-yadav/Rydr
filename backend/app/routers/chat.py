@@ -52,7 +52,6 @@ from pydantic import ValidationError
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
-from app.database import SessionLocal
 from app.dependencies import decode_token, get_current_user, get_db
 from app.models.chat import ChatGroup, ChatMessage
 from app.models.notification import EntityType, NotificationType
@@ -516,6 +515,7 @@ async def chat_stream(
     websocket: WebSocket,
     group_id: UUID,
     token: str = Query(...),
+    db: Session = Depends(get_db),
 ) -> None:
     """Live chat stream for one ride.
 
@@ -536,10 +536,16 @@ async def chat_stream(
         {"type": "pong"}
         {"type": "error", "detail": "..."}     -> non-fatal; socket stays open
 
-    The socket is closed with 1008 for auth and membership failures, and 1011
-    if the server hits an unexpected error.
+    The socket is closed with 1008 for auth and membership failures.
+
+    The session comes from ``Depends(get_db)`` like every other route rather
+    than from a hand-made ``SessionLocal()``. FastAPI supports dependencies on
+    WebSocket routes, and the yielded session lives exactly as long as this
+    coroutine, which is the socket's lifetime — so the explicit construction
+    bought nothing and cost two things: it diverged from the rest of the
+    router, and it bypassed dependency overrides, which made the endpoint
+    untestable against anything but the real database.
     """
-    db = SessionLocal()
     try:
         try:
             user, group = _authorize_socket(db, group_id, token)
@@ -582,7 +588,10 @@ async def chat_stream(
         finally:
             await ws_manager.manager.disconnect(group_id, websocket)
     finally:
-        db.close()
+        # Release the transaction opened by the last frame. get_db closes the
+        # session itself; this makes sure the connection is not handed back to
+        # the pool mid-transaction.
+        db.rollback()
 
 
 async def _handle_frame(
