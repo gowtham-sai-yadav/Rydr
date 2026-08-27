@@ -1,0 +1,5 @@
+Static assets served from the site root.
+
+Kept in git even while empty because the Docker build copies this directory
+into the runtime image, and Phase 4 W9 puts the Android app icon and splash
+assets here.
