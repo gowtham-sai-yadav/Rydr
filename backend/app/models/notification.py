@@ -64,6 +64,7 @@ class NotificationType(str, enum.Enum):
     ride_waitlist_promoted = "ride_waitlist_promoted"
     ride_cancelled = "ride_cancelled"
     ride_starting = "ride_starting"
+    ride_completed = "ride_completed"
 
     # Chat
     chat_message = "chat_message"

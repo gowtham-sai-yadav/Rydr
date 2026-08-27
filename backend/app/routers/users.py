@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import get_current_user, get_db, get_optional_user
+from app.models.notification import EntityType, NotificationType
 from app.models.ride import (
     Bike,
     ParticipantStatus,
@@ -39,6 +40,7 @@ from app.schemas.user import (
     UserStatsOut,
     UserUpdate,
 )
+from app.services import notifications as notification_service
 from app.services.user_view import load_user_with_social as _load_user_with_social
 
 router = APIRouter()
@@ -166,6 +168,19 @@ def follow_user(
     )
     row = db.execute(stmt).first()
     db.commit()
+
+    # Only notify on a genuinely new edge. ON CONFLICT DO NOTHING returns None
+    # for a re-follow, so this does not re-notify when a client retries.
+    if row is not None:
+        notification_service.safe_notify_commit(
+            db,
+            user_id=user_id,
+            type=NotificationType.new_follower,
+            title=f"{user.name} started following you",
+            actor_id=user.id,
+            entity_type=EntityType.user,
+            entity_id=user.id,
+        )
 
     if row is None:
         # Existing row — fetch for the response. The conflict guarantees a
