@@ -41,6 +41,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.dependencies import get_current_user, get_db, get_optional_user
 from app.models.chat import ChatGroup
 from app.models.destination import Destination
+from app.models.notification import EntityType, NotificationType
 from app.models.ride import (
     ParticipantStatus,
     RidePlan,
@@ -68,6 +69,7 @@ from app.schemas.ride_log import RideLogListResponse, RideLogOut
 from app.schemas.user import UserBrief
 from app.services.badge_engine import safe_evaluate as _evaluate_badges
 from app.services.ride_helpers import approved_counts_for as _approved_counts_for
+from app.services import notifications as notification_service
 from app.services import ride_capacity
 
 router = APIRouter()
@@ -93,6 +95,87 @@ def _load_ride_or_404(db: Session, ride_id: UUID) -> RidePlan:
     if not ride:
         raise HTTPException(status_code=404, detail="Ride not found")
     return ride
+
+
+def _approved_user_ids(db: Session, ride_id: UUID) -> list[UUID]:
+    """User ids of everyone currently holding a seat on this ride.
+
+    The audience for ride-wide announcements (cancelled, starting). Includes
+    the captain, who is auto-joined as approved; ``notify_many`` drops the
+    actor, so a captain-triggered announcement does not notify the captain.
+    """
+    return [
+        row[0]
+        for row in db.query(RidePlanParticipant.user_id).filter(
+            RidePlanParticipant.ride_plan_id == ride_id,
+            RidePlanParticipant.status == ParticipantStatus.approved,
+        )
+    ]
+
+
+_DECISION_NOTIFICATIONS = {
+    ParticipantStatus.approved: (
+        NotificationType.ride_join_approved,
+        "You're in: {title}",
+        "The captain approved your request.",
+    ),
+    ParticipantStatus.rejected: (
+        NotificationType.ride_join_rejected,
+        "Your request for {title} was declined",
+        None,
+    ),
+    ParticipantStatus.waitlisted: (
+        NotificationType.ride_waitlisted,
+        "You're on the waitlist for {title}",
+        "The ride is full. You'll be added automatically if a seat frees up.",
+    ),
+}
+
+
+def _notify_participant_decision(
+    db: Session,
+    ride: RidePlan,
+    participant: RidePlanParticipant,
+    actor: User,
+) -> None:
+    """Tell a rider what the captain decided about their request."""
+    entry = _DECISION_NOTIFICATIONS.get(participant.status)
+    if entry is None:
+        return
+    kind, title, body = entry
+    notification_service.safe_notify_commit(
+        db,
+        user_id=participant.user_id,
+        type=kind,
+        title=title.format(title=ride.title),
+        body=body,
+        actor_id=actor.id,
+        entity_type=EntityType.ride,
+        entity_id=ride.id,
+    )
+
+
+def _notify_promotions(
+    db: Session, ride: RidePlan, promoted: list[RidePlanParticipant]
+) -> None:
+    """Tell waitlisted riders that a seat opened up and they took it.
+
+    No actor: the promotion is the system reacting to a freed seat, not a
+    person acting on the rider. Passing the leaving rider as the actor would
+    both misattribute it and, when a rider's own departure frees a seat they
+    were somehow queued for, silently drop the notification via the
+    don't-notify-yourself rule.
+    """
+    for p in promoted:
+        notification_service.safe_notify_commit(
+            db,
+            user_id=p.user_id,
+            type=NotificationType.ride_waitlist_promoted,
+            title=f"A seat opened up: {ride.title}",
+            body="You've moved off the waitlist and you're now approved.",
+            entity_type=EntityType.ride,
+            entity_id=ride.id,
+        )
 
 
 def _build_detail_response(db: Session, ride: RidePlan) -> RidePlanOut:
@@ -459,8 +542,18 @@ def cancel_ride(
         raise HTTPException(status_code=403, detail="Only the captain can cancel this ride")
 
     if ride.status != RidePlanStatus.cancelled:
+        audience = _approved_user_ids(db, ride.id)
         ride.status = RidePlanStatus.cancelled
-        # TODO M6: notify approved participants that the ride was cancelled.
+        notification_service.safe_notify_many(
+            db,
+            user_ids=audience,
+            type=NotificationType.ride_cancelled,
+            title=f"{ride.title} was cancelled",
+            body=f"{user.name} cancelled this ride.",
+            actor_id=user.id,
+            entity_type=EntityType.ride,
+            entity_id=ride.id,
+        )
         db.commit()
 
     fresh = _load_ride_or_404(db, ride.id)
@@ -486,7 +579,16 @@ def start_ride(
 
     if ride.status != RidePlanStatus.in_progress:
         ride.status = RidePlanStatus.in_progress
-        # TODO M6: notify approved participants that the ride has started.
+        notification_service.safe_notify_many(
+            db,
+            user_ids=_approved_user_ids(db, ride.id),
+            type=NotificationType.ride_starting,
+            title=f"{ride.title} is starting",
+            body="The captain has started this ride. Ride safe.",
+            actor_id=user.id,
+            entity_type=EntityType.ride,
+            entity_id=ride.id,
+        )
         db.commit()
 
     fresh = _load_ride_or_404(db, ride.id)
@@ -509,8 +611,18 @@ def complete_ride(
 
     if ride.status != RidePlanStatus.completed:
         ride.status = RidePlanStatus.completed
-        # TODO M6: notify approved participants that the ride is complete.
-        # Riders can still create / update their RideLog after this.
+        # Riders can still create / update their RideLog after this, which is
+        # the point of the notification: it is the prompt to go log the ride.
+        notification_service.safe_notify_many(
+            db,
+            user_ids=_approved_user_ids(db, ride.id),
+            type=NotificationType.ride_completed,
+            title=f"{ride.title} is complete",
+            body="Log your ride and rate the destination.",
+            actor_id=user.id,
+            entity_type=EntityType.ride,
+            entity_id=ride.id,
+        )
         db.commit()
 
     fresh = _load_ride_or_404(db, ride.id)
@@ -622,6 +734,18 @@ def join_ride(
         .filter(RidePlanParticipant.id == participant_id)
         .one()
     )
+
+    notification_service.safe_notify_commit(
+        db,
+        user_id=ride.captain_id,
+        type=NotificationType.ride_join_requested,
+        title=f"{user.name} wants to join {ride.title}",
+        body="Review the request from the ride page.",
+        actor_id=user.id,
+        entity_type=EntityType.ride,
+        entity_id=ride.id,
+    )
+
     return RidePlanParticipantOut.model_validate(participant)
 
 
@@ -679,6 +803,8 @@ def leave_ride(
 
         for p in promoted:
             _evaluate_badges(db, p.user_id)
+
+        _notify_promotions(db, ride, promoted)
 
     return RidePlanParticipantOut.model_validate(participant)
 
@@ -806,5 +932,8 @@ def update_participant_status(
         _evaluate_badges(db, participant.user_id)
     for p in promoted:
         _evaluate_badges(db, p.user_id)
+
+    _notify_participant_decision(db, ride, participant, actor=user)
+    _notify_promotions(db, ride, promoted)
 
     return RidePlanParticipantOut.model_validate(participant)

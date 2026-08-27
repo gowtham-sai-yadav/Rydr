@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.dependencies import get_current_user, get_db
 from app.models.chat import ChatGroup, ChatMessage
+from app.models.notification import EntityType, NotificationType
 from app.models.ride import (
     ParticipantStatus,
     RidePlan,
@@ -49,6 +50,7 @@ from app.schemas.chat import (
     ChatMessageListResponse,
     ChatMessageOut,
 )
+from app.services import notifications as notification_service
 from app.services.ride_helpers import approved_counts_for as _approved_counts_for
 
 router = APIRouter()
@@ -373,7 +375,29 @@ def send_message(
         body=payload.body,
     )
     db.add(msg)
-    # TODO M6: notify other approved participants of the new message.
+
+    # Everyone holding a seat except the author. notify_many drops the actor,
+    # so the author is filtered out even though they are in this list.
+    audience = [
+        row[0]
+        for row in db.query(RidePlanParticipant.user_id).filter(
+            RidePlanParticipant.ride_plan_id == group.ride_plan_id,
+            RidePlanParticipant.status == ParticipantStatus.approved,
+        )
+    ]
+    # Body is truncated for the preview — the notification is a pointer to the
+    # room, not a copy of the conversation.
+    preview = payload.body if len(payload.body) <= 140 else payload.body[:137] + "..."
+    notification_service.safe_notify_many(
+        db,
+        user_ids=audience,
+        type=NotificationType.chat_message,
+        title=f"{user.name} in {group.ride_plan.title}",
+        body=preview,
+        actor_id=user.id,
+        entity_type=EntityType.chat_group,
+        entity_id=group.id,
+    )
     db.commit()
 
     # Re-fetch with the author relationship eager-loaded so the response build

@@ -50,6 +50,7 @@ from app.models.destination import (
 )
 from app.models.ride import RidePlan
 from app.models.ride_log import RideLog
+from app.models.notification import EntityType, NotificationType
 from app.models.user import User
 from app.schemas.destination import (
     CostEstimate,
@@ -65,6 +66,7 @@ from app.schemas.destination import (
     TagOut,
 )
 from app.schemas.user import UserBrief
+from app.services import notifications as notification_service
 from app.services.badge_engine import safe_evaluate as _evaluate_badges
 from app.services.cost_calculator import estimate_cost
 from app.services.geo import haversine_km, haversine_sql_expression
@@ -514,7 +516,19 @@ def create_or_update_rating(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> RatingOut:
-    if not db.query(Destination.id).filter(Destination.id == destination_id).first():
+    # Pull name + submitter alongside the existence check: the Phase 4 W5
+    # "someone rated your destination" notification needs both, and fetching
+    # three columns costs the same round trip as fetching one.
+    dest = (
+        db.query(
+            Destination.id,
+            Destination.name,
+            Destination.submitted_by_user_id,
+        )
+        .filter(Destination.id == destination_id)
+        .first()
+    )
+    if not dest:
         raise HTTPException(status_code=404, detail="Destination not found")
 
     # Atomic upsert keyed on uq_rating_destination_user — two concurrent
@@ -569,6 +583,24 @@ def create_or_update_rating(
     # insert/update branch.
     if payload.stars == 5:
         _evaluate_badges(db, user.id)
+
+    # Phase 4 W5: tell whoever submitted this destination that someone rated
+    # it. Community-submitted destinations are the flywheel's input, so the
+    # submitter seeing the response is what makes submitting feel worthwhile.
+    # submitted_by_user_id is nullable (seeded destinations have no submitter)
+    # and notify() drops self-notifications, so a submitter rating their own
+    # destination stays quiet.
+    if dest.submitted_by_user_id is not None:
+        notification_service.safe_notify_commit(
+            db,
+            user_id=dest.submitted_by_user_id,
+            type=NotificationType.destination_rated,
+            title=f"{user.name} rated {dest.name} {payload.stars}\u2605",
+            body=payload.review or None,
+            actor_id=user.id,
+            entity_type=EntityType.destination,
+            entity_id=dest.id,
+        )
 
     # Re-fetch with user eager-loaded so the response build doesn't lazy-load.
     rating = (

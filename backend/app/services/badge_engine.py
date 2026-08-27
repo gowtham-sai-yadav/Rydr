@@ -34,7 +34,7 @@ breaking the other.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Dict
+from typing import Callable, Dict, List, Tuple
 from uuid import UUID
 
 from sqlalchemy import and_, func, select
@@ -43,12 +43,14 @@ from sqlalchemy.orm import Session
 
 from app.models.badge import Badge, UserBadge
 from app.models.destination import Rating
+from app.models.notification import EntityType, NotificationType
 from app.models.ride import (
     ParticipantStatus,
     RidePlan,
     RidePlanParticipant,
 )
 from app.models.ride_log import RideLog
+from app.services import notifications as notification_service
 
 
 # ---------------------------------------------------------------------------
@@ -154,12 +156,14 @@ BADGE_PREDICATES: Dict[str, Callable[[UserBadgeStats], bool]] = {
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
-def evaluate_user_badges(db: Session, user_id: UUID) -> int:
+def evaluate_user_badges(db: Session, user_id: UUID) -> List[Tuple[UUID, str, str]]:
     """Compute the user's stats and insert any newly-qualifying badges.
 
-    Returns the number of NEW badge rows inserted (zero if the user
-    already had everything they qualified for, or qualifies for
-    nothing yet).
+    Returns ``(badge_id, slug, name)`` for each NEWLY inserted award — empty
+    when the user already had everything they qualified for, or qualifies for
+    nothing yet. Phase 4 W5 widened this from a bare count so the caller can
+    name the badge in the "you earned X" notification without a second query;
+    ``len(result)`` is the old return value.
 
     Implementation notes:
     - One INSERT per qualifying badge. ``on_conflict_do_nothing``
@@ -179,16 +183,16 @@ def evaluate_user_badges(db: Session, user_id: UUID) -> int:
         slug for slug, predicate in BADGE_PREDICATES.items() if predicate(stats)
     ]
     if not qualifying_slugs:
-        return 0
+        return []
 
     catalog_rows = (
-        db.query(Badge.id, Badge.slug)
+        db.query(Badge.id, Badge.slug, Badge.name)
         .filter(Badge.slug.in_(qualifying_slugs))
         .all()
     )
 
-    awarded = 0
-    for badge_id, _slug in catalog_rows:
+    awarded: List[Tuple[UUID, str, str]] = []
+    for badge_id, slug, name in catalog_rows:
         stmt = (
             pg_insert(UserBadge)
             .values(user_id=user_id, badge_id=badge_id)
@@ -197,7 +201,7 @@ def evaluate_user_badges(db: Session, user_id: UUID) -> int:
         )
         inserted_id = db.execute(stmt).scalar_one_or_none()
         if inserted_id is not None:
-            awarded += 1
+            awarded.append((badge_id, slug, name))
 
     if awarded:
         db.commit()
@@ -215,10 +219,27 @@ def safe_evaluate(db: Session, user_id: UUID) -> None:
     We swallow exceptions here and rely on the catalog being seeded
     correctly. If the engine errors we'd see it in logs but the
     parent write succeeds.
+
+    Phase 4 W5: a newly earned badge also raises a notification. Delivery goes
+    through ``safe_notify_commit``, which has its own savepoint and its own
+    swallow, so a notification problem cannot undo an award that was already
+    committed.
     """
     try:
-        evaluate_user_badges(db, user_id)
+        awarded = evaluate_user_badges(db, user_id)
     except Exception:  # noqa: BLE001 — intentional swallow for side-effect
         # The session may be in a bad state after a failed flush; roll
         # back so subsequent operations on the session can proceed.
         db.rollback()
+        return
+
+    for badge_id, _slug, name in awarded:
+        notification_service.safe_notify_commit(
+            db,
+            user_id=user_id,
+            type=NotificationType.badge_earned,
+            title=f"Badge unlocked: {name}",
+            body="Tap to see it on your profile.",
+            entity_type=EntityType.badge,
+            entity_id=badge_id,
+        )
