@@ -13,6 +13,7 @@ M6 (2026-05-28) adds:
     reflects the viewer.
 """
 from typing import Optional
+from dataclasses import asdict
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -21,24 +22,21 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import get_current_user, get_db, get_optional_user
-from app.models.ride import (
-    Bike,
-    ParticipantStatus,
-    RidePlan,
-    RidePlanParticipant,
-    RidePlanStatus,
-)
+from app.models.notification import EntityType, NotificationType
+from app.models.ride import Bike
 from app.models.social import Follow
 from app.models.user import User
+from app.schemas.leaderboard import PersonalStatsOut
 from app.schemas.social import FollowEdgeOut, FollowListResponse, FollowOut
 from app.schemas.user import (
     BikeOut,
     BikeUpdate,
     UserBrief,
     UserOut,
-    UserStatsOut,
     UserUpdate,
 )
+from app.services import notifications as notification_service
+from app.services import stats
 from app.services.user_view import load_user_with_social as _load_user_with_social
 
 router = APIRouter()
@@ -96,30 +94,24 @@ def update_bike(
     return bike
 
 
-@router.get("/me/stats", response_model=UserStatsOut)
-def get_stats(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    captained = db.query(RidePlan).filter(RidePlan.captain_id == user.id).count()
-    joined = (
-        db.query(RidePlanParticipant)
-        .filter(
-            RidePlanParticipant.user_id == user.id,
-            RidePlanParticipant.status == ParticipantStatus.approved,
-        )
-        .count()
-    )
-    completed = (
-        db.query(RidePlan)
-        .filter(
-            RidePlan.captain_id == user.id,
-            RidePlan.status == RidePlanStatus.completed,
-        )
-        .count()
-    )
-    return UserStatsOut(
-        rides_captained=captained,
-        rides_joined=joined,
-        rides_completed=completed,
-    )
+@router.get("/me/stats", response_model=PersonalStatsOut)
+def get_stats(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> PersonalStatsOut:
+    """Personal stats dashboard — Phase 4 W5.
+
+    Widened from the three ride counters M3 shipped to the full dashboard the
+    Phase 4 plan asks for (§1.4): weekly and monthly distance, ride streaks,
+    personal bests, and destinations visited. The three original fields keep
+    their names and meanings, so existing clients are unaffected.
+
+    One correction is folded in. The old ``rides_completed`` counted rides the
+    user *captained* that reached completed status, which meant a rider who
+    joined thirty rides and led none had a completed count of zero. It now
+    counts completed rides this user actually logged, captained or not, which
+    is what the label always claimed.
+    """
+    return PersonalStatsOut(**asdict(stats.personal_stats(db, user)))
 
 
 @router.get("/{user_id}", response_model=UserOut)
@@ -166,6 +158,19 @@ def follow_user(
     )
     row = db.execute(stmt).first()
     db.commit()
+
+    # Only notify on a genuinely new edge. ON CONFLICT DO NOTHING returns None
+    # for a re-follow, so this does not re-notify when a client retries.
+    if row is not None:
+        notification_service.safe_notify_commit(
+            db,
+            user_id=user_id,
+            type=NotificationType.new_follower,
+            title=f"{user.name} started following you",
+            actor_id=user.id,
+            entity_type=EntityType.user,
+            entity_id=user.id,
+        )
 
     if row is None:
         # Existing row — fetch for the response. The conflict guarantees a

@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import type { RidePlanSummary } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 
 const difficultyDotColor: Record<string, string> = {
@@ -18,7 +19,7 @@ export default function RideCard({ ride }: { ride: RidePlanSummary }) {
   );
 
   return (
-    <Link href={`/rides/${ride.id}`} className="block group">
+    <Link href={routes.ride(ride.id)} className="block group">
       <div className="card-bordered overflow-hidden p-0 transition-colors hover:border-hairline-strong group-hover:bg-surface-elevated">
         <div className="relative aspect-[16/10] bg-surface-deep">
           {ride.thumbnail_url || ride.destination?.hero_media_url ? (
