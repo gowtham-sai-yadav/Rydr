@@ -359,3 +359,54 @@
     border-color: var(--color-hairline);
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Leaflet — Phase 4 W2.
+ *
+ * OSM's raster tiles are a light cartography, which reads as a bright slab
+ * dropped into a pure-black page. There is no dark OSM tile server that is
+ * free and keyless, so the tiles are inverted in CSS instead.
+ *
+ * The filter is applied to `.leaflet-tile-pane` rather than to the map
+ * container: Leaflet renders markers, popups, cluster badges and zoom
+ * controls into sibling panes, and filtering the whole container would invert
+ * those too — turning the orange marker blue and the cluster badges magenta.
+ *
+ * hue-rotate undoes the hue flip that invert() causes, so water stays blue
+ * and parkland stays green rather than becoming orange and magenta.
+ * ------------------------------------------------------------------------- */
+.leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9)
+    saturate(0.75);
+}
+
+/* Leaflet's own chrome ships with a white background and dark text. */
+.leaflet-container {
+  background: var(--color-surface-deep);
+  font-family: var(--font-sans);
+}
+
+.leaflet-control-attribution {
+  background: rgba(0, 0, 0, 0.6) !important;
+  color: var(--color-mute) !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: var(--color-link) !important;
+}
+
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  background: var(--color-surface-elevated);
+  color: var(--color-ink);
+  border-color: var(--color-hairline);
+}
+
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--color-surface-elevated);
+  color: var(--color-ink);
+  border: 1px solid var(--color-hairline);
+  box-shadow: none;
+}
