@@ -132,7 +132,10 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
     }
   };
 
-  const handleParticipantAction = async (userId: string, status: "approved" | "rejected") => {
+  const handleParticipantAction = async (
+    userId: string,
+    status: "approved" | "rejected" | "waitlisted",
+  ) => {
     try {
       await api.updateParticipant(id, userId, status);
       await loadParticipants();
@@ -255,6 +258,22 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
             <p className="text-ink font-medium">
               {ride.participant_count} / {ride.max_riders}
             </p>
+            {/* Phase 4 W6: max_riders is now enforced, so the number has
+                consequences and the state worth surfacing is whether there is
+                room. seats_available comes from the API, which knows the
+                captain occupies one of the seats. */}
+            {ride.seats_available > 0 ? (
+              <p className="text-[11px] text-accent-green">
+                {ride.seats_available} seat
+                {ride.seats_available === 1 ? "" : "s"} left
+              </p>
+            ) : (
+              <p className="text-[11px] text-accent-yellow">
+                Full
+                {ride.waitlist_count > 0 &&
+                  ` · ${ride.waitlist_count} waiting`}
+              </p>
+            )}
           </div>
         </div>
         {ride.break_schedule && (
@@ -317,6 +336,14 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
                 </button>
               </>
             )}
+            {myStatus === "waitlisted" && (
+              <div className="flex-1 bg-accent-blue/10 text-accent-blue text-center py-3 rounded-lg font-medium">
+                <span className="block">On the waitlist</span>
+                <span className="block text-[11px] font-normal opacity-80">
+                  You&apos;ll be added automatically when a seat frees up
+                </span>
+              </div>
+            )}
             {myStatus === "rejected" && (
               <div className="flex-1 bg-accent-red/20 text-accent-red text-center py-3 rounded-lg font-medium">
                 Request declined
@@ -328,7 +355,13 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
                 disabled={busy}
                 className="flex-1 bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 py-3 rounded-lg font-medium transition-colors"
               >
-                {busy ? "Requesting…" : "Request to join"}
+                {busy
+                  ? "Requesting…"
+                  : ride.seats_available > 0
+                    ? "Request to join"
+                    : // Joining a full ride is still allowed — the captain can
+                      // waitlist you — but the label should not imply a seat.
+                      "Join the waitlist"}
               </button>
             )}
           </>
@@ -403,17 +436,41 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
                   </Link>
                   {p.status === "pending" && p.user_id !== ride.captain_id && (
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => handleParticipantAction(p.user_id, "approved")}
-                        className="bg-accent-green/90 hover:bg-accent-green text-ink px-3 py-1.5 rounded-lg text-xs font-medium"
-                      >
-                        Approve
-                      </button>
+                      {/* Approving into a full ride is a 409 from the API, so
+                          the button that would fail is replaced rather than
+                          shown and left to error. */}
+                      {ride.seats_available > 0 ? (
+                        <button
+                          onClick={() => handleParticipantAction(p.user_id, "approved")}
+                          className="bg-accent-green/90 hover:bg-accent-green text-ink px-3 py-1.5 rounded-lg text-xs font-medium"
+                        >
+                          Approve
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleParticipantAction(p.user_id, "waitlisted")}
+                          className="bg-accent-blue/90 hover:bg-accent-blue text-ink px-3 py-1.5 rounded-lg text-xs font-medium"
+                          title="The ride is full. This rider joins the queue and is approved automatically when a seat frees."
+                        >
+                          Waitlist
+                        </button>
+                      )}
                       <button
                         onClick={() => handleParticipantAction(p.user_id, "rejected")}
                         className="bg-accent-red/90 hover:bg-accent-red text-ink px-3 py-1.5 rounded-lg text-xs font-medium"
                       >
                         Reject
+                      </button>
+                    </div>
+                  )}
+                  {p.status === "waitlisted" && p.user_id !== ride.captain_id && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-accent-blue">in queue</span>
+                      <button
+                        onClick={() => handleParticipantAction(p.user_id, "rejected")}
+                        className="bg-accent-red/20 text-accent-red hover:bg-accent-red/30 px-3 py-1.5 rounded-lg text-xs font-medium"
+                      >
+                        Remove
                       </button>
                     </div>
                   )}
