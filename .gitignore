@@ -44,3 +44,12 @@ frontend/android/.gradle/
 frontend/android/local.properties
 frontend/android/capacitor-cordova-android-plugins/build/
 frontend/out/
+
+# Firebase config identifies the project and is per-environment.
+# See docs/plan/phase4-android-release.md §4.
+frontend/android/app/google-services.json
+# Release signing material must never be committed. Losing the keystore
+# means never updating the app under this package name again.
+*.keystore
+*.jks
+frontend/android/keystore.properties
