@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 
 const navItems = [
   { href: "/destinations", label: "Discover" },
+  { href: "/feed", label: "Feed" },
   { href: "/rides", label: "Rides" },
   { href: "/chat", label: "Chat" },
   { href: "/profile", label: "Profile" },
