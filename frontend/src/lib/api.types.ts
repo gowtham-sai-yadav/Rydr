@@ -69,6 +69,8 @@ export interface UserOut {
   followers_count: number;
   following_count: number;
   is_followed_by_me: boolean;
+  /** Phase 4 W7. Granted from the server only. */
+  is_admin?: boolean;
 }
 
 export interface UserStatsOut {
@@ -102,6 +104,11 @@ export interface DestinationMediaOut {
   id: string;
   destination_id: string;
   url: string;
+  /**
+   * Phase 4 W3 — poster frame for video, resized variant for images.
+   * Null means the asset is not Cloudinary-hosted: render `url`.
+   */
+  thumbnail_url: string | null;
   caption: string | null;
   uploaded_by_user_id: string | null;
   ride_log_id: string | null;

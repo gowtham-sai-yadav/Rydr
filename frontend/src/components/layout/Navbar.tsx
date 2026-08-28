@@ -28,7 +28,12 @@ export default function Navbar() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">
-            {navItems.map((item) => {
+            {/* Moderation is appended for admins only. Non-admins get a 403
+                from the API, so showing the link would be a dead end. */}
+            {(user?.is_admin
+              ? [...navItems, { href: "/admin/reports", label: "Moderation" }]
+              : navItems
+            ).map((item) => {
               const active = pathname.startsWith(item.href);
               return (
                 <Link
