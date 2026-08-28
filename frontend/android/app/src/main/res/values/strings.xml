@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Rydr</string>
+    <string name="title_activity_main">Rydr</string>
+    <string name="package_name">com.rydr.app</string>
+    <string name="custom_url_scheme">com.rydr.app</string>
+</resources>
