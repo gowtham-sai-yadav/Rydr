@@ -4,6 +4,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import { capturePhoto } from "@/lib/native/camera";
+import { isNative } from "@/lib/native/platform";
 import ShareCard from "@/components/share/ShareCard";
 import type {
   RideLogOut,
@@ -39,6 +41,10 @@ function RideLogPageInner() {
   // Media upload state
   const [uploading, setUploading] = useState(false);
   const [manualUrl, setManualUrl] = useState("");
+  // Resolved after mount: isNative() inspects the Capacitor bridge, which
+  // does not exist during a server render or the first hydration pass.
+  const [native, setNative] = useState(false);
+  useEffect(() => setNative(isNative()), []);
 
   const reload = useCallback(async () => {
     try {
@@ -338,8 +344,53 @@ function RideLogPageInner() {
           </div>
         )}
 
-        <div>
-          <label className="block text-sm text-mute mb-1">Upload (image or video)</label>
+        <div className="space-y-2">
+          <label className="block text-sm text-mute mb-1">Add a photo or video</label>
+
+          {/* Phase 4 W10: on Android these open the native camera and gallery
+              through the Capacitor Camera plugin; in a browser they fall back
+              to a file input, so one code path serves both. The plain file
+              input below stays as the desktop affordance and as the fallback
+              if a native call fails. */}
+          {native && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={async () => {
+                  try {
+                    const file = await capturePhoto("camera");
+                    if (file) await uploadFile(file);
+                  } catch (err) {
+                    setError(
+                      err instanceof Error ? err.message : "Camera unavailable",
+                    );
+                  }
+                }}
+                className="flex-1 bg-ink text-canvas disabled:opacity-50 py-2.5 rounded-lg text-sm font-medium"
+              >
+                Take photo
+              </button>
+              <button
+                type="button"
+                disabled={uploading}
+                onClick={async () => {
+                  try {
+                    const file = await capturePhoto("gallery");
+                    if (file) await uploadFile(file);
+                  } catch (err) {
+                    setError(
+                      err instanceof Error ? err.message : "Gallery unavailable",
+                    );
+                  }
+                }}
+                className="flex-1 bg-surface-elevated text-ink disabled:opacity-50 py-2.5 rounded-lg text-sm font-medium"
+              >
+                From gallery
+              </button>
+            </div>
+          )}
+
           <input
             type="file"
             accept="image/*,video/*"
