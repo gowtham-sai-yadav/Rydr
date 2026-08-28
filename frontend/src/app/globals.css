@@ -410,3 +410,58 @@
   border: 1px solid var(--color-hairline);
   box-shadow: none;
 }
+
+/* ---------------------------------------------------------------------------
+ * Touch targets — Phase 4 W9.
+ *
+ * Several controls are visually small by design: segmented toggles, filter
+ * chips, and inline text buttons like "Sign out" or "Edit". At 18-32px tall
+ * they are fine with a mouse and awkward with a thumb; both Android and iOS
+ * guidance puts the minimum around 44px.
+ *
+ * Rather than making every control physically larger — which would coarsen
+ * the desktop layout to fix a phone problem — the *hit area* is expanded with
+ * an absolutely positioned pseudo-element, and only where the pointer is
+ * actually coarse. The visible control is unchanged.
+ *
+ * `pointer: coarse` rather than a width breakpoint, because the relevant fact
+ * is the input device and not the viewport: a narrow browser window on a
+ * desktop does not need bigger targets, and a large tablet does.
+ *
+ * Applied to every button and link inside the app shell rather than to a
+ * hand-maintained list of classes — the audit that prompted this found small
+ * targets on five separate pages, and any list would go stale the next time a
+ * button is added.
+ *
+ * The tradeoff: two small controls closer together than 44px will have
+ * overlapping hit areas, and the one later in the DOM wins. Where that
+ * mattered — the like and comment buttons in a feed card — the controls were
+ * also given real padding so they are genuinely large rather than just
+ * generously targeted.
+ * ------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  main a,
+  main button {
+    position: relative;
+  }
+
+  main a::after,
+  main button::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 100%;
+    height: 100%;
+    min-width: 44px;
+    min-height: 44px;
+    transform: translate(-50%, -50%);
+  }
+
+  /* Anything that already paints a pseudo-element, or that lays out its own
+     children absolutely, must not have one injected. */
+  main a.no-tap-expand::after,
+  main button.no-tap-expand::after {
+    content: none;
+  }
+}
