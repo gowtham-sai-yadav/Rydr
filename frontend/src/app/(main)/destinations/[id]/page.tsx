@@ -3,6 +3,7 @@ import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import RoutePreview from "@/components/map/RoutePreview";
 import type {
   CostEstimate,
   DestinationOut,
@@ -152,6 +153,18 @@ export default function DestinationDetailPage({
       </div>
 
       {/* Cost estimate */}
+      {/* Route preview (Phase 4 W2) — sits above the cost panel because
+          distance is what the cost is derived from. */}
+      <RoutePreview
+        destinationId={id}
+        destinationName={destination.name}
+        origin={
+          user?.home_latitude != null && user?.home_longitude != null
+            ? [user.home_latitude, user.home_longitude]
+            : null
+        }
+      />
+
       {cost && (
         <div className="bg-surface-card rounded-xl p-6">
           <h2 className="text-lg font-semibold text-ink mb-2">Cost estimate (from your home)</h2>
