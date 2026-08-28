@@ -1,8 +1,10 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import MapPanel from "@/components/map/MapPanel";
 import type {
   DestinationSummary,
   TagListResponse,
@@ -10,6 +12,13 @@ import type {
 
 
 type SortMode = "rating" | "distance" | "popularity";
+
+// The filter rail applies to the list. The map is viewport-driven and
+// deliberately unfiltered: a pin missing because of a tag filter looks
+// identical to a place that does not exist, which is worse than showing
+// everything nearby. Documented here because it is a choice, not an
+// oversight.
+type ViewMode = "list" | "map";
 
 
 export default function DestinationsPage() {
@@ -26,6 +35,8 @@ export default function DestinationsPage() {
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortMode>("rating");
   const [useHomeOrigin, setUseHomeOrigin] = useState(false);
+  const [view, setView] = useState<ViewMode>("list");
+  const router = useRouter();
 
   const canUseDistance = !!user?.home_latitude && !!user?.home_longitude;
 
@@ -83,18 +94,56 @@ export default function DestinationsPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12 glow-orange">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-ink">Destinations</h1>
-        {user && (
-          <Link
-            href="/destinations/new"
-            className="bg-ink text-canvas hover:bg-surface-light text-sm font-medium px-4 py-2 rounded-lg"
+        <div className="flex items-center gap-2">
+          {/* List / map toggle. role=tablist so the pair reads as one control
+              to a screen reader rather than two unrelated buttons. */}
+          <div
+            role="tablist"
+            aria-label="View destinations as"
+            className="flex rounded-lg bg-surface-card border border-hairline p-0.5"
           >
-            Add destination
-          </Link>
-        )}
+            {(["list", "map"] as ViewMode[]).map((mode) => (
+              <button
+                key={mode}
+                role="tab"
+                aria-selected={view === mode}
+                onClick={() => setView(mode)}
+                className={`px-3 py-1.5 rounded-md text-[13px] font-medium capitalize transition-colors ${
+                  view === mode
+                    ? "bg-surface-elevated text-ink"
+                    : "text-charcoal hover:text-ink"
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+          {user && (
+            <Link
+              href="/destinations/new"
+              className="bg-ink text-canvas hover:bg-surface-light text-sm font-medium px-4 py-2 rounded-lg whitespace-nowrap"
+            >
+              Add destination
+            </Link>
+          )}
+        </div>
       </div>
 
+      {view === "map" && (
+        <MapPanel
+          origin={
+            user?.home_latitude != null && user?.home_longitude != null
+              ? [user.home_latitude, user.home_longitude]
+              : null
+          }
+          onSelect={(pin) => router.push(`/destinations/${pin.id}`)}
+        />
+      )}
+
+      {view === "list" && (
+      <>
       {/* Filters */}
       <div className="bg-surface-card rounded-xl p-4 space-y-4">
         <input
@@ -241,6 +290,8 @@ export default function DestinationsPage() {
             </Link>
           ))}
         </div>
+      )}
+      </>
       )}
     </div>
   );
