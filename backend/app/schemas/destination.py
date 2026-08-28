@@ -42,6 +42,9 @@ class DestinationMediaOut(BaseModel):
     id: UUID
     destination_id: UUID
     url: str
+    # Phase 4 W3 — poster frame for video, resized variant for images.
+    # Null for media not hosted on Cloudinary; render ``url`` in that case.
+    thumbnail_url: Optional[str] = None
     caption: Optional[str] = None
     uploaded_by_user_id: Optional[UUID] = None
     ride_log_id: Optional[UUID] = None

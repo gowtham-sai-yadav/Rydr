@@ -13,7 +13,7 @@ the ALTER TYPE as its own implicit transaction, matching the documented
 Alembic pattern for enum additions.
 
 Revision ID: a1c2e3f4b5d6
-Revises: b8c1f3e5a7d9
+Revises: d4e7b9f1c8a3
 Create Date: 2026-08-26 00:00:00
 """
 from typing import Sequence, Union
@@ -22,7 +22,7 @@ from alembic import op
 
 
 revision: str = "a1c2e3f4b5d6"
-down_revision: Union[str, None] = "b8c1f3e5a7d9"
+down_revision: Union[str, None] = "d4e7b9f1c8a3"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

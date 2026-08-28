@@ -6,6 +6,7 @@ import type { DestinationSummary } from "@/lib/api.types";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { TimePicker } from "@/components/ui/TimePicker";
 import { DestinationAutocomplete } from "@/components/destinations/DestinationAutocomplete";
+import { routes } from "@/lib/routes";
 
 
 function CreateRideForm() {
@@ -72,7 +73,7 @@ function CreateRideForm() {
         break_schedule: breakSchedule || null,
         route_id: routeId || null,
       });
-      router.push(`/rides/${ride.id}`);
+      router.push(routes.ride(ride.id));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to create ride");
     } finally {

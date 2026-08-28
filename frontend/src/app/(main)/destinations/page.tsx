@@ -4,17 +4,23 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import DestinationMap from "@/components/destinations/DestinationMap";
+import MapPanel from "@/components/map/MapPanel";
 import { PlaceAutocomplete } from "@/components/destinations/PlaceAutocomplete";
 import type {
   DestinationSummary,
   RegionSummary,
   TagListResponse,
 } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 type SortMode = "rating" | "distance" | "popularity";
-type ViewMode = "grid" | "map";
 
+// The filter rail applies to the grid. The map is viewport-driven and
+// deliberately unfiltered: a pin missing because of a tag filter looks
+// identical to a place that does not exist, which is worse than showing
+// everything nearby. Documented here because it is a choice, not an
+// oversight.
+type ViewMode = "grid" | "map";
 
 export default function DestinationsPage() {
   const { user } = useAuth();
@@ -24,9 +30,6 @@ export default function DestinationsPage() {
   const [surpriseHours, setSurpriseHours] = useState("3");
   const [surpriseLoading, setSurpriseLoading] = useState(false);
   const [surpriseError, setSurpriseError] = useState("");
-
-  const [fogOfWar, setFogOfWar] = useState(false);
-  const [visitedIds, setVisitedIds] = useState<Set<string> | null>(null);
 
   const [destinations, setDestinations] = useState<DestinationSummary[]>([]);
   const [tags, setTags] = useState<TagListResponse>({ vibe: [], vehicle_fit: [] });
@@ -98,14 +101,6 @@ export default function DestinationsPage() {
       });
   }, []);
 
-  useEffect(() => {
-    if (!fogOfWar || !user) return;
-    api
-      .getVisitedDestinations(user.id)
-      .then((res) => setVisitedIds(new Set(res.visited_destination_ids)))
-      .catch(() => {});
-  }, [fogOfWar, user]);
-
   const handleSurpriseMe = async () => {
     setSurpriseError("");
     const hours = parseFloat(surpriseHours);
@@ -124,7 +119,7 @@ export default function DestinationsPage() {
         from_lat: user!.home_latitude!,
         from_lng: user!.home_longitude!,
       });
-      router.push(`/destinations/${dest.id}`);
+      router.push(routes.destination(dest.id));
     } catch (err) {
       setSurpriseError(err instanceof Error ? err.message : "Couldn't find a match — try a bigger time budget");
     } finally {
@@ -152,10 +147,10 @@ export default function DestinationsPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-16 relative">
-      
+
       {/* 1. Winding Road Hero Banner */}
       <div className="h-44 sm:h-56 rounded-2xl overflow-hidden relative border border-hairline-strong shadow-lg select-none">
-        <div 
+        <div
           className="absolute inset-0 bg-cover bg-center brightness-[0.55] filter saturate-[0.85]"
           style={{ backgroundImage: "url('/images/winding_road.jpg')" }}
         />
@@ -165,36 +160,30 @@ export default function DestinationsPage() {
             <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-ink uppercase">Scout Horizons</h1>
             <p className="text-xs text-mute font-semibold tracking-wider uppercase mt-1">Discover winding trails and rider hangouts</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex gap-1 bg-surface-deep/80 border border-hairline-strong rounded-xl p-1 backdrop-blur-md">
-              <button
-                onClick={() => setView("grid")}
-                className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all duration-200 ${
-                  view === "grid" ? "bg-accent-gold text-canvas shadow-[0_0_12px_var(--color-accent-gold-glow)]" : "text-mute hover:text-ink"
-                }`}
-              >
-                Grid
-              </button>
-              <button
-                onClick={() => setView("map")}
-                className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all duration-200 ${
-                  view === "map" ? "bg-accent-gold text-canvas shadow-[0_0_12px_var(--color-accent-gold-glow)]" : "text-mute hover:text-ink"
-                }`}
-              >
-                Map
-              </button>
+          {/* flex-wrap so a narrow phone wraps the controls onto their own
+              row instead of pushing the CTA off-screen. */}
+          <div className="flex items-center gap-3 flex-wrap justify-center sm:justify-end">
+            {/* Grid / map toggle. role=tablist so the pair reads as one
+                control to a screen reader rather than two unrelated buttons. */}
+            <div
+              role="tablist"
+              aria-label="View destinations as"
+              className="flex gap-1 bg-surface-deep/80 border border-hairline-strong rounded-xl p-1 backdrop-blur-md"
+            >
+              {(["grid", "map"] as ViewMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  role="tab"
+                  aria-selected={view === mode}
+                  onClick={() => setView(mode)}
+                  className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider capitalize transition-all duration-200 ${
+                    view === mode ? "bg-accent-gold text-canvas shadow-[0_0_12px_var(--color-accent-gold-glow)]" : "text-mute hover:text-ink"
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
             </div>
-            {user && view === "map" && (
-              <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-mute select-none cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={fogOfWar}
-                  onChange={(e) => setFogOfWar(e.target.checked)}
-                  className="rounded border-hairline-strong text-accent-gold focus:ring-accent-gold bg-surface-deep w-4 h-4 cursor-pointer"
-                />
-                Fog of war
-              </label>
-            )}
             <button
               onClick={() => setSurpriseOpen((v) => !v)}
               className="btn h-10 px-5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all duration-200 bg-accent-orange/20 text-accent-orange border border-accent-orange/30 hover:bg-accent-orange/30"
@@ -203,10 +192,12 @@ export default function DestinationsPage() {
             </button>
             {user && (
               <Link
-                href="/destinations/new"
+                href={routes.newDestination}
                 className="btn btn-primary h-10 px-5 rounded-xl text-xs font-semibold uppercase tracking-wider transition-all duration-200"
               >
-                Add destination
+                {/* Shorter label on phones; the full one from sm up. */}
+                <span className="sm:hidden">Add</span>
+                <span className="hidden sm:inline">Add destination</span>
               </Link>
             )}
           </div>
@@ -263,16 +254,31 @@ export default function DestinationsPage() {
           {!canUseDistance && (
             <p className="text-mute text-xs">
               Set your home location on your{" "}
-              <Link href="/profile" className="underline">profile</Link> so we know where to start from.
+              <Link href={routes.profile} className="underline">profile</Link> so we know where to start from.
             </p>
           )}
         </div>
       )}
 
+      {view === "map" && (
+        <div className="rounded-2xl overflow-hidden border border-hairline-strong shadow-2xl">
+          <MapPanel
+            origin={
+              user?.home_latitude != null && user?.home_longitude != null
+                ? [user.home_latitude, user.home_longitude]
+                : null
+            }
+            onSelect={(pin) => router.push(routes.destination(pin.id))}
+          />
+        </div>
+      )}
+
+      {view === "grid" && (
+      <>
       {/* 2. Enhanced Filters Dashboard */}
       <div className="card-bordered bg-surface-card/35 backdrop-blur-xl border border-hairline-strong p-6 rounded-2xl space-y-6 relative overflow-hidden shadow-2xl">
         <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
-        
+
         {/* Search bar with magnifying glass icon */}
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-stone">
@@ -357,7 +363,7 @@ export default function DestinationsPage() {
               </option>
             </select>
           </label>
-          
+
           {canUseDistance && sort !== "distance" && (
             <label className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-mute select-none cursor-pointer">
               <input
@@ -400,30 +406,16 @@ export default function DestinationsPage() {
       ) : destinations.length === 0 ? (
         <div className="text-center py-20 text-mute border border-dashed border-hairline-strong rounded-2xl bg-surface-card/10">
           <p className="font-semibold text-sm">No scouted routes match your filters.</p>
-          <Link href="/destinations/new" className="text-accent-gold hover:underline font-bold text-xs uppercase tracking-wider mt-3 inline-block">
+          <Link href={routes.newDestination} className="text-accent-gold hover:underline font-bold text-xs uppercase tracking-wider mt-3 inline-block">
             + Scout New Horizon
           </Link>
-        </div>
-      ) : view === "map" ? (
-        <div className="rounded-2xl overflow-hidden border border-hairline-strong shadow-2xl">
-          <DestinationMap
-            destinations={destinations.map((d) => ({
-              id: d.id,
-              name: d.name,
-              latitude: d.latitude,
-              longitude: d.longitude,
-              region: d.region,
-            }))}
-            height={500}
-            visitedIds={fogOfWar && visitedIds ? visitedIds : undefined}
-          />
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {destinations.map((d) => (
             <Link
               key={d.id}
-              href={`/destinations/${d.id}`}
+              href={routes.destination(d.id)}
               className="group bg-surface-card/30 backdrop-blur-md rounded-2xl overflow-hidden border border-hairline-strong hover:border-accent-gold/40 hover:-translate-y-1.5 transition-all duration-300 shadow-lg hover:shadow-2xl flex flex-col relative"
             >
               <div className="aspect-video bg-surface-deep relative overflow-hidden">
@@ -471,6 +463,8 @@ export default function DestinationsPage() {
             </Link>
           ))}
         </div>
+      )}
+      </>
       )}
     </div>
   );

@@ -1,201 +1,246 @@
-"""Shared pytest fixtures.
+"""Pytest fixtures — Phase 4 W7.
 
-Tests run against a real Postgres database — this repo's models use
-Postgres-specific types (UUID, enums) that don't work against SQLite —
-but a *dedicated* one (``rydr_test``, derived from DATABASE_URL by
-swapping the db name), never the dev database from DATABASE_URL itself.
+Test database
+-------------
+Tests run against a real Postgres database named ``rydr_test``, created and
+migrated once per session, not against SQLite. The schema leans on Postgres
+throughout — ``ON CONFLICT`` upserts, ``UUID`` columns, partial indexes, GIN
+trigram indexes, ``SELECT ... FOR UPDATE`` row locks — so a SQLite test suite
+would exercise a different application than the one that gets deployed and
+would pass while production broke.
 
-This used to point straight at DATABASE_URL, so every test run's
-autouse TRUNCATE fixture wiped the actual dev/demo dataset — anyone
-seeded data, ran `pytest`, and found an empty database with no
-explanation. `app.dependencies.get_db` is overridden on the shared
-`app` so requests through `TestClient` hit the test engine too, not
-just direct `db_session` usage.
+The database URL is set in the environment *before* ``app.config`` is
+imported, because ``Settings`` reads it at import time and ``app.database``
+builds its engine from it immediately. Anything that imports the app before
+this module runs would bind to the development database instead.
+
+Isolation
+---------
+Each test gets a fresh transaction that is rolled back afterwards, so tests
+cannot see each other's writes and the suite can be re-run without cleanup.
+The FastAPI ``get_db`` dependency is overridden to hand out that same session,
+which is what makes a request made through TestClient participate in the
+test's transaction.
+
+Data made by a test is also namespaced with a random suffix, because a few
+paths commit on their own (``safe_notify_commit``, the badge engine) and a
+unique email or destination name keeps those from colliding across runs.
 """
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
+import uuid
+from pathlib import Path
 
 import pytest
-from alembic import command
-from alembic.config import Config
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
 
-from app.config import settings
-from app.dependencies import get_db
-from app.main import app
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+TEST_DB_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql://rydr:rydr_secret@localhost:5432/rydr_test",
+)
 
-# No separate "import app.models" here — `app.main` already imports every
-# router, which imports every model, which registers it with
-# Base.metadata as a side effect. Adding it would also shadow the `app`
-# name above with the `app` package (import app.models rebinds `app`
-# to the package, not the FastAPI instance) - a real footgun.
+# Must happen before any `app.*` import. See module docstring.
+os.environ["DATABASE_URL"] = TEST_DB_URL
+os.environ["APP_ENV"] = "test"
+
+from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 
-_CACHE_ATTR = "_rydr_test_database_url"
+def _ensure_database() -> None:
+    """Create rydr_test if it does not exist, then migrate it to head."""
+    admin_url = TEST_DB_URL.rsplit("/", 1)[0] + "/postgres"
+    db_name = TEST_DB_URL.rsplit("/", 1)[1]
 
+    admin = create_engine(admin_url, isolation_level="AUTOCOMMIT")
+    with admin.connect() as conn:
+        exists = conn.execute(
+            text("SELECT 1 FROM pg_database WHERE datname = :n"), {"n": db_name}
+        ).scalar()
+        if not exists:
+            # Identifier cannot be parameterised; db_name comes from our own
+            # constant or an operator-set env var, never from user input.
+            conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+    admin.dispose()
 
-def _test_database_url() -> str:
-    # This module gets imported twice in one pytest run (once as
-    # `conftest` via pytest's auto-discovery, once as `tests.conftest` via
-    # test files' explicit `from tests.conftest import ...`), so its
-    # top-level code runs twice with two distinct module objects - neither
-    # os.environ nor settings.DATABASE_URL is a safe place to detect
-    # "already computed" (settings gets mutated below; DATABASE_URL may
-    # only live in .env, never os.environ). `sys` is the one module
-    # Python guarantees is the same object across both imports, so cache
-    # the derived URL there instead of re-deriving (and compounding) it.
-    cached = getattr(sys, _CACHE_ATTR, None)
-    if cached:
-        return cached
-    base = settings.DATABASE_URL
-    # postgresql://user:pass@host:port/rydr -> .../rydr_test
-    root, _, db_name = base.rpartition("/")
-    url = f"{root}/{db_name}_test" if db_name else base
-    setattr(sys, _CACHE_ATTR, url)
-    return url
-
-
-_TEST_DB_URL = _test_database_url()
-test_engine = create_engine(_TEST_DB_URL)
-TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-
-# Bring the test DB's schema to head via the real Alembic chain rather
-# than Base.metadata.create_all(): some tables have a genuine 3-way FK
-# cycle (ride_plans -> routes -> ride_logs -> ride_plans, from route
-# matching + "captured from a ride" provenance), which create_all/drop_all
-# can't topologically sort. Alembic doesn't have this problem since each
-# migration ALTERs tables into existence incrementally - the same chain
-# already runs cleanly against the dev database.
-#
-# alembic/env.py unconditionally does
-# `config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)` to stop
-# alembic.ini's checked-in URL from silently pointing prod migrations at
-# someone's laptop - so passing sqlalchemy.url on the Config object here
-# gets overwritten right back to the dev URL. Point the shared `settings`
-# singleton at the test DB first so env.py's override lands on the right
-# value instead.
-settings.DATABASE_URL = _TEST_DB_URL
-_alembic_cfg = Config(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
-command.upgrade(_alembic_cfg, "head")
-
-
-def _override_get_db():
-    session = TestSessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
-
-
-app.dependency_overrides[get_db] = _override_get_db
-
-# The chat WebSocket route can't use Depends(get_db) (no per-request
-# lifecycle to hang it off for a long-lived connection) so it opens its
-# own `SessionLocal()` directly - dependency_overrides above doesn't
-# reach that. Patch the name in that module instead so WS tests hit the
-# test database too, not the real one.
-import app.routers.chat as _chat_router  # noqa: E402
-
-_chat_router.SessionLocal = TestSessionLocal
-
-_TABLES = [
-    "notifications",
-    "reports",
-    "badges",
-    "tags",
-    "post_comments",
-    "post_likes",
-    "posts",
-    "chat_messages",
-    "chat_groups",
-    "direct_messages",
-    "dm_threads",
-    "user_badges",
-    "discussion_comments",
-    "discussions",
-    "ride_log_comments",
-    "ride_media",
-    "trip_ride_logs",
-    "trips",
-    "hazard_reports",
-    "event_rsvps",
-    "events",
-    "user_club_badges",
-    "club_challenges",
-    "club_badges",
-    "club_memberships",
-    "clubs",
-    "ride_logs",
-    "ratings",
-    "destination_media",
-    "destination_tags",
-    "ride_plan_participants",
-    "ride_plans",
-    "route_points",
-    "routes",
-    "follows",
-    "destinations",
-    "bikes",
-    "users",
-]
-
-
-@pytest.fixture(autouse=True)
-def _clean_db():
-    yield
-    with test_engine.begin() as conn:
-        conn.execute(text(f"TRUNCATE TABLE {', '.join(_TABLES)} RESTART IDENTITY CASCADE"))
-
-
-@pytest.fixture
-def client() -> TestClient:
-    return TestClient(app)
-
-
-@pytest.fixture
-def db_session():
-    session = TestSessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
-
-
-def signup(client: TestClient, email: str, name: str = "Test Rider") -> dict:
-    resp = client.post(
-        "/api/auth/signup",
-        json={"name": name, "email": email, "password": "password123"},
+    # Invoked as `python -m alembic` rather than the bare `alembic` script:
+    # the console script only exists on PATH when the virtualenv is activated,
+    # and pytest is commonly run as `path/to/venv/bin/python -m pytest`, which
+    # does not activate it. sys.executable is always the right interpreter.
+    subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=BACKEND_DIR,
+        check=True,
+        capture_output=True,
+        env={**os.environ, "DATABASE_URL": TEST_DB_URL, "PYTHONPATH": str(BACKEND_DIR)},
     )
-    assert resp.status_code == 200, resp.text
-    return resp.json()
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _database():
+    _ensure_database()
+    yield
+
+
+@pytest.fixture(scope="session")
+def engine(_database):
+    from app.database import engine as app_engine
+
+    return app_engine
+
+
+@pytest.fixture
+def db(engine):
+    """A session wrapped in a transaction that is rolled back after the test.
+
+    ``join_transaction_mode="create_savepoint"`` is what makes this work. The
+    older recipe — begin a nested transaction and re-open it from an
+    ``after_transaction_end`` listener — breaks against this application,
+    because several services legitimately open their own savepoints
+    (``notifications.safe_notify_commit`` runs every delivery inside one).
+    The listener would then restart the wrong savepoint and the application's
+    commit would roll back rows it had just written, producing
+    ObjectDeletedError inside code that is correct in production.
+
+    SQLAlchemy 2.0's ``create_savepoint`` mode handles that properly: the
+    session opens its own savepoint against the enclosing connection
+    transaction, application commits release savepoints rather than writing
+    through, and nested savepoints from application code stack as they
+    normally would.
+    """
+    connection = engine.connect()
+    transaction = connection.begin()
+    Session = sessionmaker(
+        bind=connection,
+        expire_on_commit=False,
+        join_transaction_mode="create_savepoint",
+    )
+    session = Session()
+    try:
+        yield session
+    finally:
+        session.close()
+        transaction.rollback()
+        connection.close()
+
+
+@pytest.fixture
+def client(db):
+    """TestClient whose requests run inside the test's transaction."""
+    from fastapi.testclient import TestClient
+
+    from app.dependencies import get_db
+    from app.main import app
+
+    def _get_db_override():
+        yield db
+
+    app.dependency_overrides[get_db] = _get_db_override
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def tag() -> str:
+    """Short random suffix, so data from concurrent or repeated runs cannot
+    collide on a unique constraint."""
+    return uuid.uuid4().hex[:8]
+
+
+@pytest.fixture
+def make_user(client, tag):
+    """Sign a rider up and return (token, user_id, name)."""
+
+    def _make(label: str = "rider", **extra):
+        payload = {
+            "name": f"{label}-{tag}",
+            "email": f"{label}-{tag}-{uuid.uuid4().hex[:6]}@test.invalid",
+            "password": "pw12345678",
+            **extra,
+        }
+        res = client.post("/api/auth/signup", json=payload)
+        assert res.status_code in (200, 201), res.text
+        token = res.json()["access_token"]
+        me = client.get(
+            "/api/users/me", headers={"Authorization": f"Bearer {token}"}
+        ).json()
+        return token, me["id"], me["name"]
+
+    return _make
+
+
+@pytest.fixture
+def db_session(db):
+    """Alias for `db` — test_destinations.py predates that fixture's name."""
+    return db
+
+
+@pytest.fixture
+def auth():
+    """Build an Authorization header from a token."""
+    return lambda token: {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def make_destination(db, tag):
+    from app.models.destination import Destination
+
+    def _make(name: str = "Dest", lat: float = 13.3702, lng: float = 77.6835, **extra):
+        d = Destination(
+            name=f"{name}-{tag}-{uuid.uuid4().hex[:4]}",
+            latitude=lat,
+            longitude=lng,
+            **extra,
+        )
+        db.add(d)
+        db.flush()
+        return d
+
+    return _make
+
+
+# ---------------------------------------------------------------------------
+# Back-compat helpers for tests written against the pre-Phase-4-W7 fixture
+# API (plain importable functions taking `client` explicitly, rather than
+# pytest fixture injection). Kept rather than rewriting every call site —
+# same "old clients unaffected" reasoning as PersonalStatsOut keeping the
+# M3 field names. New tests should prefer the make_user/auth fixtures above.
+# ---------------------------------------------------------------------------
 def auth_headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def create_destination(client: TestClient, token: str, name: str = "Test Destination") -> dict:
-    resp = client.post(
-        "/api/destinations",
-        headers=auth_headers(token),
-        json={
-            "name": name,
-            "latitude": 31.5,
-            "longitude": 77.1,
-            "terrain_difficulty": "moderate",
-        },
+def signup(client, email: str, name: str = "Rider", **extra) -> dict:
+    """Returns {"access_token": ..., "user": {...}} — the shape these older
+    tests expect, built from the same /api/auth/signup call make_user uses."""
+    payload = {"name": name, "email": email, "password": "pw12345678", **extra}
+    res = client.post("/api/auth/signup", json=payload)
+    assert res.status_code in (200, 201), res.text
+    body = res.json()
+    return {"access_token": body["access_token"], "user": body["user"]}
+
+
+def create_destination(client, token: str, name: str = "Dest", **extra) -> dict:
+    payload = {
+        "name": f"{name}-{uuid.uuid4().hex[:8]}",
+        "latitude": 13.3702,
+        "longitude": 77.6835,
+        **extra,
+    }
+    res = client.post(
+        "/api/destinations", json=payload, headers=auth_headers(token)
     )
-    assert resp.status_code == 201, resp.text
-    return resp.json()
+    assert res.status_code in (200, 201), res.text
+    return res.json()
 
 
-def create_and_complete_ride(
-    client: TestClient, token: str, destination_id: str, planned_date: str
-) -> str:
+def create_and_complete_ride(client, token: str, destination_id: str, planned_date: str) -> str:
+    """Creates a ride plan as captain and drives it planned -> in_progress ->
+    completed, so callers get an id that /api/ride-logs will accept."""
     resp = client.post(
         "/api/rides",
         headers=auth_headers(token),

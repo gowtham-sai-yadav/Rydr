@@ -1,102 +1,177 @@
-from sqlalchemy import text
+"""Content reporting and the admin queue — Phase 4 W7."""
+from __future__ import annotations
 
-from tests.conftest import auth_headers, signup, test_engine
+import uuid
 
-
-def _promote_to_admin(email: str) -> None:
-    with test_engine.begin() as conn:
-        conn.execute(
-            text("UPDATE users SET is_admin = true WHERE email = :email"),
-            {"email": email},
-        )
+import pytest
 
 
-def test_anyone_can_file_a_report(client):
-    user = signup(client, "reporter@test.com", "Reporter")
-    resp = client.post(
-        "/api/moderation/reports",
-        headers=auth_headers(user["access_token"]),
-        json={
-            "target_type": "user",
-            "target_id": user["user"]["id"],
-            "reason": "testing the report flow",
-        },
+@pytest.fixture
+def admin(client, auth, make_user, db):
+    """A rider promoted to admin, the way grant_admin.py does it."""
+    from app.models.user import User
+
+    token, user_id, _ = make_user("admin")
+    db.query(User).filter(User.id == user_id).update({User.is_admin: True})
+    db.flush()
+    return token, user_id
+
+
+def test_reporting_the_same_content_twice_amends_rather_than_duplicates(
+    client, auth, make_user
+):
+    author_token, _, _ = make_user("author")
+    reporter_token, _, _ = make_user("reporter")
+    pid = client.post(
+        "/api/posts", headers=auth(author_token), json={"body": "spam"}
+    ).json()["id"]
+
+    first = client.post(
+        "/api/reports",
+        headers=auth(reporter_token),
+        json={"content_type": "post", "content_id": pid, "reason": "spam"},
     )
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    assert body["status"] == "open"
-    assert body["reporter_id"] == user["user"]["id"]
+    assert first.status_code == 201
 
-
-def test_non_admin_forbidden_from_queue(client):
-    user = signup(client, "notadmin@test.com", "Not Admin")
-    resp = client.get(
-        "/api/moderation/reports", headers=auth_headers(user["access_token"])
+    client.post(
+        "/api/reports",
+        headers=auth(reporter_token),
+        json={"content_type": "post", "content_id": pid, "reason": "harassment"},
     )
-    assert resp.status_code == 403
 
-    resp = client.post(
-        "/api/moderation/reports",
-        headers=auth_headers(user["access_token"]),
+    mine = client.get("/api/reports/mine", headers=auth(reporter_token)).json()
+    assert mine["total"] == 1
+    assert mine["reports"][0]["reason"] == "harassment"
+
+
+def test_reporting_content_that_does_not_exist_is_refused(client, auth, make_user):
+    token, _, _ = make_user("reporter")
+    res = client.post(
+        "/api/reports",
+        headers=auth(token),
         json={
-            "target_type": "post",
-            "target_id": user["user"]["id"],
+            "content_type": "post",
+            "content_id": str(uuid.uuid4()),
             "reason": "spam",
         },
     )
-    report_id = resp.json()["id"]
+    assert res.status_code == 404
 
-    resp = client.patch(
-        f"/api/moderation/reports/{report_id}",
-        headers=auth_headers(user["access_token"]),
-        json={"status": "dismissed"},
+
+def test_cannot_report_yourself(client, auth, make_user):
+    token, user_id, _ = make_user("self")
+    res = client.post(
+        "/api/reports",
+        headers=auth(token),
+        json={"content_type": "user", "content_id": user_id, "reason": "spam"},
     )
-    assert resp.status_code == 403
+    assert res.status_code == 400
 
 
-def test_admin_can_list_and_update_reports(client):
-    admin = signup(client, "admin@test.com", "Admin")
-    _promote_to_admin("admin@test.com")
-    reporter = signup(client, "reporter2@test.com", "Reporter Two")
+def test_queue_requires_admin(client, auth, make_user):
+    token, _, _ = make_user("rider")
+    assert client.get("/api/reports/admin", headers=auth(token)).status_code == 403
 
-    resp = client.post(
-        "/api/moderation/reports",
-        headers=auth_headers(reporter["access_token"]),
-        json={
-            "target_type": "chat_message",
-            "target_id": reporter["user"]["id"],
-            "reason": "abusive language",
-        },
+
+def test_report_count_aggregates_distinct_reporters(
+    client, auth, make_user, admin
+):
+    admin_token, _ = admin
+    author_token, _, _ = make_user("author")
+    a_token, _, _ = make_user("a")
+    b_token, _, _ = make_user("b")
+    pid = client.post(
+        "/api/posts", headers=auth(author_token), json={"body": "spam"}
+    ).json()["id"]
+
+    for token in (a_token, b_token):
+        client.post(
+            "/api/reports",
+            headers=auth(token),
+            json={"content_type": "post", "content_id": pid, "reason": "spam"},
+        )
+
+    queue = client.get("/api/reports/admin", headers=auth(admin_token)).json()
+    row = next(r for r in queue["reports"] if r["content_id"] == pid)
+    assert row["report_count"] == 2
+
+
+def test_resolving_notifies_the_reporter(client, auth, make_user, admin):
+    admin_token, _ = admin
+    author_token, _, _ = make_user("author")
+    reporter_token, _, _ = make_user("reporter")
+    pid = client.post(
+        "/api/posts", headers=auth(author_token), json={"body": "spam"}
+    ).json()["id"]
+    rid = client.post(
+        "/api/reports",
+        headers=auth(reporter_token),
+        json={"content_type": "post", "content_id": pid, "reason": "spam"},
+    ).json()["id"]
+
+    res = client.patch(
+        f"/api/reports/admin/{rid}",
+        headers=auth(admin_token),
+        json={"status": "actioned", "resolution_note": "Removed"},
     )
-    report_id = resp.json()["id"]
+    assert res.status_code == 200
+    assert res.json()["status"] == "actioned"
 
-    resp = client.get(
-        "/api/moderation/reports", headers=auth_headers(admin["access_token"])
-    )
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["total"] == 1
-    assert body["reports"][0]["id"] == report_id
+    kinds = [
+        n["type"]
+        for n in client.get(
+            "/api/notifications", headers=auth(reporter_token)
+        ).json()["notifications"]
+    ]
+    assert "report_resolved" in kinds
 
-    resp = client.get(
-        "/api/moderation/reports?status=open",
-        headers=auth_headers(admin["access_token"]),
-    )
-    assert resp.json()["total"] == 1
 
-    resp = client.get(
-        "/api/moderation/reports?status=dismissed",
-        headers=auth_headers(admin["access_token"]),
-    )
-    assert resp.json()["total"] == 0
+def test_reopening_clears_the_resolution_attribution(
+    client, auth, make_user, admin
+):
+    admin_token, _ = admin
+    author_token, _, _ = make_user("author")
+    reporter_token, _, _ = make_user("reporter")
+    pid = client.post(
+        "/api/posts", headers=auth(author_token), json={"body": "spam"}
+    ).json()["id"]
+    rid = client.post(
+        "/api/reports",
+        headers=auth(reporter_token),
+        json={"content_type": "post", "content_id": pid, "reason": "spam"},
+    ).json()["id"]
 
-    resp = client.patch(
-        f"/api/moderation/reports/{report_id}",
-        headers=auth_headers(admin["access_token"]),
+    client.patch(
+        f"/api/reports/admin/{rid}",
+        headers=auth(admin_token),
         json={"status": "actioned"},
     )
-    assert resp.status_code == 200
-    updated = resp.json()
-    assert updated["status"] == "actioned"
-    assert updated["reviewed_by"] == admin["user"]["id"]
-    assert updated["reviewed_at"] is not None
+    reopened = client.patch(
+        f"/api/reports/admin/{rid}",
+        headers=auth(admin_token),
+        json={"status": "reviewing"},
+    ).json()
+
+    assert reopened["resolved_at"] is None
+    assert reopened["resolver"] is None
+
+
+def test_report_outlives_the_content_it_describes(client, auth, make_user):
+    """The moderation record is the audit trail; deleting the post must not
+    erase the fact that it was reported."""
+    author_token, _, _ = make_user("author")
+    reporter_token, _, _ = make_user("reporter")
+    pid = client.post(
+        "/api/posts", headers=auth(author_token), json={"body": "spam"}
+    ).json()["id"]
+    client.post(
+        "/api/reports",
+        headers=auth(reporter_token),
+        json={"content_type": "post", "content_id": pid, "reason": "spam"},
+    )
+
+    client.delete(f"/api/posts/{pid}", headers=auth(author_token))
+
+    assert client.get("/api/reports/mine", headers=auth(reporter_token)).json()[
+        "total"
+    ] == 1

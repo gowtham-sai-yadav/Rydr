@@ -1,11 +1,17 @@
-"""m8 badges + user_badges
+"""m8 badge lookup indexes
 
-Creates the badge catalog and the user-award table for M8.
+Adds the two badge lookup indexes M8 needs.
 
-The ``badges`` table is a fixed catalog (8 rows seeded by
-``scripts/seed_badges.py``). The ``user_badges`` table records who has
-earned which catalog entry and when. The ``uq_user_badge`` constraint is
-what lets ``services/badge_engine.evaluate_user_badges`` use
+The ``badges`` and ``user_badges`` tables themselves are created by the
+M1 destination-schema revision (``b4e6c8f2a1d3``), not here — this
+revision originally re-declared them, which made ``alembic upgrade head``
+fail on a fresh database with "relation already exists". It now only adds
+what M1 left out.
+
+``badges`` is a fixed catalog (8 rows seeded by
+``scripts/seed_badges.py``). ``user_badges`` records who has earned which
+catalog entry and when. The ``uq_user_badge`` constraint (from M1) is what
+lets ``services/badge_engine.evaluate_user_badges`` use
 ``ON CONFLICT DO NOTHING`` — the engine is safe to re-run without
 producing duplicates.
 
@@ -19,6 +25,7 @@ Create Date: 2026-05-28 00:00:00
 """
 from typing import Sequence, Union
 
+import sqlalchemy as sa
 from alembic import op
 
 
@@ -29,18 +36,30 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # "badges" and "user_badges" were already created as forward-looking
-    # stubs in the M1 destination-schema migration (b4e6c8f2a1d3) — creating
-    # either again here fails on a fresh database. Only the two read-path
-    # indexes are new.
-    op.create_index(
-        "idx_user_badges_user_id", "user_badges", ["user_id"]
-    )
-    op.create_index(
-        "idx_user_badges_badge_id", "user_badges", ["badge_id"]
-    )
+    # Both tables were introduced by the earlier M1 destination-schema
+    # migration.  This revision only adds the lookup indexes that M1 omitted.
+    inspector = sa.inspect(op.get_bind())
+    existing_indexes = {
+        index["name"] for index in inspector.get_indexes("user_badges")
+    }
+
+    if "idx_user_badges_user_id" not in existing_indexes:
+        op.create_index(
+            "idx_user_badges_user_id", "user_badges", ["user_id"]
+        )
+    if "idx_user_badges_badge_id" not in existing_indexes:
+        op.create_index(
+            "idx_user_badges_badge_id", "user_badges", ["badge_id"]
+        )
 
 
 def downgrade() -> None:
-    op.drop_index("idx_user_badges_badge_id", table_name="user_badges")
-    op.drop_index("idx_user_badges_user_id", table_name="user_badges")
+    inspector = sa.inspect(op.get_bind())
+    existing_indexes = {
+        index["name"] for index in inspector.get_indexes("user_badges")
+    }
+
+    if "idx_user_badges_badge_id" in existing_indexes:
+        op.drop_index("idx_user_badges_badge_id", table_name="user_badges")
+    if "idx_user_badges_user_id" in existing_indexes:
+        op.drop_index("idx_user_badges_user_id", table_name="user_badges")

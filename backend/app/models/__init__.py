@@ -35,9 +35,24 @@ from app.models.ride_log import (  # noqa: F401
 from app.models.social import Discussion, DiscussionComment, Follow  # noqa: F401
 from app.models.badge import Badge, BadgeRarity, UserBadge  # noqa: F401
 from app.models.chat import ChatGroup, ChatMessage  # noqa: F401
-from app.models.post import Post, PostComment, PostLike  # noqa: F401
-from app.models.notification import Notification, NotificationType  # noqa: F401
-from app.models.report import Report, ReportStatus, ReportTargetType  # noqa: F401
+from app.models.report import (  # noqa: F401
+    Report,
+    ReportReason,
+    ReportStatus,
+    ReportedContentType,
+)
+from app.models.post import (  # noqa: F401
+    Post,
+    PostComment,
+    PostLike,
+    PostMedia,
+    PostMediaType,
+)
+from app.models.notification import (  # noqa: F401
+    EntityType,
+    Notification,
+    NotificationType,
+)
 from app.models.direct_message import DMThread, DirectMessage  # noqa: F401
 from app.models.trip import Trip, TripRideLog  # noqa: F401
 from app.models.club import (  # noqa: F401

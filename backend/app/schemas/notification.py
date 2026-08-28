@@ -1,4 +1,4 @@
-"""Pydantic schemas for Notification."""
+"""Notification API schemas — Phase 4 W5."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -7,19 +7,19 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.models.notification import NotificationType
+from app.schemas.user import UserBrief
 
 
 class NotificationOut(BaseModel):
     id: UUID
-    type: NotificationType
-    actor_id: Optional[UUID] = None
-    ride_plan_id: Optional[UUID] = None
-    post_id: Optional[UUID] = None
-    badge_id: Optional[UUID] = None
-    message: str
+    type: str
+    title: str
+    body: Optional[str] = None
+    entity_type: Optional[str] = None
+    entity_id: Optional[UUID] = None
     read_at: Optional[datetime] = None
     created_at: datetime
+    actor: Optional[UserBrief] = None
 
     class Config:
         from_attributes = True
@@ -28,6 +28,14 @@ class NotificationOut(BaseModel):
 class NotificationListResponse(BaseModel):
     notifications: List[NotificationOut] = []
     total: int
+    unread: int
     page: int
     limit: int
-    unread_count: int
+
+
+class UnreadCountResponse(BaseModel):
+    unread: int
+
+
+class MarkReadResponse(BaseModel):
+    marked: int

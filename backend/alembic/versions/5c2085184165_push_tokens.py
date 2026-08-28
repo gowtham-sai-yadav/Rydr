@@ -1,7 +1,7 @@
 """push tokens
 
 Revision ID: 5c2085184165
-Revises: 6a06f8bbfa33
+Revises: 447062326768
 Create Date: 2026-08-27 21:51:23.384164
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '5c2085184165'
-down_revision: Union[str, None] = '6a06f8bbfa33'
+down_revision: Union[str, None] = '447062326768'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

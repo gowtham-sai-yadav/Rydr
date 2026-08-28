@@ -30,7 +30,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.dependencies import _decode_token, get_current_user, get_db
+from app.dependencies import decode_token, get_current_user, get_db
 from app.models.ride import ParticipantStatus, RidePlan, RidePlanParticipant, RidePlanStatus
 from app.models.user import User
 
@@ -143,7 +143,7 @@ async def live_ride_ws(websocket: WebSocket, ride_id: UUID) -> None:
     the ride isn't in_progress (nothing to track before it starts or after
     it ends)."""
     token = websocket.query_params.get("token")
-    user_id = _decode_token(token) if token else None
+    user_id = decode_token(token) if token else None
     if user_id is None:
         await websocket.close(code=4401)
         return

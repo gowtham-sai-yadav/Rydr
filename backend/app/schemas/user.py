@@ -77,10 +77,14 @@ class UserOut(BaseModel):
     has_pending_follow_request: bool = False
     privacy_zone_radius_km: Optional[float] = None
     is_verified_rider: bool = False
-    # Real column on the model, used internally for moderation/verify-rider
-    # gating (routers/users.py, moderation.py) but never actually exposed
-    # here until now — every admin-gated UI element on both frontends has
-    # been silently unreachable via this field for the whole build.
+    # Real column on the model, used internally for moderation/report-queue
+    # gating (routers/reports.py's require_admin) but never actually
+    # exposed here until this merge — every admin-gated UI element on both
+    # frontends had been silently unreachable via this field. Phase 4 W7:
+    # exposed so the client can show or hide the moderation surface; the
+    # admin endpoints enforce it themselves regardless, so this is a UI
+    # hint and not the access control. Granted only by
+    # ``scripts/grant_admin.py`` — there is no endpoint that sets it.
     is_admin: bool = False
 
     class Config:
@@ -113,6 +117,13 @@ class BikeUpdate(BaseModel):
 
 
 class UserStatsOut(BaseModel):
+    """Superseded by ``schemas/leaderboard.PersonalStatsOut`` in Phase 4 W5.
+
+    Kept as the documented shape of the three counters that endpoint still
+    returns under the same names. Nothing imports it; delete once no client
+    is pinned to the M3 response.
+    """
+
     rides_captained: int
     rides_joined: int
     rides_completed: int
