@@ -2,12 +2,17 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
-import type { BadgeOut, BikeType, UserBadgeOut, UserStatsOut } from "@/lib/api.types";
+import type {
+  BadgeOut,
+  BikeType,
+  PersonalStatsOut,
+  UserBadgeOut,
+} from "@/lib/api.types";
 import { BadgeShelf } from "@/components/badges/BadgeShelf";
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
-  const [stats, setStats] = useState<UserStatsOut | null>(null);
+  const [stats, setStats] = useState<PersonalStatsOut | null>(null);
   // Earned awards + the full catalog so the shelf can render locked tiles.
   // Loaded in parallel — neither blocks first paint of the rest of the page.
   const [badges, setBadges] = useState<UserBadgeOut[]>([]);
@@ -361,9 +366,18 @@ export default function ProfilePage() {
         />
       </div>
 
-      {/* Stats */}
-      <div className="bg-surface-card rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-ink mb-4">Ride stats</h3>
+      {/* Stats dashboard (Phase 4 W5) */}
+      <div className="bg-surface-card rounded-xl p-6 space-y-6">
+        <div className="flex items-baseline justify-between">
+          <h3 className="text-lg font-semibold text-ink">Ride stats</h3>
+          <a
+            href="/leaderboard"
+            className="text-[13px] text-link hover:underline"
+          >
+            Leaderboard →
+          </a>
+        </div>
+
         <div className="grid grid-cols-3 gap-4">
           <div className="text-center">
             <p className="text-3xl font-bold text-accent-blue">{stats?.rides_captained ?? 0}</p>
@@ -378,6 +392,88 @@ export default function ProfilePage() {
             <p className="text-xs text-mute uppercase mt-1">Completed</p>
           </div>
         </div>
+
+        {/* Distance is derived from home -> destination -> home, not measured,
+            so with no home location every figure below is zero. Prompting is
+            the only honest thing to show in that case — a dashboard of zeros
+            reads as "you have ridden nothing". */}
+        {stats && !stats.has_home_location ? (
+          <div className="border-t border-hairline pt-5">
+            <p className="text-[13px] text-accent-yellow">
+              Set your home location above to see distance ridden, streaks and
+              personal bests. Rydr estimates distance from your home to each
+              destination, so it needs a starting point.
+            </p>
+          </div>
+        ) : (
+          stats && (
+            <>
+              <div className="border-t border-hairline pt-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-mute uppercase">This week</p>
+                  <p className="text-xl font-semibold text-ink">
+                    {stats.distance_this_week_km} km
+                  </p>
+                  <p className="text-[11px] text-stone">
+                    {stats.rides_this_week} ride
+                    {stats.rides_this_week === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-mute uppercase">This month</p>
+                  <p className="text-xl font-semibold text-ink">
+                    {stats.distance_this_month_km} km
+                  </p>
+                  <p className="text-[11px] text-stone">
+                    {stats.rides_this_month} ride
+                    {stats.rides_this_month === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-mute uppercase">All time</p>
+                  <p className="text-xl font-semibold text-ink">
+                    {stats.total_distance_km} km
+                  </p>
+                  <p className="text-[11px] text-stone">
+                    {stats.destinations_visited} destination
+                    {stats.destinations_visited === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-mute uppercase">Longest ride</p>
+                  <p className="text-xl font-semibold text-ink">
+                    {stats.longest_ride_km} km
+                  </p>
+                  <p className="text-[11px] text-stone">personal best</p>
+                </div>
+              </div>
+
+              <div className="border-t border-hairline pt-5 flex items-center gap-6">
+                <div>
+                  <p className="text-xs text-mute uppercase">Current streak</p>
+                  <p className="text-xl font-semibold text-accent-orange">
+                    {stats.current_streak_weeks} week
+                    {stats.current_streak_weeks === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-mute uppercase">Best streak</p>
+                  <p className="text-xl font-semibold text-ink">
+                    {stats.longest_streak_weeks} week
+                    {stats.longest_streak_weeks === 1 ? "" : "s"}
+                  </p>
+                </div>
+              </div>
+
+              {/* Says what the number is, once, where it appears. */}
+              <p className="text-[11px] text-stone">
+                Distances are estimated from your home location to each
+                destination and back — Rydr does not record a GPS track.
+                Streaks count consecutive weeks with a completed ride.
+              </p>
+            </>
+          )
+        )}
       </div>
 
       {/* Follow surface */}
