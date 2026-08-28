@@ -95,9 +95,12 @@ export default function DestinationsPage() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12 glow-orange">
-      <div className="flex items-center justify-between gap-3">
+      {/* flex-wrap, and the toggle before the CTA in source order, so a
+          narrow phone wraps rather than pushing the button off-screen —
+          which is what a nowrap CTA in a nowrap row did at 412px. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-ink">Destinations</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {/* List / map toggle. role=tablist so the pair reads as one control
               to a screen reader rather than two unrelated buttons. */}
           <div
@@ -126,7 +129,9 @@ export default function DestinationsPage() {
               href="/destinations/new"
               className="bg-ink text-canvas hover:bg-surface-light text-sm font-medium px-4 py-2 rounded-lg whitespace-nowrap"
             >
-              Add destination
+              {/* Shorter label on phones; the full one from sm up. */}
+              <span className="sm:hidden">Add</span>
+              <span className="hidden sm:inline">Add destination</span>
             </Link>
           )}
         </div>
