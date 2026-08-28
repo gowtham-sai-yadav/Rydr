@@ -14,6 +14,7 @@ import type {
   RidePlanOut,
 } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
+import Avatar from "@/components/ui/Avatar";
 
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
@@ -354,9 +355,11 @@ function RideLogPageInner() {
                   href={routes.user(f.rider.id)}
                   className="flex items-center gap-2 text-sm hover:opacity-80"
                 >
-                  <div className="w-6 h-6 rounded-full bg-ink text-canvas flex items-center justify-center text-[10px] font-bold">
-                    {f.rider.name.charAt(0)}
-                  </div>
+                  <Avatar
+                    name={f.rider.name}
+                    avatarUrl={f.rider.avatar_url}
+                    size="xs"
+                  />
                   <span className="text-ink">{f.rider.name}</span>
                   <span className="text-mute text-xs">— {(f.closest_distance_km * 1000).toFixed(0)}m away</span>
                 </Link>

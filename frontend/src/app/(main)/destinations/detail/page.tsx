@@ -13,6 +13,8 @@ import type {
   RatingOut,
 } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
+import Avatar from "@/components/ui/Avatar";
+import RemoteImage from "@/components/ui/RemoteImage";
 
 
 function DestinationDetailPageInner() {
@@ -86,14 +88,11 @@ function DestinationDetailPageInner() {
     <div className="max-w-4xl mx-auto space-y-6 pb-12 glow-blue">
       {/* Hero */}
       <div className="relative rounded-xl overflow-hidden h-72 bg-surface-card">
-        {destination.hero_media_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={destination.hero_media_url}
-            alt={destination.name}
-            className="w-full h-full object-cover"
-          />
-        )}
+        <RemoteImage
+          src={destination.hero_media_url}
+          name={destination.name}
+          priority
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-gray-950/80 to-transparent" />
         <div className="absolute bottom-4 left-4 right-4">
           <h1 className="text-3xl font-bold text-ink">{destination.name}</h1>
@@ -276,9 +275,11 @@ function DestinationDetailPageInner() {
                 href={routes.user(r.id)}
                 className="flex items-center gap-2 bg-surface-elevated/50 hover:bg-surface-elevated rounded-full pr-3 pl-1 py-1"
               >
-                <div className="w-7 h-7 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
-                  {r.name.charAt(0)}
-                </div>
+                <Avatar
+                  name={r.name}
+                  avatarUrl={r.avatar_url}
+                  size="xs"
+                />
                 <span className="text-ink text-sm">{r.name}</span>
               </Link>
             ))}
@@ -319,9 +320,11 @@ function DestinationDetailPageInner() {
                       href={routes.user(r.user.id)}
                       className="flex items-center gap-2 hover:opacity-80"
                     >
-                      <div className="w-7 h-7 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
-                        {r.user.name.charAt(0)}
-                      </div>
+                      <Avatar
+                        name={r.user.name}
+                        avatarUrl={r.user.avatar_url}
+                        size="xs"
+                      />
                       <span className="text-ink text-sm font-medium">{r.user.name}</span>
                     </Link>
                   )}

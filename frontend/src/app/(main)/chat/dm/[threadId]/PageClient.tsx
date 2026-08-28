@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import type { DirectMessageOut, DMThreadOut } from "@/lib/api.types";
+import Avatar from "@/components/ui/Avatar";
 
 const POLL_INTERVAL_MS = 4000;
 
@@ -113,14 +114,11 @@ export default function DMThreadPage({ params }: { params: Promise<{ threadId: s
         </Link>
         {thread ? (
           <Link href={`/users/${thread.other_user.id}`} className="flex items-center gap-3 hover:opacity-80">
-            <div className="w-9 h-9 rounded-full bg-ink text-canvas flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden">
-              {thread.other_user.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={thread.other_user.avatar_url} alt="" className="w-full h-full object-cover" />
-              ) : (
-                thread.other_user.name.charAt(0)
-              )}
-            </div>
+            <Avatar
+              name={thread.other_user.name}
+              avatarUrl={thread.other_user.avatar_url}
+              size="md"
+            />
             <h1 className="text-ink font-semibold">{thread.other_user.name}</h1>
           </Link>
         ) : (
@@ -147,9 +145,11 @@ export default function DMThreadPage({ params }: { params: Promise<{ threadId: s
                 <div className={`max-w-xs sm:max-w-md ${isMine ? "order-2" : ""}`}>
                   {!isMine && (
                     <div className="flex items-center gap-2 mb-1">
-                      <div className="w-6 h-6 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
-                        {msg.author.name.charAt(0)}
-                      </div>
+                      <Avatar
+                        name={msg.author.name}
+                        avatarUrl={msg.author.avatar_url}
+                        size="xs"
+                      />
                       <span className="text-mute text-xs">{msg.author.name}</span>
                     </div>
                   )}

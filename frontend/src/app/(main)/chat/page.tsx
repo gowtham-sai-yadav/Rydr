@@ -4,6 +4,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ChatGroupOut, DMThreadOut } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
+import Avatar from "@/components/ui/Avatar";
 
 type Tab = "rides" | "messages";
 
@@ -142,14 +143,11 @@ export default function ChatPage() {
           {threads.map((thread) => (
             <Link key={thread.id} href={`/chat/dm/${thread.id}`}>
               <div className="bg-surface-card rounded-xl p-4 hover:bg-surface-elevated hover:ring-1 hover:ring-hairline-strong transition-all cursor-pointer flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-ink text-canvas flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden">
-                  {thread.other_user.avatar_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={thread.other_user.avatar_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    thread.other_user.name.charAt(0)
-                  )}
-                </div>
+                <Avatar
+                  name={thread.other_user.name}
+                  avatarUrl={thread.other_user.avatar_url}
+                  size="lg"
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className={`truncate ${thread.unread_count > 0 ? "text-ink font-semibold" : "text-ink font-medium"}`}>

@@ -24,6 +24,8 @@ import type {
   WeeklyLeagueTier,
 } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
+import Avatar from "@/components/ui/Avatar";
+import RemoteImage from "@/components/ui/RemoteImage";
 
 type Tab = "riders" | "destinations" | "league";
 
@@ -199,14 +201,11 @@ export default function LeaderboardPage() {
                                   : "bg-amber-700"
                             }`}
                           >
-                            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-surface-deep overflow-hidden flex items-center justify-center font-bold text-ink text-sm sm:text-base uppercase">
-                              {entry.avatar_url ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={entry.avatar_url} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                entry.name.charAt(0)
-                              )}
-                            </div>
+                            <Avatar
+                              name={entry.name}
+                              avatarUrl={entry.avatar_url}
+                              size="lg"
+                            />
                             <span
                               className={`absolute -top-2.5 left-1/2 -translate-x-1/2 text-[9px] font-bold px-2 py-0.5 rounded-full border shadow-md ${
                                 isGold
@@ -266,14 +265,11 @@ export default function LeaderboardPage() {
                               <span className="font-display font-semibold text-xs text-mute w-8 text-center shrink-0">
                                 #{entry.rank}
                               </span>
-                              <div className="w-8 h-8 rounded-full bg-surface-deep border border-hairline-strong overflow-hidden flex items-center justify-center text-xs font-bold shrink-0 uppercase text-ink">
-                                {entry.avatar_url ? (
-                                  // eslint-disable-next-line @next/next/no-img-element
-                                  <img src={entry.avatar_url} alt="" className="w-full h-full object-cover" />
-                                ) : (
-                                  entry.name.charAt(0)
-                                )}
-                              </div>
+                              <Avatar
+                                name={entry.name}
+                                avatarUrl={entry.avatar_url}
+                                size="sm"
+                              />
                               <div className="flex-1 min-w-0">
                                 <p className="text-ink text-sm font-semibold truncate">
                                   {entry.name}
@@ -338,12 +334,7 @@ export default function LeaderboardPage() {
                             }`}
                           >
                             <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-surface-deep overflow-hidden flex items-center justify-center font-bold text-ink text-sm sm:text-base uppercase">
-                              {entry.hero_media_url ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={entry.hero_media_url} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                entry.name.charAt(0)
-                              )}
+                              <RemoteImage src={entry.hero_media_url} name={entry.name} />
                             </div>
                             <span
                               className={`absolute -top-2.5 left-1/2 -translate-x-1/2 text-[9px] font-bold px-2 py-0.5 rounded-full border shadow-md ${
@@ -396,12 +387,7 @@ export default function LeaderboardPage() {
                               #{entry.rank}
                             </span>
                             <div className="w-8 h-8 rounded-full bg-surface-deep border border-hairline-strong overflow-hidden flex items-center justify-center text-xs font-bold shrink-0 uppercase text-ink">
-                              {entry.hero_media_url ? (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img src={entry.hero_media_url} alt="" className="w-full h-full object-cover" />
-                              ) : (
-                                entry.name.charAt(0)
-                              )}
+                              <RemoteImage src={entry.hero_media_url} name={entry.name} />
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-ink text-sm font-semibold truncate">{entry.name}</p>
@@ -451,14 +437,11 @@ export default function LeaderboardPage() {
                                 <span className="font-display font-semibold text-xs text-mute w-8 text-center shrink-0">
                                   #{entry.rank}
                                 </span>
-                                <div className="w-8 h-8 rounded-full bg-surface-deep border border-hairline-strong overflow-hidden flex items-center justify-center text-xs font-bold shrink-0 uppercase text-ink">
-                                  {entry.user.avatar_url ? (
-                                    // eslint-disable-next-line @next/next/no-img-element
-                                    <img src={entry.user.avatar_url} alt="" className="w-full h-full object-cover" />
-                                  ) : (
-                                    entry.user.name.charAt(0)
-                                  )}
-                                </div>
+                                <Avatar
+                                  name={entry.user.name}
+                                  avatarUrl={entry.user.avatar_url}
+                                  size="sm"
+                                />
                                 <div className="flex-1 min-w-0">
                                   <p className="text-ink text-sm font-semibold truncate">
                                     {entry.user.name}
