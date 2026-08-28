@@ -3,9 +3,13 @@ import { useState, useEffect, use, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import { useChatSocket } from "@/lib/hooks/useChatSocket";
 import type { ChatGroupOut, ChatMessageOut } from "@/lib/api.types";
 
 
+// Phase 4 W6: the socket carries messages when it is up. This poll is the
+// fallback and only runs while the socket is down, so the interval no longer
+// sets the latency floor for everyone.
 const POLL_INTERVAL_MS = 5000;
 
 
@@ -57,6 +61,30 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
     };
   }, [groupId]);
 
+  /**
+   * Append a message unless it is already on screen.
+   *
+   * Both transports can deliver the same message: the socket echoes your own
+   * send, and a poll that fires in the same window fetches it again by
+   * after_id. De-duplicating on id here is what keeps the transports from
+   * having to know about each other.
+   */
+  const ingest = useCallback((incoming: ChatMessageOut) => {
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === incoming.id)) return prev;
+      const next = [...prev, incoming];
+      lastSeenIdRef.current = next[next.length - 1].id;
+      return next;
+    });
+  }, []);
+
+  const { state: socketState, send: sendOverSocket } = useChatSocket({
+    groupId,
+    enabled: !loading && !!group,
+    onMessage: ingest,
+    onError: setError,
+  });
+
   // Poll forward with after_id every POLL_INTERVAL_MS while page is visible.
   const pollOnce = useCallback(async () => {
     if (!lastSeenIdRef.current) return;
@@ -76,6 +104,9 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
 
   useEffect(() => {
     if (loading) return;
+    // Socket is live — it delivers everything, so the poll would only
+    // duplicate work and load the database for nothing.
+    if (socketState === "open") return;
 
     const tick = () => {
       pollOnce();
@@ -101,7 +132,7 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
       if (pollHandleRef.current) clearTimeout(pollHandleRef.current);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [loading, pollOnce]);
+  }, [loading, pollOnce, socketState]);
 
   useEffect(() => {
     scrollToBottom();
@@ -113,10 +144,21 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
     if (!body || sending) return;
     setSending(true);
     setError("");
+
+    // Over the socket when it is open: the server echoes the persisted
+    // message back, so `ingest` adds it with the real id and timestamp rather
+    // than a locally invented one that would disagree with everyone else's
+    // copy. Falls back to REST, which is also what runs when the socket is
+    // down or unsupported.
+    if (sendOverSocket(body)) {
+      setInput("");
+      setSending(false);
+      return;
+    }
+
     try {
       const msg = await api.sendChatMessage(groupId, body);
-      setMessages((prev) => [...prev, msg]);
-      lastSeenIdRef.current = msg.id;
+      ingest(msg);
       setInput("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send");
@@ -166,7 +208,24 @@ export default function ChatRoomPage({ params }: { params: Promise<{ groupId: st
           earlier short-circuit return. */}
       <div className="card p-4 mb-4 flex items-center justify-between">
         <div>
-          <h1 className="text-ink font-semibold">{group.name}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-ink font-semibold">{group.name}</h1>
+            {/* Shown only when the socket is NOT carrying traffic. A green
+                "connected" dot is noise; what a rider needs to know is that
+                messages may be up to a few seconds late. */}
+            {socketState !== "open" && (
+              <span
+                className="text-[11px] text-mute"
+                title={
+                  socketState === "connecting"
+                    ? "Connecting for live updates"
+                    : "Live updates unavailable — checking every few seconds"
+                }
+              >
+                {socketState === "connecting" ? "connecting…" : "delayed"}
+              </span>
+            )}
+          </div>
           {ride && (
             <p className="text-mute text-xs">
               {ride.destination_name && `${ride.destination_name} · `}
