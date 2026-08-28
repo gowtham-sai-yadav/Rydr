@@ -41,6 +41,12 @@ class User(Base):
     # follows land instantly.
     is_private = Column(Boolean, nullable=False, server_default="false", default=False)
 
+    # Phase 4 W7 — moderation. A plain flag rather than a role table: the
+    # product has exactly two roles (rider, admin) and no plan for more, so a
+    # roles/permissions schema would be structure without a use. Revisit if a
+    # third role appears.
+    is_admin = Column(Boolean, nullable=False, server_default="false", default=False)
+
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True),
@@ -113,7 +119,14 @@ class User(Base):
         "UserBadge", back_populates="user", cascade="all, delete-orphan"
     )
 
-    # Notifications
+    # Feed posts (Phase 4 W4).
+    posts = relationship(
+        "Post", back_populates="author", cascade="all, delete-orphan"
+    )
+
+    # Notifications (Phase 4 W5). foreign_keys is required because
+    # Notification has two FKs to users — recipient and actor — and the
+    # feed relationship is the recipient one.
     notifications = relationship(
         "Notification",
         foreign_keys="Notification.user_id",

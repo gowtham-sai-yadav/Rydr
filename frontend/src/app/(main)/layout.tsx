@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import Navbar from "@/components/layout/Navbar";
 import BottomNav from "@/components/layout/BottomNav";
+import NativeShell from "@/components/native/NativeShell";
 
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
@@ -28,6 +29,10 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-canvas">
+      {/* Native-only behaviour: splash dismissal, status bar, hardware back
+          button and push registration. Renders nothing, and every call inside
+          is guarded, so it is inert in a browser. */}
+      <NativeShell />
       <Navbar onSignout={() => setShowSignoutModal(true)} />
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 md:pb-12">
         {children}

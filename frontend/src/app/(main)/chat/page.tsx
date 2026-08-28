@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ChatGroupOut, DMThreadOut } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 type Tab = "rides" | "messages";
 
@@ -95,7 +96,7 @@ export default function ChatPage() {
         ) : (
           <div className="space-y-2">
             {groups.map((group) => (
-              <Link key={group.id} href={`/chat/${group.id}`}>
+              <Link key={group.id} href={routes.chatRoom(group.id)}>
                 <div className="bg-surface-card rounded-xl p-4 hover:bg-surface-elevated hover:ring-1 hover:ring-hairline-strong transition-all cursor-pointer flex items-center gap-4">
                   <div className="w-12 h-12 rounded-full bg-surface-elevated flex items-center justify-center shrink-0">
                     <svg className="w-6 h-6 text-accent-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">

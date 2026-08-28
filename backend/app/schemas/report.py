@@ -1,4 +1,4 @@
-"""Pydantic schemas for Report (moderation)."""
+"""Moderation report schemas — Phase 4 W7."""
 from __future__ import annotations
 
 from datetime import datetime
@@ -7,32 +7,43 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.models.report import ReportStatus, ReportTargetType
+from app.models.report import ReportedContentType, ReportReason, ReportStatus
+from app.schemas.user import UserBrief
 
 
 class ReportCreate(BaseModel):
-    target_type: ReportTargetType
-    target_id: UUID
-    reason: str = Field(min_length=1, max_length=1000)
-
-
-class ReportStatusUpdate(BaseModel):
-    status: ReportStatus
+    content_type: ReportedContentType
+    content_id: UUID
+    reason: ReportReason
+    details: Optional[str] = Field(default=None, max_length=2000)
 
 
 class ReportOut(BaseModel):
     id: UUID
-    reporter_id: UUID
-    target_type: ReportTargetType
-    target_id: UUID
+    content_type: str
+    content_id: UUID
     reason: str
-    status: ReportStatus
-    reviewed_by: Optional[UUID] = None
-    reviewed_at: Optional[datetime] = None
+    details: Optional[str] = None
+    status: str
     created_at: datetime
+    resolved_at: Optional[datetime] = None
+    resolution_note: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class AdminReportOut(ReportOut):
+    """Admin view — adds who reported it, who resolved it, and how many
+    other people reported the same content.
+
+    ``report_count`` is what separates one annoyed rider from a real problem,
+    so it is on the queue row rather than requiring a drill-down.
+    """
+
+    reporter: Optional[UserBrief] = None
+    resolver: Optional[UserBrief] = None
+    report_count: int = 1
 
 
 class ReportListResponse(BaseModel):
@@ -40,3 +51,16 @@ class ReportListResponse(BaseModel):
     total: int
     page: int
     limit: int
+
+
+class AdminReportListResponse(BaseModel):
+    reports: List[AdminReportOut] = []
+    total: int
+    open_count: int
+    page: int
+    limit: int
+
+
+class ReportResolve(BaseModel):
+    status: ReportStatus
+    resolution_note: Optional[str] = Field(default=None, max_length=2000)

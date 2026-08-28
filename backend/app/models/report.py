@@ -1,9 +1,24 @@
-"""Report - user-filed moderation reports against any content type.
+"""Content reports — Phase 4 W7 moderation.
 
-``target_type`` + ``target_id`` is a loose polymorphic reference (no FK -
-the target tables don't share a common parent) mirroring how ``Notification``
-handles multiple optional target kinds, except here only one type applies
-per row so a plain enum + UUID pair is enough.
+The plan asks for "basic content moderation / admin reporting tools". This is
+the report queue: any authenticated rider can flag a piece of content, and an
+admin works the queue.
+
+Polymorphic target
+------------------
+Reports point at posts, comments, destinations, ride plans, chat messages and
+users, so the target is a ``(content_type, content_id)`` pair rather than six
+nullable foreign keys — the same tradeoff, for the same reason, as
+``Notification``. The consequence is the same too: deleting reported content
+does not cascade the report away. Here that is a feature rather than a cost,
+because the moderation record should outlive the content it was about. An
+admin needs to see that a post was reported and removed, and a report row that
+vanished along with the post would erase the audit trail.
+
+Status lifecycle
+----------------
+``open -> reviewing -> actioned | dismissed``. Terminal states record who
+resolved it and when, so "who removed this and why" is answerable later.
 """
 from __future__ import annotations
 
@@ -13,9 +28,11 @@ import uuid
 from sqlalchemy import (
     Column,
     DateTime,
-    Enum as SQLEnum,
     ForeignKey,
+    Index,
     String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -24,48 +41,81 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 
-class ReportTargetType(str, enum.Enum):
+class ReportedContentType(str, enum.Enum):
     post = "post"
-    comment = "comment"
-    rating = "rating"
+    post_comment = "post_comment"
+    destination = "destination"
+    ride_plan = "ride_plan"
     chat_message = "chat_message"
     user = "user"
 
 
+class ReportReason(str, enum.Enum):
+    spam = "spam"
+    harassment = "harassment"
+    misinformation = "misinformation"
+    unsafe = "unsafe"
+    inappropriate = "inappropriate"
+    other = "other"
+
+
 class ReportStatus(str, enum.Enum):
     open = "open"
-    reviewed = "reviewed"
-    dismissed = "dismissed"
+    reviewing = "reviewing"
     actioned = "actioned"
+    dismissed = "dismissed"
 
 
 class Report(Base):
     __tablename__ = "reports"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
     reporter_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
-    target_type = Column(
-        SQLEnum(ReportTargetType, name="report_target_type"),
-        nullable=False,
-    )
-    target_id = Column(UUID(as_uuid=True), nullable=False)
-    reason = Column(String(1000), nullable=False)
-    status = Column(
-        SQLEnum(ReportStatus, name="report_status"),
-        nullable=False,
-        default=ReportStatus.open,
-    )
-    reviewed_by = Column(
+
+    content_type = Column(String(20), nullable=False)
+    content_id = Column(UUID(as_uuid=True), nullable=False)
+
+    reason = Column(String(20), nullable=False)
+    details = Column(Text, nullable=True)
+
+    status = Column(String(20), nullable=False, default=ReportStatus.open.value)
+
+    # SET NULL rather than CASCADE: an admin leaving the project must not
+    # delete the record of decisions they made.
+    resolved_by_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
-    reviewed_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    resolution_note = Column(Text, nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    created_at = Column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        # One report per person per piece of content. Without this, a single
+        # user could inflate a report count by submitting repeatedly, and the
+        # admin queue would fill with duplicates of the same complaint. Users
+        # who want to add information amend their existing report.
+        UniqueConstraint(
+            "reporter_id",
+            "content_type",
+            "content_id",
+            name="uq_report_reporter_content",
+        ),
+        # The admin queue: WHERE status = 'open' ORDER BY created_at.
+        Index("idx_reports_status_created", "status", "created_at"),
+        # "How many people reported this thing?" — the signal that separates
+        # one annoyed rider from a genuine problem.
+        Index("idx_reports_content", "content_type", "content_id"),
+    )
 
     reporter = relationship("User", foreign_keys=[reporter_id])
-    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    resolver = relationship("User", foreign_keys=[resolved_by_id])

@@ -14,6 +14,7 @@ M6 (2026-05-28) adds:
 """
 from datetime import date, datetime, timezone
 from typing import Optional
+from dataclasses import asdict
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -30,7 +31,7 @@ from app.models.ride import (
     RidePlanStatus,
 )
 from app.models.social import Follow, FollowStatus
-from app.models.notification import NotificationType
+from app.models.notification import EntityType, NotificationType
 from app.models.badge import UserBadge
 from app.models.destination import Destination
 from app.models.push_token import PushToken
@@ -40,18 +41,19 @@ from app.models.user import User
 from app.schemas.personal_records import BestEffortListResponse, BestEffortOut, PersonalRecordsOut
 from app.schemas.year_in_rydr import TopDestinationOut, YearInRydrOut
 from app.schemas.ride_log import TimelineEntryOut, TimelineResponse
+from app.schemas.leaderboard import PersonalStatsOut
 from app.schemas.social import FollowEdgeOut, FollowListResponse, FollowOut
-from app.services.notification_service import create_notification as _notify
 from app.schemas.user import (
     BikeOut,
     BikeUpdate,
     PushTokenRegister,
     UserBrief,
     UserOut,
-    UserStatsOut,
     UserUpdate,
 )
 from app.services.personal_records import compute_personal_records
+from app.services import notifications as notification_service
+from app.services import stats
 from app.services.user_view import load_user_with_social as _load_user_with_social
 
 router = APIRouter()
@@ -157,30 +159,24 @@ def mark_bike_serviced(
     return bike
 
 
-@router.get("/me/stats", response_model=UserStatsOut)
-def get_stats(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
-    captained = db.query(RidePlan).filter(RidePlan.captain_id == user.id).count()
-    joined = (
-        db.query(RidePlanParticipant)
-        .filter(
-            RidePlanParticipant.user_id == user.id,
-            RidePlanParticipant.status == ParticipantStatus.approved,
-        )
-        .count()
-    )
-    completed = (
-        db.query(RidePlan)
-        .filter(
-            RidePlan.captain_id == user.id,
-            RidePlan.status == RidePlanStatus.completed,
-        )
-        .count()
-    )
-    return UserStatsOut(
-        rides_captained=captained,
-        rides_joined=joined,
-        rides_completed=completed,
-    )
+@router.get("/me/stats", response_model=PersonalStatsOut)
+def get_stats(
+    db: Session = Depends(get_db), user: User = Depends(get_current_user)
+) -> PersonalStatsOut:
+    """Personal stats dashboard — Phase 4 W5.
+
+    Widened from the three ride counters M3 shipped to the full dashboard the
+    Phase 4 plan asks for (§1.4): weekly and monthly distance, ride streaks,
+    personal bests, and destinations visited. The three original fields keep
+    their names and meanings, so existing clients are unaffected.
+
+    One correction is folded in. The old ``rides_completed`` counted rides the
+    user *captained* that reached completed status, which meant a rider who
+    joined thirty rides and led none had a completed count of zero. It now
+    counts completed rides this user actually logged, captained or not, which
+    is what the label always claimed.
+    """
+    return PersonalStatsOut(**asdict(stats.personal_stats(db, user)))
 
 
 @router.get("/{user_id}/visited-destinations")
@@ -452,6 +448,16 @@ def follow_user(
     # (e.g. the account used to be private) upgrades on the next call.
     # Private target: DO NOTHING - a second request while one is already
     # pending/accepted shouldn't reset anything or re-notify.
+    # DO UPDATE always returns a row via RETURNING, even when the row already
+    # existed and nothing changed (re-following a public account), so `row`
+    # alone can't tell a genuinely new edge from a repeat. Check first.
+    already_existed = (
+        db.query(Follow.follower_id)
+        .filter(Follow.follower_id == user.id, Follow.followed_id == user_id)
+        .first()
+        is not None
+    )
+
     base_insert = pg_insert(Follow).values(
         follower_id=user.id, followed_id=user_id, status=target_status
     )
@@ -468,15 +474,35 @@ def follow_user(
     row = db.execute(stmt).first()
 
     if row is not None and row.status == FollowStatus.pending:
-        _notify(
+        notification_service.safe_notify(
             db,
             user_id=user_id,
             type=NotificationType.follow_requested,
-            message=f"{user.name} requested to follow you",
+            title=f"{user.name} requested to follow you",
             actor_id=user.id,
+            entity_type=EntityType.user,
+            entity_id=user.id,
         )
 
     db.commit()
+
+    # Only notify on a genuinely new edge — `already_existed` (checked before
+    # the upsert) catches the DO UPDATE re-follow case that `row is not None`
+    # alone can't, since DO UPDATE always returns a row via RETURNING even
+    # when it changed nothing. And only for an *accepted* edge — a pending
+    # request into a private account already got its own follow_requested
+    # notification above; firing new_follower too would double-notify the
+    # same event.
+    if not already_existed and row is not None and row.status == FollowStatus.accepted:
+        notification_service.safe_notify_commit(
+            db,
+            user_id=user_id,
+            type=NotificationType.new_follower,
+            title=f"{user.name} started following you",
+            actor_id=user.id,
+            entity_type=EntityType.user,
+            entity_id=user.id,
+        )
 
     if row is None:
         follow = (
@@ -575,12 +601,14 @@ def accept_follow_request(
         raise HTTPException(status_code=404, detail="No pending follow request from this user")
 
     follow.status = FollowStatus.accepted
-    _notify(
+    notification_service.safe_notify(
         db,
         user_id=follower_id,
         type=NotificationType.follow_accepted,
-        message=f"{user.name} accepted your follow request",
+        title=f"{user.name} accepted your follow request",
         actor_id=user.id,
+        entity_type=EntityType.user,
+        entity_id=user.id,
     )
     db.commit()
     db.refresh(follow)

@@ -1,166 +1,292 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
-import { useAuth } from "@/context/AuthContext";
-import { api } from "@/lib/api";
-import type { ReportOut, ReportStatus } from "@/lib/api.types";
+/**
+ * Moderation queue — Phase 4 W7.
+ *
+ * Admin-only. The API returns 403 for non-admins rather than 404, because the
+ * admin routes are a fixed documented surface whose existence is not secret,
+ * so this page can say plainly that an admin account is needed instead of
+ * pretending the page does not exist.
+ */
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
-const STATUS_FILTERS: Array<{ value: ReportStatus | "all"; label: string }> = [
-  { value: "all", label: "All" },
+import { api } from "@/lib/api";
+import type {
+  AdminReportOut,
+  ReportStatus,
+  ReportedContentType,
+} from "@/lib/api.types";
+import { routes } from "@/lib/routes";
+
+const STATUSES: { value: ReportStatus | "all"; label: string }[] = [
   { value: "open", label: "Open" },
-  { value: "reviewed", label: "Reviewed" },
+  { value: "reviewing", label: "Reviewing" },
   { value: "actioned", label: "Actioned" },
   { value: "dismissed", label: "Dismissed" },
+  { value: "all", label: "All" },
 ];
 
-const STATUS_OPTIONS: ReportStatus[] = ["open", "reviewed", "actioned", "dismissed"];
+/** Where an admin goes to look at the thing that was reported. */
+function contentHref(type: ReportedContentType, id: string): string | null {
+  switch (type) {
+    case "destination":
+      return routes.destination(id);
+    case "ride_plan":
+      return routes.ride(id);
+    case "user":
+      return routes.user(id);
+    case "post":
+    case "post_comment":
+      // No single-post route yet; the feed is the closest place to look.
+      return "/feed";
+    case "chat_message":
+      // Chat is scoped to a ride the admin may not be a member of, so there
+      // is nothing safe to link to.
+      return null;
+    default:
+      return null;
+  }
+}
 
-const statusPillColor: Record<string, string> = {
-  open: "bg-accent-red/15 text-accent-red",
-  reviewed: "bg-accent-yellow/15 text-accent-yellow",
+const STATUS_STYLES: Record<ReportStatus, string> = {
+  open: "bg-accent-orange/15 text-accent-orange",
+  reviewing: "bg-accent-blue/15 text-accent-blue",
   actioned: "bg-accent-green/15 text-accent-green",
   dismissed: "bg-surface-elevated text-mute",
 };
 
 export default function AdminReportsPage() {
-  const { user, loading: authLoading } = useAuth();
-
-  const [reports, setReports] = useState<ReportOut[]>([]);
-  const [statusFilter, setStatusFilter] = useState<ReportStatus | "all">("open");
+  const [reports, setReports] = useState<AdminReportOut[]>([]);
+  const [openCount, setOpenCount] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [filter, setFilter] = useState<ReportStatus | "all">("open");
   const [loading, setLoading] = useState(true);
+  const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState("");
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const isAdmin = user?.is_admin === true;
-
-  const load = useCallback(async () => {
+  const load = useCallback(async (status: ReportStatus | "all") => {
     setLoading(true);
     setError("");
     try {
-      const res = await api.listReports({
-        status: statusFilter === "all" ? undefined : statusFilter,
-        limit: 100,
+      const res = await api.listReportQueue({
+        status: status === "all" ? undefined : status,
+        limit: 50,
       });
       setReports(res.reports);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load reports");
+      setOpenCount(res.open_count);
+      setTotal(res.total);
+      setForbidden(false);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not load the queue";
+      // The API's 403 detail names the requirement; surfacing it verbatim
+      // beats inventing our own wording.
+      if (/administrator/i.test(message)) setForbidden(true);
+      else setError(message);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, []);
 
   useEffect(() => {
-    if (isAdmin) load();
-  }, [isAdmin, load]);
+    void load(filter);
+  }, [filter, load]);
 
-  const changeStatus = async (id: string, status: ReportStatus) => {
-    setUpdatingId(id);
-    setError("");
+  async function resolve(report: AdminReportOut, status: ReportStatus) {
+    setBusyId(report.id);
     try {
-      const updated = await api.updateReport(id, { status });
-      setReports((prev) => prev.map((r) => (r.id === id ? updated : r)));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update report");
+      await api.resolveReport(report.id, {
+        status,
+        resolution_note: notes[report.id]?.trim() || null,
+      });
+      // Refetch rather than patching in place: resolving changes open_count
+      // and can move the row out of the current filter.
+      await load(filter);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update the report");
     } finally {
-      setUpdatingId(null);
+      setBusyId(null);
     }
-  };
-
-  if (authLoading) {
-    return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
-      </div>
-    );
   }
 
-  // is_admin is being added to the User model in parallel — treat
-  // missing/false as non-admin rather than trusting an absent field.
-  if (!isAdmin) {
+  if (forbidden) {
     return (
       <div className="max-w-md mx-auto text-center py-16 space-y-3">
-        <h2 className="heading-md">Not authorized</h2>
-        <p className="text-mute text-sm">
-          This page is restricted to Rydr admins.
+        <h1 className="text-xl font-semibold text-ink">Admins only</h1>
+        <p className="text-[13px] text-mute">
+          This is the moderation queue. Your account does not have
+          administrator access.
+        </p>
+        <p className="text-[12px] text-stone">
+          Admin is granted from the server with
+          <code className="mx-1 px-1 rounded bg-surface-card">
+            scripts/grant_admin.py
+          </code>
+          — there is deliberately no way to grant it through the app.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 pb-12">
-      <h1 className="display-lg">Reports</h1>
+    <div className="max-w-3xl mx-auto space-y-5 pb-12">
+      <div className="flex items-baseline justify-between gap-3">
+        <h1 className="text-2xl font-bold text-ink">Moderation</h1>
+        <span className="text-[13px] text-mute">
+          {openCount} open
+        </span>
+      </div>
 
-      <div className="flex flex-wrap gap-2">
-        {STATUS_FILTERS.map((f) => (
+      <div className="flex flex-wrap gap-1.5">
+        {STATUSES.map((s) => (
           <button
-            key={f.value}
-            onClick={() => setStatusFilter(f.value)}
-            className={`chip ${statusFilter === f.value ? "chip-active" : ""}`}
+            key={s.value}
+            onClick={() => setFilter(s.value)}
+            aria-pressed={filter === s.value}
+            className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
+              filter === s.value
+                ? "bg-surface-elevated text-ink"
+                : "bg-surface-card text-charcoal hover:text-ink"
+            }`}
           >
-            {f.label}
+            {s.label}
           </button>
         ))}
       </div>
 
       {error && (
-        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg text-sm">
+        <p className="text-[13px] text-accent-red bg-surface-card rounded-lg p-3">
           {error}
+        </p>
+      )}
+
+      {loading && (
+        <p className="text-[13px] text-mute bg-surface-card rounded-xl p-6" role="status">
+          Loading…
+        </p>
+      )}
+
+      {!loading && reports.length === 0 && (
+        <div className="bg-surface-card rounded-xl p-8 text-center">
+          <p className="text-ink font-medium">Nothing to review</p>
+          <p className="text-[13px] text-mute mt-1">
+            {filter === "open"
+              ? "The queue is empty."
+              : `No ${filter} reports.`}
+          </p>
         </div>
       )}
 
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
-        </div>
-      ) : reports.length === 0 ? (
-        <p className="text-mute text-center py-12">No reports match this filter.</p>
-      ) : (
-        <div className="card-bordered p-0 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-hairline text-left">
-                <th className="px-4 py-3 label-eyebrow">Reporter</th>
-                <th className="px-4 py-3 label-eyebrow">Target</th>
-                <th className="px-4 py-3 label-eyebrow">Reason</th>
-                <th className="px-4 py-3 label-eyebrow">Status</th>
-                <th className="px-4 py-3 label-eyebrow">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reports.map((r) => (
-                <tr key={r.id} className="border-b border-hairline last:border-0 align-top">
-                  <td className="px-4 py-3 text-ink whitespace-nowrap">
-                    <span className="mono text-xs text-stone">{r.reporter_id.slice(0, 8)}</span>
-                  </td>
-                  <td className="px-4 py-3 text-body whitespace-nowrap">
-                    <span className="capitalize">{r.target_type}</span>{" "}
-                    <span className="mono text-xs text-stone">{r.target_id.slice(0, 8)}</span>
-                  </td>
-                  <td className="px-4 py-3 text-body max-w-xs">{r.reason}</td>
-                  <td className="px-4 py-3">
-                    <span className={`pill capitalize ${statusPillColor[r.status] ?? ""}`}>
-                      {r.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={r.status}
-                      onChange={(e) => changeStatus(r.id, e.target.value as ReportStatus)}
-                      disabled={updatingId === r.id}
-                      className="select text-xs py-1.5"
+      {reports.map((r) => {
+        const href = contentHref(r.content_type, r.content_id);
+        const terminal = r.status === "actioned" || r.status === "dismissed";
+        return (
+          <article key={r.id} className="bg-surface-card rounded-xl p-4 space-y-3">
+            <header className="flex flex-wrap items-center gap-2">
+              <span
+                className={`px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase ${STATUS_STYLES[r.status]}`}
+              >
+                {r.status}
+              </span>
+              <span className="text-[13px] text-ink font-medium capitalize">
+                {r.content_type.replace(/_/g, " ")}
+              </span>
+              <span className="text-[13px] text-mute">· {r.reason}</span>
+              {/* How many distinct people reported it — the signal that
+                  separates one annoyed rider from a real problem. */}
+              {r.report_count > 1 && (
+                <span className="px-2 py-0.5 rounded-full bg-accent-red/15 text-accent-red text-[11px] font-semibold">
+                  {r.report_count} reports
+                </span>
+              )}
+              <span className="text-[12px] text-stone ml-auto">
+                {new Date(r.created_at).toLocaleString()}
+              </span>
+            </header>
+
+            {r.details && (
+              <p className="text-[13px] text-body whitespace-pre-wrap">
+                {r.details}
+              </p>
+            )}
+
+            <p className="text-[12px] text-mute">
+              Reported by {r.reporter?.name ?? "unknown"}
+              {r.resolver && ` · resolved by ${r.resolver.name}`}
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {href ? (
+                <Link
+                  href={href}
+                  className="text-[13px] text-link hover:underline"
+                >
+                  View content →
+                </Link>
+              ) : (
+                <span className="text-[12px] text-stone">
+                  No direct link for this content type
+                </span>
+              )}
+              <code className="text-[11px] text-stone">{r.content_id}</code>
+            </div>
+
+            {!terminal && (
+              <div className="pt-2 border-t border-hairline space-y-2">
+                <input
+                  value={notes[r.id] ?? ""}
+                  onChange={(e) =>
+                    setNotes((n) => ({ ...n, [r.id]: e.target.value }))
+                  }
+                  placeholder="What did you do? (shown to the reporter)"
+                  maxLength={2000}
+                  className="w-full bg-surface-elevated border border-hairline rounded-lg px-3 py-1.5 text-[13px] text-ink placeholder:text-stone"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => resolve(r, "actioned")}
+                    disabled={busyId === r.id}
+                    className="bg-accent-green/90 hover:bg-accent-green text-ink text-[12px] font-medium px-3 py-1.5 rounded-lg disabled:opacity-40"
+                  >
+                    Actioned
+                  </button>
+                  <button
+                    onClick={() => resolve(r, "dismissed")}
+                    disabled={busyId === r.id}
+                    className="bg-surface-elevated hover:bg-surface-light/10 text-ink text-[12px] font-medium px-3 py-1.5 rounded-lg disabled:opacity-40"
+                  >
+                    Dismiss
+                  </button>
+                  {r.status === "open" && (
+                    <button
+                      onClick={() => resolve(r, "reviewing")}
+                      disabled={busyId === r.id}
+                      className="bg-accent-blue/20 text-accent-blue text-[12px] font-medium px-3 py-1.5 rounded-lg disabled:opacity-40"
                     >
-                      {STATUS_OPTIONS.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                      Mark reviewing
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-stone">
+                  Actioning or dismissing notifies the reporter.
+                </p>
+              </div>
+            )}
+
+            {terminal && r.resolution_note && (
+              <p className="text-[12px] text-mute pt-2 border-t border-hairline">
+                Resolution: {r.resolution_note}
+              </p>
+            )}
+          </article>
+        );
+      })}
+
+      {total > reports.length && (
+        <p className="text-[12px] text-stone text-center">
+          Showing {reports.length} of {total}.
+        </p>
       )}
     </div>
   );

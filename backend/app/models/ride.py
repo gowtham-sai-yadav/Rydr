@@ -63,9 +63,9 @@ class ParticipantStatus(str, enum.Enum):
     approved = "approved"
     rejected = "rejected"
     left = "left"
-    # Added for capacity hardening: a join request made while the ride is
-    # already full lands here instead of "pending" so the captain can tell
-    # "waiting for a spot" apart from "needs my review."
+    # Phase 4 W6: captain has said yes but the ride is at ``max_riders``.
+    # Promoted to ``approved`` automatically by
+    # ``services/ride_capacity.promote_from_waitlist`` when a seat frees.
     waitlisted = "waitlisted"
 
 

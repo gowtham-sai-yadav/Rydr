@@ -155,6 +155,11 @@ class RidePlanOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     chat_group_id: Optional[UUID] = None
+    # Phase 4 W6 capacity signals. ``participant_count`` is the approved
+    # count (seats taken); these two save the client from having to know
+    # that max_riders includes the captain in order to render "2 seats left".
+    seats_available: int = 0
+    waitlist_count: int = 0
     destination: Optional[DestinationSummary] = None
     captain: Optional[UserBrief] = None
     participants: List[RidePlanParticipantOut] = []
@@ -167,10 +172,21 @@ class ParticipantStatusUpdate(BaseModel):
     @field_validator("status")
     @classmethod
     def _captain_actions_only(cls, v: ParticipantStatus) -> ParticipantStatus:
-        # The captain-facing update endpoint can only set approved/rejected.
-        # `pending` is the join state; `left` is the participant-facing leave.
-        if v not in {ParticipantStatus.approved, ParticipantStatus.rejected}:
+        # The captain-facing update endpoint can only set approved/rejected/
+        # waitlisted. `pending` is the join state; `left` is the
+        # participant-facing leave.
+        #
+        # Phase 4 W6 added `waitlisted` so a captain can accept a rider into
+        # the queue of a full ride deliberately. Approving into a full ride is
+        # a 409 rather than a silent downgrade to waitlisted, so the captain
+        # always knows which of the two happened.
+        if v not in {
+            ParticipantStatus.approved,
+            ParticipantStatus.rejected,
+            ParticipantStatus.waitlisted,
+        }:
             raise ValueError(
-                "captain can only set status to 'approved' or 'rejected'"
+                "captain can only set status to 'approved', 'rejected' "
+                "or 'waitlisted'"
             )
         return v

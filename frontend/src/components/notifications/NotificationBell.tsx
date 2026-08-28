@@ -1,155 +1,258 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from "react";
+/**
+ * Notification bell and dropdown — Phase 4 W5.
+ *
+ * Polls the unread count rather than holding a socket open. The chat
+ * WebSocket exists because chat needs sub-second delivery; a notification
+ * badge does not, and a second persistent connection per tab would cost the
+ * single-worker backend real capacity for a number that can be a minute
+ * stale without anyone noticing.
+ */
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+
 import { api } from "@/lib/api";
 import type { NotificationOut } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
-const POLL_INTERVAL_MS = 30000;
+const POLL_MS = 60_000;
 
-function timeAgo(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+/** Where a notification should take you, by what it points at. */
+function targetHref(n: NotificationOut): string | null {
+  if (!n.entity_id) return null;
+  switch (n.entity_type) {
+    case "ride":
+      return routes.ride(n.entity_id);
+    case "chat_group":
+      return routes.chatRoom(n.entity_id);
+    case "destination":
+      return routes.destination(n.entity_id);
+    case "user":
+      return routes.user(n.entity_id);
+    case "badge":
+      return "/profile";
+    case "post":
+      // No single-post route yet; the feed is the closest useful place.
+      return "/feed";
+    case "report":
+      return null;
+    default:
+      return null;
+  }
 }
 
-export function NotificationBell() {
-  const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationOut[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const containerRef = useRef<HTMLDivElement>(null);
+function relativeTime(iso: string): string {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+}
 
-  const refresh = useCallback(async () => {
+export default function NotificationBell() {
+  const [unread, setUnread] = useState(0);
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<NotificationOut[]>([]);
+  const [loading, setLoading] = useState(false);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+
+  const refreshCount = useCallback(async () => {
     try {
-      const res = await api.getNotifications({ limit: 20 });
-      setNotifications(res.notifications);
-      setUnreadCount(res.unread_count);
-      setError("");
+      const res = await api.getUnreadCount();
+      setUnread(res.unread);
     } catch {
-      // Silent on background polls — the badge just keeps its last known
-      // value rather than flashing an error toast on every tick.
+      // A failed poll is not worth telling the user about; the next one may
+      // succeed, and a badge that shows an error is worse than a stale badge.
     }
   }, []);
 
   useEffect(() => {
-    refresh();
-    const handle = setInterval(refresh, POLL_INTERVAL_MS);
-    return () => clearInterval(handle);
-  }, [refresh]);
+    void refreshCount();
+    const timer = setInterval(refreshCount, POLL_MS);
+    return () => clearInterval(timer);
+  }, [refreshCount]);
 
+  // Close on outside click and on Escape — a dropdown that only closes by
+  // clicking the trigger again is a trap on mobile.
   useEffect(() => {
-    const onClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+    if (!open) return;
+    function onPointer(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointer);
+      document.removeEventListener("keydown", onKey);
     };
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
+  }, [open]);
 
-  const togglePanel = async () => {
+  async function toggle() {
     const next = !open;
     setOpen(next);
-    if (next) {
-      setLoading(true);
-      try {
-        await refresh();
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load notifications");
-      } finally {
-        setLoading(false);
-      }
-    }
-  };
-
-  const markRead = async (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id && !n.read_at ? { ...n, read_at: new Date().toISOString() } : n)),
-    );
-    setUnreadCount((c) => Math.max(0, c - 1));
+    if (!next) return;
+    setLoading(true);
     try {
-      await api.markNotificationRead(id);
+      const res = await api.listNotifications({ limit: 15 });
+      setItems(res.notifications);
+      setUnread(res.unread);
     } catch {
-      // Best-effort — a stale unread badge self-corrects on the next poll.
+      setItems([]);
+    } finally {
+      setLoading(false);
     }
-  };
+  }
 
-  const markAllRead = async () => {
-    setNotifications((prev) => prev.map((n) => (n.read_at ? n : { ...n, read_at: new Date().toISOString() })));
-    setUnreadCount(0);
+  async function markRead(n: NotificationOut) {
+    if (n.read_at) return;
+    // Optimistic: the row dims immediately. Opening a notification and
+    // watching it stay bold for a round trip reads as a failed tap.
+    setItems((list) =>
+      list.map((x) =>
+        x.id === n.id ? { ...x, read_at: new Date().toISOString() } : x
+      )
+    );
+    setUnread((u) => Math.max(0, u - 1));
+    try {
+      await api.markNotificationRead(n.id);
+    } catch {
+      void refreshCount();
+    }
+  }
+
+  async function markAll() {
+    setItems((list) =>
+      list.map((x) => ({ ...x, read_at: x.read_at ?? new Date().toISOString() }))
+    );
+    setUnread(0);
     try {
       await api.markAllNotificationsRead();
     } catch {
-      // Same as above — next poll reconciles.
+      void refreshCount();
     }
-  };
+  }
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div ref={wrapRef} className="relative">
       <button
-        type="button"
-        onClick={togglePanel}
-        aria-label="Notifications"
-        className="relative w-9 h-9 flex items-center justify-center rounded-full hover:bg-surface-elevated transition-colors text-charcoal hover:text-ink"
+        onClick={toggle}
+        aria-label={
+          unread > 0 ? `Notifications, ${unread} unread` : "Notifications"
+        }
+        aria-expanded={open}
+        className="relative p-1.5 text-charcoal hover:text-ink transition-colors"
       >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+        <svg
+          className="w-5 h-5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.8}
+          viewBox="0 0 24 24"
+          aria-hidden
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+          />
         </svg>
-        {unreadCount > 0 && (
-          <span className="absolute top-0.5 right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-accent-red text-ink text-[10px] leading-4 font-semibold flex items-center justify-center">
-            {unreadCount > 99 ? "99+" : unreadCount}
+        {unread > 0 && (
+          <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-accent-orange text-canvas text-[10px] font-semibold flex items-center justify-center">
+            {/* Capped: a three-digit badge blows out the header layout. */}
+            {unread > 99 ? "99+" : unread}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 max-w-[90vw] card-bordered p-0 overflow-hidden z-50">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-hairline">
-            <p className="text-sm font-medium text-ink">Notifications</p>
-            {unreadCount > 0 && (
+        <div className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-2rem)] bg-surface-elevated border border-hairline rounded-xl shadow-xl overflow-hidden z-50">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-hairline">
+            <span className="text-[13px] font-semibold text-ink">
+              Notifications
+            </span>
+            {unread > 0 && (
               <button
-                type="button"
-                onClick={markAllRead}
-                className="text-xs text-accent-blue hover:text-accent-blue"
+                onClick={markAll}
+                className="text-[12px] text-link hover:underline"
               >
                 Mark all read
               </button>
             )}
           </div>
-          <div className="max-h-96 overflow-y-auto">
-            {loading ? (
-              <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-ink/20 border-t-ink" />
-              </div>
-            ) : error ? (
-              <p className="text-accent-red text-xs px-4 py-4">{error}</p>
-            ) : notifications.length === 0 ? (
-              <p className="caption px-4 py-6 text-center">No notifications yet.</p>
-            ) : (
-              notifications.map((n) => (
-                <button
-                  key={n.id}
-                  type="button"
-                  onClick={() => !n.read_at && markRead(n.id)}
-                  className={`w-full text-left px-4 py-3 border-b border-hairline last:border-0 transition-colors hover:bg-surface-elevated ${
-                    n.read_at ? "" : "bg-surface-elevated/50"
+
+          <div className="max-h-96 overflow-y-auto divide-y divide-hairline">
+            {loading && (
+              <p className="px-4 py-6 text-[13px] text-mute text-center">
+                Loading…
+              </p>
+            )}
+
+            {!loading && items.length === 0 && (
+              <p className="px-4 py-8 text-[13px] text-mute text-center">
+                Nothing yet. Join a ride and this fills up.
+              </p>
+            )}
+
+            {items.map((n) => {
+              const href = targetHref(n);
+              const body = (
+                <div
+                  className={`px-4 py-3 ${
+                    n.read_at ? "opacity-60" : "bg-surface-card/40"
                   }`}
                 >
                   <div className="flex items-start gap-2">
-                    {!n.read_at && <span className="status-dot bg-accent-blue mt-1.5 shrink-0" />}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-ink text-sm">{n.message}</p>
-                      <p className="caption mt-0.5">{timeAgo(n.created_at)}</p>
+                    {!n.read_at && (
+                      <span
+                        className="mt-1.5 w-1.5 h-1.5 rounded-full bg-accent-orange shrink-0"
+                        aria-hidden
+                      />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-[13px] text-ink leading-snug">
+                        {n.title}
+                      </p>
+                      {n.body && (
+                        <p className="text-[12px] text-mute truncate">{n.body}</p>
+                      )}
+                      <p className="text-[11px] text-stone mt-0.5">
+                        {relativeTime(n.created_at)}
+                      </p>
                     </div>
                   </div>
+                </div>
+              );
+
+              return href ? (
+                <Link
+                  key={n.id}
+                  href={href}
+                  onClick={() => {
+                    void markRead(n);
+                    setOpen(false);
+                  }}
+                  className="block hover:bg-surface-card transition-colors"
+                >
+                  {body}
+                </Link>
+              ) : (
+                // Notifications whose target has no route (or was deleted)
+                // stay readable and dismissible, just not clickable.
+                <button
+                  key={n.id}
+                  onClick={() => void markRead(n)}
+                  className="block w-full text-left hover:bg-surface-card transition-colors"
+                >
+                  {body}
                 </button>
-              ))
-            )}
+              );
+            })}
           </div>
         </div>
       )}
