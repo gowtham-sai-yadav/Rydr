@@ -1,7 +1,9 @@
 # Phase 4 — Web app completion + Android wrap
 
-**Status:** Finalized 2026-08-28. Supersedes the placeholder `phase4_*`
-modules committed during the W1–W8 branch merges.
+**Status:** Complete. Finalized 2026-08-28; superseded the placeholder
+`phase4_*` modules committed during the W1–W8 branch merges.
+**Outcome:** see [phase4-completion.md](./phase4-completion.md) for what
+shipped, the regression results, the defects found, and the known limitations.
 **Source of truth:** `Rydr_Phase4_Plan.docx` (Jun 6 – Aug 29, 2026).
 **Class:** Core.
 
