@@ -16,6 +16,7 @@ import type {
   ReportStatus,
   ReportedContentType,
 } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 const STATUSES: { value: ReportStatus | "all"; label: string }[] = [
   { value: "open", label: "Open" },
@@ -29,11 +30,11 @@ const STATUSES: { value: ReportStatus | "all"; label: string }[] = [
 function contentHref(type: ReportedContentType, id: string): string | null {
   switch (type) {
     case "destination":
-      return `/destinations/${id}`;
+      return routes.destination(id);
     case "ride_plan":
-      return `/rides/${id}`;
+      return routes.ride(id);
     case "user":
-      return `/users/${id}`;
+      return routes.user(id);
     case "post":
     case "post_comment":
       // No single-post route yet; the feed is the closest place to look.

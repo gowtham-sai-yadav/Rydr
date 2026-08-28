@@ -13,6 +13,7 @@ import Link from "next/link";
 
 import { api } from "@/lib/api";
 import type { NotificationOut } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 const POLL_MS = 60_000;
 
@@ -21,13 +22,13 @@ function targetHref(n: NotificationOut): string | null {
   if (!n.entity_id) return null;
   switch (n.entity_type) {
     case "ride":
-      return `/rides/${n.entity_id}`;
+      return routes.ride(n.entity_id);
     case "chat_group":
-      return `/chat/${n.entity_id}`;
+      return routes.chatRoom(n.entity_id);
     case "destination":
-      return `/destinations/${n.entity_id}`;
+      return routes.destination(n.entity_id);
     case "user":
-      return `/users/${n.entity_id}`;
+      return routes.user(n.entity_id);
     case "badge":
       return "/profile";
     case "post":
