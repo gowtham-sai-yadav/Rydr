@@ -1,8 +1,8 @@
 import uuid
 
-from app.database import SessionLocal
 from app.models.badge import Badge, UserBadge
 from tests.conftest import (
+    TestSessionLocal,
     auth_headers,
     create_and_complete_ride,
     create_destination,
@@ -48,7 +48,7 @@ def test_badge_card(client):
     # Badge catalog rows are seeded by a standalone script (scripts/seed_badges.py),
     # not by migrations or the app itself, so tests create their own catalog
     # row + award directly rather than depending on that script having run.
-    db = SessionLocal()
+    db = TestSessionLocal()
     try:
         badge = Badge(
             slug=f"test-badge-{uuid.uuid4().hex[:8]}",

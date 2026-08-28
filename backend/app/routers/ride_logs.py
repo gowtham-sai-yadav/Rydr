@@ -38,10 +38,18 @@ from app.models.ride import (
     RidePlanParticipant,
     RidePlanStatus,
 )
-from app.models.ride_log import RideLog, RideMedia
+from app.models.notification import NotificationType
+from app.models.ride_log import RideLog, RideLogComment, RideMedia
 from app.models.user import User
 from app.schemas.ride_log import (
     CloudinarySignature,
+    FlybyListResponse,
+    FlybyOut,
+    MyRideLogListResponse,
+    MyRideLogOut,
+    RideLogCommentCreate,
+    RideLogCommentListResponse,
+    RideLogCommentOut,
     RideLogCreate,
     RideLogOut,
     RideLogSummary,
@@ -52,6 +60,13 @@ from app.schemas.ride_log import (
 from app.services import cloudinary_service
 from app.services.badge_engine import safe_evaluate as _evaluate_badges
 from app.services.card_renderer import render_card
+from app.services.effort import compute_relative_effort
+from app.services.flyby import find_flybys
+from app.services.notification_service import create_notification as _notify
+from app.services.personal_records import compute_personal_records
+from app.services.privacy import fuzz_track_near_home
+from app.services.route_matching import find_matching_route
+from app.services.track_analysis import analyze_track
 
 router = APIRouter()
 
@@ -201,16 +216,90 @@ def create_ride_log(
 
 
 # ---------------------------------------------------------------------------
+# "mine" — registered before /{log_id} (single-segment literal vs. UUID
+# param collision, same reasoning as destinations' surprise-me route).
+# ---------------------------------------------------------------------------
+@router.get("/mine", response_model=MyRideLogListResponse)
+def list_my_ride_logs(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> MyRideLogListResponse:
+    """Trimmed list of the caller's own ride logs, newest first — powers
+    pickers like "add this ride as a trip day" that don't need the full
+    RideLogOut payload."""
+    rows = (
+        db.query(RideLog, RidePlan)
+        .join(RidePlan, RidePlan.id == RideLog.ride_plan_id)
+        .options(selectinload(RideLog.ride_plan).selectinload(RidePlan.destination))
+        .filter(RideLog.rider_id == user.id)
+        .order_by(RideLog.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return MyRideLogListResponse(
+        logs=[
+            MyRideLogOut(
+                id=log.id,
+                ride_plan_id=plan.id,
+                destination_name=plan.destination.name if plan.destination else None,
+                distance_km=log.distance_km,
+                actual_start_ts=log.actual_start_ts,
+                thumbnail_url=plan.thumbnail_url,
+            )
+            for log, plan in rows
+        ]
+    )
+
+
+# ---------------------------------------------------------------------------
 # Detail
 # ---------------------------------------------------------------------------
 @router.get("/{log_id}", response_model=RideLogOut)
 def get_ride_log(
     log_id: UUID,
     db: Session = Depends(get_db),
-    _user=Depends(get_optional_user),
+    viewer=Depends(get_optional_user),
 ) -> RideLogOut:
     log = _load_log_or_404(db, log_id)
-    return RideLogOut.model_validate(log)
+    out = RideLogOut.model_validate(log)
+
+    # Privacy zone: only applies when someone OTHER than the rider is
+    # looking, and only if the rider has one set - never fuzzes anything
+    # for the rider's own view of their own ride.
+    if out.recorded_track and (viewer is None or viewer.id != log.rider_id):
+        rider = log.rider
+        if rider and rider.privacy_zone_radius_km:
+            out.recorded_track = fuzz_track_near_home(
+                out.recorded_track,
+                user_id=rider.id,
+                home_lat=rider.home_latitude,
+                home_lng=rider.home_longitude,
+                privacy_zone_radius_km=rider.privacy_zone_radius_km,
+            )
+    return out
+
+
+@router.get("/{log_id}/flybys", response_model=FlybyListResponse)
+def get_flybys(
+    log_id: UUID,
+    db: Session = Depends(get_db),
+) -> FlybyListResponse:
+    """Other riders whose recorded track came within 500m of this one
+    around the same time — even on a completely unrelated ride."""
+    log = _load_log_or_404(db, log_id)
+    matches = find_flybys(db, log)
+    return FlybyListResponse(
+        flybys=[
+            FlybyOut(
+                rider=m.rider,
+                other_ride_log_id=m.other_ride_log_id,
+                closest_distance_km=m.closest_distance_km,
+                approx_time=m.approx_time,
+            )
+            for m in matches
+        ]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -265,11 +354,72 @@ def update_ride_log(
     log = _load_log_or_404(db, log_id)
     _require_owner(log, user)
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    fields = payload.model_dump(exclude_unset=True)
+    track_points = fields.pop("recorded_track", None)
+
+    for field, value in fields.items():
         setattr(log, field, value)
+
+    if track_points:
+        destination = log.ride_plan.destination if log.ride_plan else None
+        destination_tags = (
+            {dt.tag.slug for dt in destination.tags if dt.tag} if destination else set()
+        )
+        stats = analyze_track(track_points, destination_tags=destination_tags)
+        if stats:
+            prev_distance = log.distance_km or 0.0
+            log.recorded_track = track_points
+            log.distance_km = stats.distance_km
+            log.moving_duration_seconds = stats.moving_duration_seconds
+            log.avg_speed_kmh = stats.avg_speed_kmh
+            log.elevation_gain_m = stats.elevation_gain_m
+            log.terrain_type = stats.terrain_type
+            log.relative_effort = compute_relative_effort(
+                stats.distance_km, stats.moving_duration_seconds, stats.terrain_type
+            )
+
+            # Gear tracking: credit the delta (handles a re-submitted/
+            # corrected track without double-counting past distance).
+            if user.bike is not None:
+                delta_km = stats.distance_km - prev_distance
+                if delta_km:
+                    user.bike.total_km_since_service = max(0.0, user.bike.total_km_since_service + delta_km)
+                    user.bike.total_km_lifetime = max(0.0, user.bike.total_km_lifetime + delta_km)
+
+            # Route matching: best-effort link to a published route that
+            # starts/ends in the same place - never blocks the save.
+            if destination is not None and len(track_points) >= 2:
+                try:
+                    first, last = track_points[0], track_points[-1]
+                    matched = find_matching_route(
+                        db, destination.id, (first["lat"], first["lng"]), (last["lat"], last["lng"])
+                    )
+                    if matched:
+                        log.matched_route_id = matched
+                except Exception:  # noqa: BLE001 - matching is a bonus, not a save-blocker
+                    pass
+
     db.commit()
+
+    new_records: list[str] = []
+    if track_points:
+        _evaluate_badges(db, user.id)
+        # PRs are computed at read-time from all of this rider's logs, so
+        # "did THIS ride set one" is just "is this log the current holder
+        # right after saving it" - no separate before/after snapshot needed.
+        records = compute_personal_records(db, user.id)
+        if records.longest_ride and records.longest_ride.ride_log_id == log.id:
+            new_records.append("longest_ride")
+        if records.best_month and log.actual_start_ts and (
+            log.actual_start_ts.year == records.best_month.year
+            and log.actual_start_ts.month == records.best_month.month
+        ):
+            new_records.append("best_month")
+
     fresh = _load_log_or_404(db, log.id)
-    return RideLogOut.model_validate(fresh)
+    out = RideLogOut.model_validate(fresh)
+    out.new_personal_records = new_records
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -371,5 +521,77 @@ def delete_media(
     ).delete(synchronize_session=False)
 
     db.delete(media)
+    db.commit()
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Comments — flat, on the ride log itself ("what tires on that gravel
+# bit?"). Public read (Phase 3 "everything public"); posting requires
+# login. Deliberately separate from Post/PostComment (feed posts about a
+# ride) and Discussion/DiscussionComment (destination-wide threads) - see
+# models/ride_log.py::RideLogComment docstring.
+# ---------------------------------------------------------------------------
+@router.get("/{log_id}/comments", response_model=RideLogCommentListResponse)
+def list_ride_log_comments(
+    log_id: UUID,
+    db: Session = Depends(get_db),
+) -> RideLogCommentListResponse:
+    _load_log_or_404(db, log_id)
+    comments = (
+        db.query(RideLogComment)
+        .options(selectinload(RideLogComment.author))
+        .filter(RideLogComment.ride_log_id == log_id)
+        .order_by(RideLogComment.created_at.asc())
+        .all()
+    )
+    return RideLogCommentListResponse(comments=comments)
+
+
+@router.post("/{log_id}/comments", response_model=RideLogCommentOut, status_code=201)
+def create_ride_log_comment(
+    log_id: UUID,
+    payload: RideLogCommentCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> RideLogCommentOut:
+    log = _load_log_or_404(db, log_id)
+    comment = RideLogComment(ride_log_id=log_id, author_id=user.id, body=payload.body)
+    db.add(comment)
+    db.flush()
+
+    if log.rider_id != user.id:
+        _notify(
+            db,
+            user_id=log.rider_id,
+            type=NotificationType.post_commented,
+            message=f"{user.name} commented on your ride log",
+            actor_id=user.id,
+        )
+
+    db.commit()
+    db.refresh(comment)
+    comment.author = user
+    return comment
+
+
+@router.delete("/{log_id}/comments/{comment_id}", status_code=204)
+def delete_ride_log_comment(
+    log_id: UUID,
+    comment_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> Response:
+    comment = (
+        db.query(RideLogComment)
+        .filter(RideLogComment.id == comment_id, RideLogComment.ride_log_id == log_id)
+        .first()
+    )
+    if comment is None:
+        return Response(status_code=204)
+    log = _load_log_or_404(db, log_id)
+    if comment.author_id != user.id and log.rider_id != user.id and not user.is_admin:
+        raise HTTPException(status_code=403, detail="Not your comment")
+    db.delete(comment)
     db.commit()
     return Response(status_code=204)

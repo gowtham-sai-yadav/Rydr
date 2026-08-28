@@ -24,11 +24,22 @@ class User(Base):
 
     # Moderation — grants access to /api/moderation admin-only endpoints.
     is_admin = Column(Boolean, nullable=False, server_default="false", default=False)
+    # Ambassador program - trusted local riders who can officially endorse
+    # routes/destinations. Granted by an admin, not self-service.
+    is_verified_rider = Column(Boolean, nullable=False, server_default="false", default=False)
 
     # Home location — used by M2 radius filter + cost calculator
     home_city = Column(String(100), nullable=True)
     home_latitude = Column(Float, nullable=True)
     home_longitude = Column(Float, nullable=True)
+    # Privacy zone: when set, any public-facing map/heatmap fuzzes points
+    # within this radius of home to a randomized offset instead of the
+    # real coordinate. Null = no privacy zone (off by default).
+    privacy_zone_radius_km = Column(Float, nullable=True)
+    # Private account (Twitter-style): a follow request needs this user's
+    # acceptance before it counts as a real follow. Public (the default):
+    # follows land instantly.
+    is_private = Column(Boolean, nullable=False, server_default="false", default=False)
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at = Column(

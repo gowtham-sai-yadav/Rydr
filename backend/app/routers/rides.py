@@ -193,6 +193,7 @@ def create_ride(
         recommended_bike_type=payload.recommended_bike_type,
         break_schedule=payload.break_schedule,
         max_riders=payload.max_riders,
+        requires_approval=payload.requires_approval,
         status=RidePlanStatus.planned,
     )
     db.add(ride)
@@ -569,14 +570,18 @@ def join_ride(
 
     # Capacity hardening: a request made while the ride is already full
     # (approved-participant count >= max_riders) lands as ``waitlisted``
-    # instead of ``pending``, so the captain's queue only shows requests
-    # they can actually act on today. Re-checked on every join/re-join
-    # (left -> pending/waitlisted) since capacity can change between calls.
-    target_status = (
-        ParticipantStatus.waitlisted
-        if _participant_count(db, ride_id) >= ride.max_riders
-        else ParticipantStatus.pending
-    )
+    # instead of ``pending``/``approved``, so the captain's queue only shows
+    # requests they can actually act on today. Re-checked on every
+    # join/re-join (left -> pending/waitlisted) since capacity can change
+    # between calls. max_riders=None means no cap - never waitlists.
+    is_full = ride.max_riders is not None and _participant_count(db, ride_id) >= ride.max_riders
+    if is_full:
+        target_status = ParticipantStatus.waitlisted
+    elif not ride.requires_approval:
+        # Open ride: joining is instant, no captain action needed.
+        target_status = ParticipantStatus.approved
+    else:
+        target_status = ParticipantStatus.pending
 
     # A brand-new join or a re-join after leaving is a genuinely new
     # request worth notifying the captain about; re-POSTing while already
@@ -606,14 +611,24 @@ def join_ride(
     participant_id = db.execute(stmt).scalar_one()
 
     if is_new_request:
-        _notify(
-            db,
-            user_id=ride.captain_id,
-            type=NotificationType.ride_join_requested,
-            message=f"{user.name} requested to join your ride \"{ride.title}\"",
-            actor_id=user.id,
-            ride_plan_id=ride.id,
-        )
+        if target_status == ParticipantStatus.approved:
+            _notify(
+                db,
+                user_id=ride.captain_id,
+                type=NotificationType.ride_join_approved,
+                message=f"{user.name} joined your ride \"{ride.title}\"",
+                actor_id=user.id,
+                ride_plan_id=ride.id,
+            )
+        else:
+            _notify(
+                db,
+                user_id=ride.captain_id,
+                type=NotificationType.ride_join_requested,
+                message=f"{user.name} requested to join your ride \"{ride.title}\"",
+                actor_id=user.id,
+                ride_plan_id=ride.id,
+            )
 
     db.commit()
 
@@ -747,6 +762,7 @@ def update_participant_status(
     if participant.status != payload.status:
         if (
             payload.status == ParticipantStatus.approved
+            and ride.max_riders is not None
             and _participant_count(db, ride_id) >= ride.max_riders
         ):
             raise HTTPException(

@@ -30,6 +30,7 @@ does not work without restructuring the relationships. New columns on
 """
 from __future__ import annotations
 
+import random
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import UUID
@@ -62,6 +63,8 @@ from app.schemas.destination import (
     RatingCreate,
     RatingListResponse,
     RatingOut,
+    RegionListResponse,
+    RegionSummary,
     TagOut,
 )
 from app.schemas.user import UserBrief
@@ -275,6 +278,7 @@ def list_destinations(
     from_lng: Optional[float] = Query(default=None, ge=-180, le=180),
     max_budget: Optional[int] = Query(default=None, ge=0),
     q: Optional[str] = Query(default=None, max_length=200),
+    region: Optional[str] = Query(default=None, max_length=100),
     sort: str = Query(default="rating", pattern="^(rating|distance|popularity)$"),
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=20, ge=1, le=50),
@@ -304,6 +308,9 @@ def list_destinations(
     _validate_slugs_exist(db, vehicle_fit, TagCategory.vehicle_fit)
 
     query = db.query(Destination)
+
+    if region:
+        query = query.filter(Destination.region == region)
 
     if tags:
         query = query.filter(
@@ -472,6 +479,89 @@ def create_destination(
     # Re-fetch with eager loaders so _build_detail_response doesn't lazy-walk
     # tags + media (was N+1 under db.refresh which discards loader options).
     fresh = _load_destination_or_404(db, dest.id)
+    return _build_detail_response(db, fresh)
+
+
+# ---------------------------------------------------------------------------
+# Regional discovery — same "before /{destination_id}" registration-order
+# requirement as surprise-me below.
+# ---------------------------------------------------------------------------
+@router.get("/regions", response_model=RegionListResponse)
+def list_regions(db: Session = Depends(get_db)) -> RegionListResponse:
+    rows = (
+        db.query(
+            Destination.region,
+            func.count(Destination.id).label("count"),
+            func.avg(Destination.avg_rating).label("avg_rating"),
+        )
+        .filter(Destination.region.isnot(None))
+        .group_by(Destination.region)
+        .order_by(func.count(Destination.id).desc())
+        .all()
+    )
+    regions = []
+    for region, count, avg_rating in rows:
+        hero = (
+            db.query(Destination.hero_media_url)
+            .filter(Destination.region == region, Destination.hero_media_url.isnot(None))
+            .order_by(Destination.avg_rating.desc())
+            .first()
+        )
+        regions.append(
+            RegionSummary(
+                region=region,
+                destination_count=count,
+                avg_rating=round(float(avg_rating or 0), 1),
+                hero_media_url=hero[0] if hero else None,
+            )
+        )
+    return RegionListResponse(regions=regions)
+
+
+# ---------------------------------------------------------------------------
+# "Surprise Me" route roulette — registered before /{destination_id} since
+# both are single path segments and FastAPI matches in registration order;
+# putting this after would make "/destinations/surprise-me" get swallowed
+# by the {destination_id}: UUID param (and 422 on the literal string).
+# ---------------------------------------------------------------------------
+@router.get("/surprise-me", response_model=DestinationOut)
+def surprise_me(
+    time_budget_hours: float = Query(gt=0, le=24),
+    from_lat: Optional[float] = Query(default=None, ge=-90, le=90),
+    from_lng: Optional[float] = Query(default=None, ge=-180, le=180),
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+) -> DestinationOut:
+    """Enter a free time budget, get a random scenic destination reachable
+    (round trip, at a generous 40km/h touring average incl. stops) within
+    it. Falls back to the caller's home location when from_lat/lng aren't
+    passed; 400s if neither is available - "surprise me" still needs a
+    "from where"."""
+    origin = _resolve_origin(from_lat, from_lng, user)
+    if origin is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Need a location — pass from_lat/from_lng or set your home location",
+        )
+    origin_lat, origin_lng = origin
+
+    # Round trip at a relaxed touring pace, minus ~20% buffer for stops.
+    max_round_trip_km = time_budget_hours * 40 * 0.8
+    max_one_way_km = max(max_round_trip_km / 2, 5)
+
+    distance_expr = haversine_sql_expression(
+        origin_lat, origin_lng, Destination.latitude, Destination.longitude
+    )
+    candidates = (
+        db.query(Destination.id)
+        .filter(distance_expr <= max_one_way_km)
+        .all()
+    )
+    if not candidates:
+        raise HTTPException(status_code=404, detail="No destinations found within that time budget")
+
+    chosen_id = random.choice(candidates).id
+    fresh = _load_destination_or_404(db, chosen_id)
     return _build_detail_response(db, fresh)
 
 

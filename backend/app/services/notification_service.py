@@ -14,6 +14,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models.notification import Notification, NotificationType
+from app.services.push_service import send_push
 
 
 def create_notification(
@@ -47,6 +48,10 @@ def create_notification(
         message=message,
     )
     db.add(note)
+    # Best-effort, same tolerance as the row insert itself - a push that
+    # fires for a row whose surrounding transaction later rolls back is a
+    # rare, harmless false notification, not a data-integrity concern.
+    send_push(db, user_id=user_id, title="Rydr", body=message)
     return note
 
 

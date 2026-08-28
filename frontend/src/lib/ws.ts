@@ -18,3 +18,7 @@ export function buildWsUrl(path: string): string {
 export function chatGroupWsUrl(groupId: string): string {
   return buildWsUrl(`/api/chat/groups/${groupId}/ws`);
 }
+
+export function liveRideWsUrl(rideId: string): string {
+  return buildWsUrl(`/api/rides/${rideId}/live/ws`);
+}

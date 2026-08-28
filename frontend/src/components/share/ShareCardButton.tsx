@@ -110,7 +110,7 @@ export function ShareCardButton({
           >
             <div className="flex items-center justify-between">
               <h3 className="heading-sm">Share card</h3>
-              <button type="button" onClick={closeModal} className="text-mute hover:text-ink">
+              <button type="button" onClick={closeModal} aria-label="Close" className="text-mute hover:text-ink">
                 ✕
               </button>
             </div>

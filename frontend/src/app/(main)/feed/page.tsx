@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { api } from "@/lib/api";
 import type { PostOut } from "@/lib/api.types";
 import { PostCard } from "@/components/feed/PostCard";
@@ -126,9 +127,19 @@ export default function FeedPage() {
         </div>
       ) : (
         <div className="space-y-4">
-          {posts.map((post) => (
-            <PostCard key={post.id} post={post} />
-          ))}
+          <AnimatePresence initial={false}>
+            {posts.map((post, i) => (
+              <motion.div
+                key={post.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, delay: Math.min(i, 8) * 0.03 }}
+              >
+                <PostCard post={post} />
+              </motion.div>
+            ))}
+          </AnimatePresence>
           {hasMore && (
             <div className="flex justify-center pt-2">
               <button
