@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import NotificationBell from "@/components/notifications/NotificationBell";
 
 const navItems = [
   { href: "/destinations", label: "Discover" },
@@ -45,7 +46,8 @@ export default function Navbar() {
             })}
           </nav>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {user && <NotificationBell />}
             <span className="text-[13px] text-charcoal hidden sm:block">
               {user?.name}
             </span>
