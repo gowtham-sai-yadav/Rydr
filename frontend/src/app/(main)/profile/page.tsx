@@ -9,6 +9,7 @@ import type {
   UserBadgeOut,
 } from "@/lib/api.types";
 import { BadgeShelf } from "@/components/badges/BadgeShelf";
+import { routes } from "@/lib/routes";
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
@@ -481,14 +482,14 @@ export default function ProfilePage() {
         <h3 className="text-lg font-semibold text-ink mb-3">Social</h3>
         <div className="flex gap-6 text-sm">
           <a
-            href={`/users/${user.id}/followers`}
+            href={routes.userFollowers(user.id)}
             className="text-body hover:text-accent-blue"
           >
             <span className="text-ink font-semibold">{user.followers_count}</span>{" "}
             <span>followers</span>
           </a>
           <a
-            href={`/users/${user.id}/following`}
+            href={routes.userFollowing(user.id)}
             className="text-body hover:text-accent-blue"
           >
             <span className="text-ink font-semibold">{user.following_count}</span>{" "}

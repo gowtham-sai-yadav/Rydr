@@ -13,6 +13,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import type { PostCommentOut, PostOut, UserOut } from "@/lib/api.types";
 import ReportButton from "@/components/moderation/ReportButton";
+import { routes } from "@/lib/routes";
 
 type Props = {
   post: PostOut;
@@ -112,7 +113,7 @@ export default function PostCard({ post, viewer, onDeleted }: Props) {
         <div className="flex items-center gap-3 min-w-0">
           {post.author && (
             <Link
-              href={`/users/${post.author.id}`}
+              href={routes.user(post.author.id)}
               className="shrink-0 w-9 h-9 rounded-full bg-surface-elevated overflow-hidden flex items-center justify-center text-[13px] text-charcoal"
             >
               {post.author.avatar_url ? (
@@ -137,7 +138,7 @@ export default function PostCard({ post, viewer, onDeleted }: Props) {
                 <>
                   {" · "}
                   <Link
-                    href={`/destinations/${post.destination.id}`}
+                    href={routes.destination(post.destination.id)}
                     className="text-link hover:underline"
                   >
                     {post.destination.name}

@@ -1,6 +1,7 @@
 "use client";
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import RoutePreview from "@/components/map/RoutePreview";
@@ -9,14 +10,14 @@ import type {
   DestinationOut,
   RatingOut,
 } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 
-export default function DestinationDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
+function DestinationDetailPageInner() {
+  // Phase 4 W9: the record id arrives as a query parameter rather than a
+  // path segment, so this route is one file that Next can statically
+  // export for the Capacitor build. See lib/routes.ts for why.
+  const id = useSearchParams().get("id") ?? "";
   const { user } = useAuth();
 
   const [destination, setDestination] = useState<DestinationOut | null>(null);
@@ -230,7 +231,7 @@ export default function DestinationDetailPage({
             {destination.recent_riders.map((r) => (
               <Link
                 key={r.id}
-                href={`/users/${r.id}`}
+                href={routes.user(r.id)}
                 className="flex items-center gap-2 bg-surface-elevated/50 hover:bg-surface-elevated rounded-full pr-3 pl-1 py-1"
               >
                 <div className="w-7 h-7 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
@@ -273,7 +274,7 @@ export default function DestinationDetailPage({
                 <div className="flex items-center gap-3 mb-1">
                   {r.user && (
                     <Link
-                      href={`/users/${r.user.id}`}
+                      href={routes.user(r.user.id)}
                       className="flex items-center gap-2 hover:opacity-80"
                     >
                       <div className="w-7 h-7 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
@@ -291,5 +292,26 @@ export default function DestinationDetailPage({
         )}
       </div>
     </div>
+  );
+}
+
+
+/**
+ * Suspense boundary around DestinationDetailPageInner.
+ *
+ * `useSearchParams` suspends during prerender, and the static export fails
+ * with a missing-suspense-boundary error without this wrapper.
+ */
+export default function DestinationDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
+        </div>
+      }
+    >
+      <DestinationDetailPageInner />
+    </Suspense>
   );
 }

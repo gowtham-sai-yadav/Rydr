@@ -1,6 +1,6 @@
 "use client";
-import { useState, useEffect, use, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
@@ -9,10 +9,14 @@ import type {
   RideLogOut,
   RidePlanOut,
 } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 
-export default function RideLogPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+function RideLogPageInner() {
+  // Phase 4 W9: the record id arrives as a query parameter rather than a
+  // path segment, so this route is one file that Next can statically
+  // export for the Capacitor build. See lib/routes.ts for why.
+  const id = useSearchParams().get("id") ?? "";
   const { user } = useAuth();
   const router = useRouter();
 
@@ -201,7 +205,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
     return (
       <div className="text-center py-12 text-mute">
         Only the rider can edit their own log.{" "}
-        <Link href={`/rides/${id}`} className="text-accent-blue">Back to ride</Link>
+        <Link href={routes.ride(id)} className="text-accent-blue">Back to ride</Link>
       </div>
     );
   }
@@ -209,7 +213,7 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
   return (
     <div className="max-w-2xl mx-auto space-y-6 pb-12">
       <div>
-        <Link href={`/rides/${ride.id}`} className="text-accent-blue hover:text-accent-blue text-sm">
+        <Link href={routes.ride(ride.id)} className="text-accent-blue hover:text-accent-blue text-sm">
           ← {ride.title}
         </Link>
         <h1 className="text-2xl font-bold text-ink mt-1">Log this ride</h1>
@@ -415,11 +419,32 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
       </div>
 
       <Link
-        href={`/destinations/${ride.destination_id}`}
+        href={routes.destination(ride.destination_id)}
         className="block text-center text-accent-blue hover:text-accent-blue text-sm py-2"
       >
         See the destination page →
       </Link>
     </div>
+  );
+}
+
+
+/**
+ * Suspense boundary around RideLogPageInner.
+ *
+ * `useSearchParams` suspends during prerender, and the static export fails
+ * with a missing-suspense-boundary error without this wrapper.
+ */
+export default function RideLogPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
+        </div>
+      }
+    >
+      <RideLogPageInner />
+    </Suspense>
   );
 }

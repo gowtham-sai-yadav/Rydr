@@ -19,6 +19,7 @@ import type {
   LeaderboardPeriod,
   RiderLeaderboardEntry,
 } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 type Board = "riders" | "destinations";
 
@@ -156,7 +157,7 @@ export default function LeaderboardPage() {
                   {medal(r.rank)}
                 </span>
                 <Link
-                  href={`/users/${r.user_id}`}
+                  href={routes.user(r.user_id)}
                   className="flex items-center gap-3 min-w-0 flex-1"
                 >
                   <span className="w-8 h-8 rounded-full bg-surface-elevated overflow-hidden flex items-center justify-center text-[12px] text-charcoal shrink-0">
@@ -194,7 +195,7 @@ export default function LeaderboardPage() {
                 {medal(d.rank)}
               </span>
               <Link
-                href={`/destinations/${d.destination_id}`}
+                href={routes.destination(d.destination_id)}
                 className="min-w-0 flex-1"
               >
                 <p className="text-[14px] text-ink truncate">{d.name}</p>
