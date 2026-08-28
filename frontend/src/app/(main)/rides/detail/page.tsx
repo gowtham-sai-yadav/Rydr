@@ -1,6 +1,6 @@
 "use client";
-import { useState, useEffect, use, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
@@ -9,6 +9,7 @@ import type {
   RidePlanOut,
   RidePlanParticipantOut,
 } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 
 const difficultyColors: Record<string, string> = {
@@ -26,8 +27,11 @@ const statusColors: Record<string, string> = {
 };
 
 
-export default function RideDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+function RideDetailPageInner() {
+  // Phase 4 W9: the record id arrives as a query parameter rather than a
+  // path segment, so this route is one file that Next can statically
+  // export for the Capacitor build. See lib/routes.ts for why.
+  const id = useSearchParams().get("id") ?? "";
   const { user } = useAuth();
   const router = useRouter();
 
@@ -208,7 +212,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {ride.destination && (
           <Link
-            href={`/destinations/${ride.destination.id}`}
+            href={routes.destination(ride.destination.id)}
             className="bg-surface-card rounded-xl p-4 hover:bg-surface-elevated transition-colors"
           >
             <p className="text-xs text-mute uppercase mb-1">Destination</p>
@@ -220,7 +224,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
         )}
         {ride.captain && (
           <Link
-            href={`/users/${ride.captain.id}`}
+            href={routes.user(ride.captain.id)}
             className="bg-surface-card rounded-xl p-4 flex items-center gap-4 hover:bg-surface-elevated transition-colors"
           >
             <div className="w-12 h-12 rounded-full bg-ink text-canvas flex items-center justify-center text-lg font-bold">
@@ -291,7 +295,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
       <div className="flex flex-wrap gap-3">
         {ride.chat_group_id && (isCaptain || myStatus === "approved") && (
           <Link
-            href={`/chat/${ride.chat_group_id}`}
+            href={routes.chatRoom(ride.chat_group_id)}
             className="bg-surface-elevated hover:bg-surface-elevated text-ink px-4 py-2 rounded-lg text-sm font-medium"
           >
             Open chat
@@ -304,7 +308,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
         )}
         {showLogLink && (
           <Link
-            href={`/rides/${ride.id}/log`}
+            href={routes.rideLog(ride.id)}
             className="bg-surface-elevated hover:bg-surface-elevated text-ink px-4 py-2 rounded-lg text-sm font-medium"
           >
             Log this ride
@@ -425,7 +429,7 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
             <div className="space-y-3">
               {participants.map((p) => (
                 <div key={p.id} className="flex items-center justify-between bg-surface-elevated/50 rounded-lg p-3">
-                  <Link href={`/users/${p.user_id}`} className="flex items-center gap-3 hover:opacity-80">
+                  <Link href={routes.user(p.user_id)} className="flex items-center gap-3 hover:opacity-80">
                     <div className="w-8 h-8 rounded-full bg-ink text-canvas flex items-center justify-center text-sm font-bold">
                       {p.user?.name?.charAt(0) || "?"}
                     </div>
@@ -481,5 +485,26 @@ export default function RideDetailPage({ params }: { params: Promise<{ id: strin
         </div>
       )}
     </div>
+  );
+}
+
+
+/**
+ * Suspense boundary around RideDetailPageInner.
+ *
+ * `useSearchParams` suspends during prerender, and the static export fails
+ * with a missing-suspense-boundary error without this wrapper.
+ */
+export default function RideDetailPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
+        </div>
+      }
+    >
+      <RideDetailPageInner />
+    </Suspense>
   );
 }

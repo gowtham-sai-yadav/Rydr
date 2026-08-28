@@ -9,6 +9,7 @@ import type {
   DestinationSummary,
   TagListResponse,
 } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 
 type SortMode = "rating" | "distance" | "popularity";
@@ -138,7 +139,7 @@ export default function DestinationsPage() {
               ? [user.home_latitude, user.home_longitude]
               : null
           }
-          onSelect={(pin) => router.push(`/destinations/${pin.id}`)}
+          onSelect={(pin) => router.push(routes.destination(pin.id))}
         />
       )}
 
@@ -256,7 +257,7 @@ export default function DestinationsPage() {
           {destinations.map((d) => (
             <Link
               key={d.id}
-              href={`/destinations/${d.id}`}
+              href={routes.destination(d.id)}
               className="bg-surface-card rounded-xl overflow-hidden hover:ring-1 hover:ring-hairline-strong transition-all"
             >
               <div className="aspect-video bg-surface-elevated relative">

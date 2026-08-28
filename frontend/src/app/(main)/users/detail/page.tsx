@@ -1,14 +1,19 @@
 "use client";
-import { useState, useEffect, use, useCallback } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import type { UserBadgeOut, UserOut } from "@/lib/api.types";
 import { BadgeShelf } from "@/components/badges/BadgeShelf";
+import { routes } from "@/lib/routes";
 
 
-export default function UserProfilePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+function UserProfilePageInner() {
+  // Phase 4 W9: the record id arrives as a query parameter rather than a
+  // path segment, so this route is one file that Next can statically
+  // export for the Capacitor build. See lib/routes.ts for why.
+  const id = useSearchParams().get("id") ?? "";
   const { user: me, refreshUser } = useAuth();
 
   const [profile, setProfile] = useState<UserOut | null>(null);
@@ -114,11 +119,11 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
           )}
           {profile.bio && <p className="text-body text-sm mt-2">{profile.bio}</p>}
           <div className="flex justify-center sm:justify-start gap-6 mt-3">
-            <Link href={`/users/${profile.id}/followers`} className="text-sm hover:opacity-80">
+            <Link href={routes.userFollowers(profile.id)} className="text-sm hover:opacity-80">
               <span className="text-ink font-semibold">{profile.followers_count}</span>{" "}
               <span className="text-mute">followers</span>
             </Link>
-            <Link href={`/users/${profile.id}/following`} className="text-sm hover:opacity-80">
+            <Link href={routes.userFollowing(profile.id)} className="text-sm hover:opacity-80">
               <span className="text-ink font-semibold">{profile.following_count}</span>{" "}
               <span className="text-mute">following</span>
             </Link>
@@ -184,5 +189,26 @@ export default function UserProfilePage({ params }: { params: Promise<{ id: stri
         </div>
       )}
     </div>
+  );
+}
+
+
+/**
+ * Suspense boundary around UserProfilePageInner.
+ *
+ * `useSearchParams` suspends during prerender, and the static export fails
+ * with a missing-suspense-boundary error without this wrapper.
+ */
+export default function UserProfilePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
+        </div>
+      }
+    >
+      <UserProfilePageInner />
+    </Suspense>
   );
 }
