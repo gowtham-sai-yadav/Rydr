@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import ShareCard from "@/components/share/ShareCard";
 import type {
   RideLogOut,
   RidePlanOut,
@@ -220,6 +221,21 @@ export default function RideLogPage({ params }: { params: Promise<{ id: string }
       {error && (
         <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg text-sm">
           {error}
+        </div>
+      )}
+
+      {/* Share card (Phase 4 W4). Only once the log exists — the card is
+          rendered from the saved log, so offering it before the first save
+          would produce a 404. */}
+      {log && (
+        <div className="bg-surface-card rounded-xl p-4 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-ink">Share this ride</p>
+            <p className="text-[12px] text-mute">
+              An image card with the route, distance and your rating.
+            </p>
+          </div>
+          <ShareCard id={log.id} kind="ride" title={ride.title} />
         </div>
       )}
 
