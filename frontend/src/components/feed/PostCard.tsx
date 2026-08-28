@@ -212,7 +212,7 @@ export default function PostCard({ post, viewer, onDeleted }: Props) {
           aria-pressed={liked}
           // Anonymous readers get a neutral, disabled control rather than an
           // unliked heart that implies they have a session.
-          className={`flex items-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-default ${
+          className={`flex items-center gap-1.5 py-2 pr-3 transition-colors disabled:opacity-40 disabled:cursor-default ${
             liked ? "text-accent-red" : "text-charcoal hover:text-ink"
           }`}
         >
@@ -222,7 +222,7 @@ export default function PostCard({ post, viewer, onDeleted }: Props) {
 
         <button
           onClick={loadComments}
-          className="flex items-center gap-1.5 text-charcoal hover:text-ink transition-colors"
+          className="flex items-center gap-1.5 py-2 px-1 text-charcoal hover:text-ink transition-colors"
         >
           <span aria-hidden>💬</span>
           <span>{commentCount}</span>
