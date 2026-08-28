@@ -8,6 +8,7 @@ Surface (all under ``/api/ride-logs`` except where noted):
   POST   /api/ride-logs/{id}/media/sign          — Cloudinary signed-upload params (503 if unconfigured)
   POST   /api/ride-logs/{id}/media                — confirm uploaded media + optional destination link
   DELETE /api/ride-logs/{id}/media/{media_id}    — remove a media row (does NOT delete from Cloudinary)
+  GET    /api/ride-logs/{id}/summary             — flat card data (Phase 4 W4)
 
 Patterns reused from M2/M3 audits:
   - Atomic upsert via ``pg_insert(...).on_conflict_do_nothing(...)`` on
@@ -27,11 +28,12 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, selectinload
 
 from app.dependencies import get_current_user, get_db, get_optional_user
-from app.models.destination import DestinationMedia
+from app.models.destination import Destination, DestinationMedia, Rating
 from app.models.ride import (
     ParticipantStatus,
     RidePlan,
@@ -42,13 +44,14 @@ from app.models.ride_log import RideLog, RideMedia
 from app.models.user import User
 from app.schemas.ride_log import (
     CloudinarySignature,
+    RideSummary,
     RideLogCreate,
     RideLogOut,
     RideLogUpdate,
     RideMediaConfirm,
     RideMediaOut,
 )
-from app.services import cloudinary_service
+from app.services import cloudinary_service, media_urls, stats
 from app.services.badge_engine import safe_evaluate as _evaluate_badges
 
 router = APIRouter()
@@ -245,12 +248,22 @@ def confirm_media(
     log = _load_log_or_404(db, log_id)
     _require_owner(log, user)
 
+    # Phase 4 W3: derive a poster frame for video (and a resized variant for
+    # images) from the delivery URL. A client-supplied thumbnail_url wins, so
+    # a caller that already knows the poster — or is not using Cloudinary —
+    # can set it explicitly. Returns None for non-Cloudinary URLs, in which
+    # case the column stays null and the client renders the original.
+    thumbnail = payload.thumbnail_url or media_urls.derive_thumbnail(
+        payload.url, payload.media_type
+    )
+
     media = RideMedia(
         ride_log_id=log.id,
         url=payload.url,
         media_type=payload.media_type,
         uploaded_by_user_id=user.id,
         caption=payload.caption,
+        thumbnail_url=thumbnail,
     )
     db.add(media)
 
@@ -262,6 +275,7 @@ def confirm_media(
                 destination_id=log.ride_plan.destination_id,
                 url=payload.url,
                 caption=payload.caption,
+                thumbnail_url=thumbnail,
                 uploaded_by_user_id=user.id,
                 ride_log_id=log.id,
             )
@@ -304,3 +318,82 @@ def delete_media(
     db.delete(media)
     db.commit()
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Ride summary — the data behind a share card (Phase 4 W4)
+# ---------------------------------------------------------------------------
+@router.get("/{log_id}/summary", response_model=RideSummary)
+def ride_summary(
+    log_id: UUID,
+    db: Session = Depends(get_db),
+) -> RideSummary:
+    """Flat, pre-formatted facts about one logged ride.
+
+    Public, like the rest of the ride-log read surface (Phase 3 decided
+    "everything public"), which also means a share card can be rendered for a
+    link recipient who has no Rydr account — the point of a share card.
+
+    Every value is computed here rather than in the renderer, so the web card,
+    the Android card and any future consumer show the same numbers.
+    """
+    row = (
+        db.query(RideLog, RidePlan, Destination, User)
+        .join(RidePlan, RidePlan.id == RideLog.ride_plan_id)
+        .join(Destination, Destination.id == RidePlan.destination_id)
+        .join(User, User.id == RideLog.rider_id)
+        .options(selectinload(RideLog.media))
+        .filter(RideLog.id == log_id)
+        .first()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Ride log not found")
+
+    log, ride, dest, rider = row
+
+    duration = None
+    if log.actual_start_ts and log.actual_end_ts:
+        delta = log.actual_end_ts - log.actual_start_ts
+        # Guard against a log whose end precedes its start (clock skew on the
+        # client, or a manual edit). A negative duration on a share card is
+        # worse than no duration at all.
+        minutes = int(delta.total_seconds() // 60)
+        duration = minutes if minutes >= 0 else None
+
+    rider_count = (
+        db.query(func.count(RidePlanParticipant.id))
+        .filter(
+            RidePlanParticipant.ride_plan_id == ride.id,
+            RidePlanParticipant.status == ParticipantStatus.approved,
+        )
+        .scalar()
+        or 0
+    )
+
+    stars = (
+        db.query(Rating.stars)
+        .filter(Rating.ride_log_id == log.id, Rating.user_id == rider.id)
+        .scalar()
+    )
+
+    return RideSummary(
+        ride_log_id=log.id,
+        ride_plan_id=ride.id,
+        rider_name=rider.name,
+        rider_avatar_url=rider.avatar_url,
+        destination_id=dest.id,
+        destination_name=dest.name,
+        destination_region=dest.region,
+        ride_title=ride.title,
+        ride_date=ride.planned_date,
+        estimated_distance_km=stats.estimated_ride_km(
+            rider.home_latitude, rider.home_longitude, dest.latitude, dest.longitude
+        ),
+        duration_minutes=duration,
+        actual_cost=log.actual_cost,
+        road_condition=log.road_condition,
+        recommended=log.recommended,
+        rider_count=rider_count,
+        photo_count=len(log.media),
+        stars=stars,
+    )

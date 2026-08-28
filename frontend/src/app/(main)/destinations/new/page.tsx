@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import type { TagListResponse } from "@/lib/api.types";
+import { routes } from "@/lib/routes";
 
 
 export default function NewDestinationPage() {
@@ -74,7 +75,7 @@ export default function NewDestinationPage() {
         tag_slugs: Array.from(selectedTags),
         gallery_urls: galleryUrls,
       });
-      router.push(`/destinations/${dest.id}`);
+      router.push(routes.destination(dest.id));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit destination");
     } finally {

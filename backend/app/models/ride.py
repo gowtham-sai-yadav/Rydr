@@ -62,6 +62,10 @@ class ParticipantStatus(str, enum.Enum):
     approved = "approved"
     rejected = "rejected"
     left = "left"
+    # Phase 4 W6: captain has said yes but the ride is at ``max_riders``.
+    # Promoted to ``approved`` automatically by
+    # ``services/ride_capacity.promote_from_waitlist`` when a seat frees.
+    waitlisted = "waitlisted"
 
 
 class Bike(Base):

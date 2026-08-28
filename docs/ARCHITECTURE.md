@@ -1,8 +1,10 @@
 # Rydr — Architecture & Roadmap
 
-*Snapshot date: 2026-05-28 · Branch: `feat/implementation1` · Commit: `d973c9e`*
+*Snapshot date: 2026-08-28 · Phase 4 complete · Branch: `main`*
 
-Rydr is an academic Phase 3 project: a destination-first community platform for motorcycle riders. This document captures **what's actually built right now**, the design intent behind it, and the planned path forward. Diagrams are Mermaid and render in any markdown viewer with Mermaid support.
+Rydr is an academic project: a destination-first community platform for motorcycle riders. This document captures **what's actually built right now**, the design intent behind it, and the planned path forward. Diagrams are Mermaid and render in any markdown viewer with Mermaid support.
+
+Phase 4 added the community layer, gamification, real-time chat, maps, moderation and the Android shell. For what shipped week by week and what did not, see [plan/phase4-completion.md](./plan/phase4-completion.md).
 
 ---
 
@@ -12,7 +14,10 @@ Rydr is an academic Phase 3 project: a destination-first community platform for 
 - **Frontend** — Next.js 16 (App Router, Turbopack) + React + Tailwind 4 styled with the *Resend* dark design system (pure black canvas, white pill primary CTAs, hairline borders, atmospheric glows).
 - **Auth** — JWT (HS256) with hardened claims (`iss=rydr`, `exp`/`sub`/`iss` required on decode).
 - **Media** — Cloudinary for ride photos / destination galleries (signed direct-from-browser uploads).
-- **Phase 3 milestones shipped**: M0 → M9. M10–M12 (stretch + close-out) pending.
+- **Maps** — OpenStreetMap tiles + OSRM routing + Nominatim geocoding, behind a provider interface with a Mapbox adapter that activates on `MAPBOX_TOKEN`.
+- **Real-time** — FastAPI WebSockets for ride chat, with the REST polling path retained as the fallback.
+- **Android** — Capacitor wrapping a static export of the same frontend. Never compiled here (no SDK); see [plan/phase4-android-release.md](./plan/phase4-android-release.md).
+- **Phase 3 milestones shipped**: M0 → M9. **Phase 4 shipped**: W1 → W11, with push delivery, Sentry and the signed AAB blocked on external accounts.
 - **Core thesis**: *destination-first*. Every social signal flows back to the destination — ratings, photos, recent-rider proof, follower activity, eventually badges.
 
 ---
@@ -27,6 +32,13 @@ flowchart LR
     Ride --> Capture[Capture photos + rating + feedback]
     Capture --> Enrich[Enriches the destination<br/>recent riders · gallery · avg rating]
     Enrich --> Discover
+
+    %% Phase 4 additions: the social + gamification loop that hangs off capture.
+    Capture --> Share[Share card · feed post]
+    Share --> Follow[Other riders see it<br/>likes · comments · follows]
+    Follow --> Discover
+    Capture --> Score[Badges · streaks · leaderboards]
+    Score --> Plan
 
     Follow[Follow signal] -.-> Discover
     Follow -.-> Plan
@@ -346,7 +358,11 @@ Notes:
 | N+1 protection | `selectinload` + scalar subqueries | Enforced in destination list/detail, ride detail, chat list. |
 | Pagination | Query params `limit ≤ 50`, `offset` | Reason a screenshot bug surfaced: frontend was asking for `limit=100`. Cap is intentional. |
 | 404 vs 403 leak | Chat group returns 404 to non-members | Don't confirm group existence to outsiders. Frontend renders friendly empty-state instead of dead link. |
-| Polling | Chat uses `after_id` long-poll with 5 s tick + visibility-pause | No websockets yet — see §10. |
+| Real-time | Chat over `WS /api/chat/groups/{id}/ws` (Phase 4 W6); the `after_id` poll is retained and runs only while the socket is down | Both paths persist through the same model, and messages are de-duplicated on id client-side. Registry is in process memory, so the deployment runs one uvicorn worker. |
+| Notifications | `services/notifications` — one `notify()` with the don't-notify-yourself rule and a SAVEPOINT per delivery | A notification failure cannot break the action that triggered it. Bell polls the unread count on a 60 s tick rather than holding a second socket. |
+| Capacity | `services/ride_capacity` — row lock on `ride_plans` before any seat-consuming write | `max_riders` is binding; the waitlist drains FIFO by `updated_at`. |
+| Estimated distance | `services/stats` (SQL) and `stats.estimated_ride_km` (Python), both on `geo.EARTH_RADIUS_KM` | No GPS track exists. Every distance is home→destination→home great-circle and is labelled an estimate in the UI. |
+| Admin | `dependencies.require_admin` → 403 (not 404) | The admin surface is documented, so hiding it buys nothing; granted only by `scripts/grant_admin.py`. |
 | File upload | Cloudinary signed direct upload | Backend never proxies the bytes; only signs params and stores the returned URL. |
 | Hairline borders | `--color-hairline` / `-strong` tokens | Replaces shadows everywhere; one knob if we ever want lighter/heavier separation. |
 
@@ -386,12 +402,31 @@ gantt
 | M4 | ✅ shipped | `docs/plan/m4-post-ride-capture.md` | Cloudinary, rating, feedback → destination enrichment. |
 | M5 | ✅ shipped | `docs/plan/m5-real-chat.md` | Real chat, 404-on-non-member, after_id polling. |
 | M6 | ✅ shipped | `docs/plan/m6-follow-system.md` | Follow / unfollow, `/users/:id/followers` + `/following`. |
-| M7 | ⏳ pending | — | Destination-scoped threads, one level deep. Model scaffolded in `social.py`. |
-| M8 | ⏳ pending | — | Badge engine + 6–8 seeded badges. Model scaffolded in `badge.py`. |
+| M7 | ⏳ pending | — | Destination-scoped threads, one level deep. Model scaffolded in `social.py`; still the only unrouted model. |
+| M8 | ✅ shipped | `docs/plan/m8-badges.md` | Badge engine + 8 seeded badges, awarded from ride/log/approval triggers. |
 | M9 | ✅ shipped | `docs/plan/m9-quality-and-frontend-connect.md` | JWT hardening, smoke suite (85 endpoints green), Resend theme, typed API client. |
 | M10 | ⏸ stretch | — | Communities (create/join, public/private). |
 | M11 | ⏸ stretch | — | Live GPS sharing. |
 | M12 | ⏳ pending | — | Polish + demo script + Phase 3 report. |
+
+### 9.1 Phase 4 (Jun 6 – Aug 29 2026)
+
+| Wk | Deliverable | Status |
+|---|---|---|
+| W1 | Codebase audit + plan reconciliation | ✅ `docs/plan/phase4-web-and-android.md` |
+| W2 | Maps, routing, geocoding, pins | ✅ OSM default, Mapbox behind a token |
+| W3 | Video + thumbnail derivation + CDN negotiation | ✅ |
+| W4 | Feed (posts/likes/comments), ride summary, share cards | ✅ |
+| W5 | Notifications, leaderboards, stats dashboard | ✅ |
+| W6 | WebSocket chat, ride capacity + waitlist | ✅ |
+| W7 | Moderation queue, 11 measured indexes, 89-test suite | ✅ |
+| W8 | Dockerised stack, staging compose, JSON logs + health probes | ✅ (Sentry not wired — needs an account) |
+| W9 | Mobile pass, query-param routes, static export, Capacitor shell | ✅ (never compiled — no SDK here) |
+| W10 | Native camera; push client | ✅ / ⚠️ push delivers nothing without Firebase |
+| W11 | Signed AAB + Play internal track | ❌ handed off — `docs/plan/phase4-android-release.md` |
+
+Full record, including the eleven defects fixed along the way and the
+regression results: [plan/phase4-completion.md](./plan/phase4-completion.md).
 
 ---
 
@@ -399,15 +434,18 @@ gantt
 
 Honest list — easier to defend in the report than to discover at demo time.
 
-- **No websockets**. Chat uses HTTP long-poll with `after_id`. Fine for ≤ 10 concurrent riders per ride.
-- **No rate limiting**. `slowapi` was considered for M9, deferred. Trivial to add at the router layer when the first abuse appears.
-- **No soft delete** on chat messages. Hard delete only (unused). Audit decision is to defer.
-- **No ETag / 304** on chat polling — bandwidth not a concern at current scale.
-- **No trigram index** on destinations search — small N (< 20 rows), `ILIKE` is fast enough.
-- **No pytest suite**. We have a 85-check curl smoke suite (`/tmp/m9_endpoint_smoke.py`) covering auth, JWT, users, follow, destinations, rides, chat, ride-logs, CORS, status transitions. Real pytest is a future investment.
-- **No badge engine**. Model is scaffolded but no triggers wired.
-- **No discussion threads**. Model is scaffolded but no router/endpoints.
-- **No map**. Decision was to defer Mapbox — destination detail links to Google Maps via `mapsUrl`.
+Resolved in Phase 4: websockets, a pytest suite (89 tests), the badge
+engine, the trigram search index, maps, and ETag/304 (on share cards).
+What remains genuinely absent:
+
+- **No rate limiting**. `slowapi` was considered for M9 and again for W7, deferred both times. Trivial to add at the router layer when the first abuse appears.
+- **No soft delete** on chat messages or posts. Hard delete only. The moderation *record* does outlive deleted content, deliberately, so the audit trail survives.
+- **No discussion threads**. `Discussion` / `DiscussionComment` remain the only scaffolded-but-unrouted models. Phase 4's feed covers the social need differently — a timeline rather than per-destination threads — so this is now a genuine product decision rather than a backlog item.
+- **No GPS track**. All distance is derived; see §8.
+- **No multi-worker chat**. In-process socket registry; needs Redis pub-sub to scale out.
+- **No push delivery**. Client complete, no Firebase project.
+- **No error-tracking SDK**. Structured JSON logs with request-id correlation instead.
+- **No in-app account deletion**. Required by Play before production release.
 
 ---
 
@@ -444,14 +482,19 @@ Ordered by current intent. Each item lists the *trigger* — i.e., the thing tha
 
 ### 11.3 Long-term (post-Phase 3, future thesis cycles)
 
-6. **Real-time chat (websockets / SSE)** — replace `after_id` polling once concurrency justifies it (>50 simultaneous rides).
-7. **pytest suite + CI** — replace the curl smoke script. Particularly: ride state machine, idempotent participant upsert, cost calc edge cases.
-8. **Rate limiting + abuse controls** — `slowapi` per IP + per user; chat throttle (1 msg/s, 30/min burst).
-9. **Native mobile app** — the PRD originally proposed React Native; Phase 3 pivoted to a PWA. A native shell becomes interesting once the destination dataset is regional + curated.
-10. **Search & recommendations** — once destination count > 100, replace `ILIKE` with trigram + pg_vector embeddings on description + tags.
-11. **Moderation tooling** — admin panel; currently all moderation is DB edits.
-12. **Multi-region** — destinations are geography-agnostic by design, but the cost calculator assumes INR fuel pricing. Generalize when we have a non-India destination.
-13. **Email / push notifications** — currently silent. M0 mentioned Resend as a possible provider (also where the design system came from); deferred for Phase 3.
+Five of the items that were here have shipped in Phase 4 and are struck
+from the list: real-time chat (W6), the pytest suite (W7), moderation
+tooling (W7), the native mobile shell (W9), and the trigram search index
+(W7). What is left:
+
+6. **Rate limiting + abuse controls** — `slowapi` per IP + per user; chat throttle (1 msg/s, 30/min burst). Deferred twice now; the trigger is the first real abuse.
+7. **Multi-worker chat** — Redis (or Postgres `LISTEN/NOTIFY`) pub-sub between workers. `services/ws_manager.broadcast` is the only function that changes. Trigger: more than one backend replica.
+8. **Push delivery** — the client is complete; needs a Firebase project, a service-account credential and a device-token endpoint. See `docs/plan/phase4-android-release.md` §4.
+9. **Error tracking** — `app/observability.py` is where a Sentry SDK would initialise. Trigger: a staging deploy that anyone other than the team uses.
+10. **Recommendations** — the trigram index covers search; `pg_vector` embeddings on description + tags become interesting past ~500 destinations.
+11. **Multi-region** — destinations are geography-agnostic by design, but the cost calculator assumes INR fuel pricing. Generalize when we have a non-India destination.
+12. **Account deletion** — required by Play before production release, and the right thing regardless.
+13. **Destination discussions** — the `Discussion` model is still unrouted. Phase 4's feed addresses the social need as a timeline instead; revisit only if per-destination threads prove distinct.
 
 ---
 
@@ -459,5 +502,5 @@ Ordered by current intent. Each item lists the *trigger* — i.e., the thing tha
 
 - **Source of truth for code state**: the code-review-graph (`mcp__code-review-graph__*` tools). Auto-rebuilds on file change via session-start hook (currently 419 nodes / 4 216 edges).
 - **Source of truth for plans**: `docs/plan/m{N}-*.md`. Plan files only exist for *finalized* milestones — we don't pre-write stubs for future M's.
-- **Source of truth for thesis + scope**: `PHASE3_PLAN.md` at repo root.
+- **Source of truth for thesis + scope**: `PHASE3_PLAN.md` at repo root for Phase 3; `docs/plan/phase4-web-and-android.md` for the Phase 4 reconciliation and `docs/plan/phase4-completion.md` for its outcome.
 - **Bridge between them**: this doc. Update on each milestone close, not mid-milestone.
