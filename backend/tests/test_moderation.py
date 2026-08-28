@@ -1,11 +1,10 @@
 from sqlalchemy import text
 
-from app.database import engine
-from tests.conftest import auth_headers, signup
+from tests.conftest import auth_headers, signup, test_engine
 
 
 def _promote_to_admin(email: str) -> None:
-    with engine.begin() as conn:
+    with test_engine.begin() as conn:
         conn.execute(
             text("UPDATE users SET is_admin = true WHERE email = :email"),
             {"email": email},

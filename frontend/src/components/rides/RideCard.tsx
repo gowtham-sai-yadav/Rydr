@@ -56,7 +56,9 @@ export default function RideCard({ ride }: { ride: RidePlanSummary }) {
               <span>{ride.planned_start_time.slice(0, 5)}</span>
             </div>
             <span className="text-charcoal">
-              {ride.participant_count}/{ride.max_riders} riders
+              {ride.max_riders === null
+                ? `${ride.participant_count} riders`
+                : `${ride.participant_count}/${ride.max_riders} riders`}
             </span>
           </div>
           {ride.captain && (

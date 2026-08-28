@@ -1,78 +1,25 @@
-"use client";
-import { useState, useEffect, use } from "react";
-import Link from "next/link";
-import { api } from "@/lib/api";
-import type { FollowEdgeOut } from "@/lib/api.types";
+import FollowingListPage from "./PageClient";
 
+// Static-export requires generateStaticParams on every dynamic segment.
+// This route's data is fetched client-side at runtime, not known at
+// build time, so this returns no pre-rendered paths - the client
+// component resolves the id via `use(params)` once loaded. A terse
+// `export { default } from "./PageClient"` re-export was tried first but
+// proved unreliable under Turbopack's parallel page-data collection
+// (intermittently reported as "missing generateStaticParams" even though
+// present) - this explicit wrapper is the version that builds reliably.
+// output: export requires at least one static path per dynamic
+// route (an empty array is rejected outright). The value here is a
+// placeholder only - every one of these pages is "use client" and
+// fetches its real data after hydration via `use(params)` reading
+// the actual browser URL, not this build-time value. Real in-app
+// navigation goes through Next's client router (<Link>/router.push),
+// which never touches the filesystem, so this placeholder is only
+// ever served on a cold load of this exact literal URL.
+export function generateStaticParams() {
+  return [{ id: "placeholder" }];
+}
 
-export default function FollowingListPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-
-  const [edges, setEdges] = useState<FollowEdgeOut[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    api
-      .getFollowing(id, { limit: 100 })
-      .then((res) => {
-        setEdges(res.edges);
-        setTotal(res.total);
-      })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load"))
-      .finally(() => setLoading(false));
-  }, [id]);
-
-  return (
-    <div className="max-w-2xl mx-auto space-y-4 pb-12">
-      <Link href={`/users/${id}`} className="text-accent-gold hover:text-accent-gold text-sm">
-        ← back
-      </Link>
-      <h1 className="text-2xl font-bold text-ink">Following · {total}</h1>
-
-      {error && (
-        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
-        </div>
-      ) : edges.length === 0 ? (
-        <p className="text-mute text-center py-12">Not following anyone yet.</p>
-      ) : (
-        <div className="space-y-2">
-          {edges.map((e) => (
-            <Link
-              key={e.user.id}
-              href={`/users/${e.user.id}`}
-              className="flex items-center gap-3 bg-surface-card hover:bg-surface-elevated rounded-xl p-4 transition-colors"
-            >
-              <div className="w-10 h-10 rounded-full bg-ink text-canvas flex items-center justify-center font-bold">
-                {e.user.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={e.user.avatar_url}
-                    alt={e.user.name}
-                    className="w-full h-full rounded-full object-cover"
-                  />
-                ) : (
-                  e.user.name.charAt(0)
-                )}
-              </div>
-              <div className="flex-1">
-                <p className="text-ink font-medium">{e.user.name}</p>
-                <p className="text-stone text-xs">
-                  since {new Date(e.created_at).toLocaleDateString()}
-                </p>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+export default function Page({ params }: { params: Promise<{ id: string }> }) {
+  return <FollowingListPage params={params} />;
 }

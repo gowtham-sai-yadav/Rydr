@@ -34,6 +34,9 @@ class NotificationType(str, enum.Enum):
     post_liked = "post_liked"
     post_commented = "post_commented"
     badge_earned = "badge_earned"
+    dm_received = "dm_received"
+    follow_requested = "follow_requested"
+    follow_accepted = "follow_accepted"
 
 
 class Notification(Base):

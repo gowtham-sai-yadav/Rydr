@@ -2,18 +2,46 @@ import { API_BASE_URL, TOKEN_KEY } from "./constants";
 import type {
   AuthResponse,
   BadgeOut,
+  BestEffortListResponse,
   BikeOut,
   ChatGroupListResponse,
   ChatGroupOut,
   ChatMessageListResponse,
   ChatMessageOut,
+  ClubBadgeOut,
+  ClubChallengeListResponse,
+  ClubChallengeOut,
+  ClubLeaderboardResponse,
+  ClubListResponse,
+  ClubMemberListResponse,
+  ClubOut,
   CloudinarySignature,
   CostEstimate,
   DestinationListResponse,
   DestinationMediaListResponse,
   DestinationOut,
   DestinationLeaderboardResponse,
+  DirectMessageListResponse,
+  DirectMessageOut,
+  DMThreadListResponse,
+  DMThreadOut,
+  ElevationProfileOut,
+  EventListResponse,
+  EventOut,
+  EventRSVPListResponse,
   FastApiValidationError,
+  FlybyListResponse,
+  HazardReportListResponse,
+  HazardReportOut,
+  HazardType,
+  HeatmapResponse,
+  LocalLegendOut,
+  MyRideLogListResponse,
+  PersonalRecordsOut,
+  RegionListResponse,
+  RouteListResponse,
+  RouteOut,
+  RSVPStatus,
   FeedListResponse,
   FollowListResponse,
   FollowOut,
@@ -29,6 +57,8 @@ import type {
   ReportStatus,
   ReportTargetType,
   RiderLeaderboardResponse,
+  RideLogCommentListResponse,
+  RideLogCommentOut,
   RideLogListResponse,
   RideLogOut,
   RideMediaOut,
@@ -36,9 +66,14 @@ import type {
   RidePlanOut,
   RidePlanParticipantOut,
   TagListResponse,
+  TimelineResponse,
+  TripListResponse,
+  TripOut,
   UserBadgeOut,
   UserOut,
   UserStatsOut,
+  WeeklyLeagueResponse,
+  YearInRydrOut,
 } from "./api.types";
 
 
@@ -136,6 +171,8 @@ class ApiClient {
     home_city: string | null;
     home_latitude: number | null;
     home_longitude: number | null;
+    is_private: boolean;
+    privacy_zone_radius_km: number | null;
   }>) {
     return this.request<UserOut>("/api/users/me", {
       method: "PUT",
@@ -151,11 +188,19 @@ class ApiClient {
     engine_cc: number | null;
     mileage_kmpl: number | null;
     type: "commuter" | "sport" | "adventure" | "cruiser" | "any";
+    service_interval_km: number;
   }>) {
     return this.request<BikeOut>("/api/users/me/bike", {
       method: "PUT",
       headers: this.headers(),
       body: JSON.stringify(data),
+    });
+  }
+
+  markBikeServiced() {
+    return this.request<BikeOut>("/api/users/me/bike/service", {
+      method: "PUT",
+      headers: this.headers(),
     });
   }
 
@@ -181,6 +226,27 @@ class ApiClient {
 
   unfollowUser(userId: string) {
     return this.request<void>(`/api/users/${userId}/follow`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+  }
+
+  /** Pending requests to follow ME (private account), awaiting accept/reject. */
+  listFollowRequests() {
+    return this.request<FollowListResponse>("/api/users/me/follow-requests", {
+      headers: this.headers(),
+    });
+  }
+
+  acceptFollowRequest(followerId: string) {
+    return this.request<FollowOut>(`/api/users/follow-requests/${followerId}/accept`, {
+      method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  rejectFollowRequest(followerId: string) {
+    return this.request<void>(`/api/users/follow-requests/${followerId}`, {
       method: "DELETE",
       headers: this.headers(),
     });
@@ -258,7 +324,8 @@ class ApiClient {
     difficulty_level?: "easy" | "moderate" | "hard" | "expert";
     recommended_bike_type?: string | null;
     break_schedule?: string | null;
-    max_riders?: number;
+    max_riders?: number | null;
+    requires_approval?: boolean;
     route_id?: string | null;
   }) {
     return this.request<RidePlanOut>("/api/rides", {
@@ -476,6 +543,118 @@ class ApiClient {
   }
 
   // ---------------------------------------------------------------------------
+  // Routes
+  // ---------------------------------------------------------------------------
+  createRoute(data: {
+    destination_id: string;
+    name?: string;
+    description?: string;
+    points: { ordinal: number; latitude: number; longitude: number; label?: string; is_stop: boolean }[];
+    publish?: boolean;
+  }) {
+    return this.request<RouteOut>("/api/routes", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  getRoute(routeId: string) {
+    return this.request<RouteOut>(`/api/routes/${routeId}`, {
+      headers: this.headers(),
+    });
+  }
+
+  listRoutes(destinationId: string) {
+    return this.request<RouteListResponse>(`/api/routes?destination_id=${destinationId}`, {
+      headers: this.headers(),
+    });
+  }
+
+  publishRoute(routeId: string) {
+    return this.request<RouteOut>(`/api/routes/${routeId}/publish`, {
+      method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Hazard reports
+  // ---------------------------------------------------------------------------
+  listHazards(params: { nearLat?: number; nearLng?: number; radiusKm?: number; destinationId?: string } = {}) {
+    const qs = new URLSearchParams();
+    if (params.nearLat != null) qs.set("near_lat", String(params.nearLat));
+    if (params.nearLng != null) qs.set("near_lng", String(params.nearLng));
+    if (params.radiusKm != null) qs.set("radius_km", String(params.radiusKm));
+    if (params.destinationId) qs.set("destination_id", params.destinationId);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<HazardReportListResponse>(`/api/hazards${suffix}`, {
+      headers: this.headers(),
+    });
+  }
+
+  reportHazard(data: {
+    latitude: number;
+    longitude: number;
+    hazard_type: HazardType;
+    description?: string | null;
+    destination_id?: string | null;
+  }) {
+    return this.request<HazardReportOut>("/api/hazards", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  deleteHazard(hazardId: string) {
+    return this.request<void>(`/api/hazards/${hazardId}`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Direct messages
+  // ---------------------------------------------------------------------------
+  listDMThreads() {
+    return this.request<DMThreadListResponse>("/api/dm/threads", {
+      headers: this.headers(),
+    });
+  }
+
+  /** Gets the existing thread with this user, or creates one — only
+   * succeeds if you follow each other (403 otherwise). */
+  openDMThread(otherUserId: string) {
+    return this.request<DMThreadOut>(`/api/dm/threads/${otherUserId}`, {
+      method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  getDMMessages(threadId: string, params: { page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<DirectMessageListResponse>(
+      `/api/dm/threads/${threadId}/messages${suffix}`,
+      { headers: this.headers() },
+    );
+  }
+
+  sendDMMessage(threadId: string, body: string) {
+    return this.request<DirectMessageOut>(
+      `/api/dm/threads/${threadId}/messages`,
+      {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ body }),
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
   // Destinations (M2)
   // ---------------------------------------------------------------------------
   listDestinations(params: {
@@ -486,6 +665,7 @@ class ApiClient {
     from_lng?: number;
     max_budget?: number;
     q?: string;
+    region?: string;
     sort?: "rating" | "distance" | "popularity";
     page?: number;
     limit?: number;
@@ -498,6 +678,7 @@ class ApiClient {
     if (params.from_lng != null) qs.set("from_lng", String(params.from_lng));
     if (params.max_budget != null) qs.set("max_budget", String(params.max_budget));
     if (params.q) qs.set("q", params.q);
+    if (params.region) qs.set("region", params.region);
     if (params.sort) qs.set("sort", params.sort);
     if (params.page) qs.set("page", String(params.page));
     if (params.limit) qs.set("limit", String(params.limit));
@@ -689,6 +870,77 @@ class ApiClient {
     );
   }
 
+  getLocalLegend(destinationId: string) {
+    return this.request<LocalLegendOut>(`/api/leaderboard/destinations/${destinationId}/local-legend`, {
+      headers: this.headers(),
+    });
+  }
+
+  getWeeklyLeague() {
+    return this.request<WeeklyLeagueResponse>("/api/leaderboard/weekly-league", {
+      headers: this.headers(),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Personal records, fog-of-war, verification
+  // ---------------------------------------------------------------------------
+  getPersonalRecords(userId: string) {
+    return this.request<PersonalRecordsOut>(`/api/users/${userId}/personal-records`, {
+      headers: this.headers(),
+    });
+  }
+
+  getVisitedDestinations(userId: string) {
+    return this.request<{ visited_destination_ids: string[] }>(`/api/users/${userId}/visited-destinations`, {
+      headers: this.headers(),
+    });
+  }
+
+  setVerifiedRider(userId: string, verified: boolean) {
+    return this.request<UserOut>(`/api/users/${userId}/verify?verified=${verified}`, {
+      method: "PUT",
+      headers: this.headers(),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Ride log comments
+  // ---------------------------------------------------------------------------
+  getRideLogComments(rideLogId: string) {
+    return this.request<RideLogCommentListResponse>(`/api/ride-logs/${rideLogId}/comments`, {
+      headers: this.headers(),
+    });
+  }
+
+  addRideLogComment(rideLogId: string, body: string) {
+    return this.request<RideLogCommentOut>(`/api/ride-logs/${rideLogId}/comments`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({ body }),
+    });
+  }
+
+  deleteRideLogComment(rideLogId: string, commentId: string) {
+    return this.request<void>(`/api/ride-logs/${rideLogId}/comments/${commentId}`, {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Surprise Me
+  // ---------------------------------------------------------------------------
+  surpriseMe(params: { time_budget_hours: number; from_lat?: number; from_lng?: number }) {
+    const qs = new URLSearchParams();
+    qs.set("time_budget_hours", String(params.time_budget_hours));
+    if (params.from_lat != null) qs.set("from_lat", String(params.from_lat));
+    if (params.from_lng != null) qs.set("from_lng", String(params.from_lng));
+    return this.request<DestinationOut>(`/api/destinations/surprise-me?${qs.toString()}`, {
+      headers: this.headers(),
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Notifications (Phase 4)
   // ---------------------------------------------------------------------------
@@ -746,6 +998,202 @@ class ApiClient {
       headers: this.headers(),
       body: JSON.stringify(data),
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Clubs
+  // ---------------------------------------------------------------------------
+  createClub(data: { name: string; description?: string | null; city?: string | null; avatar_url?: string | null }) {
+    return this.request<ClubOut>("/api/clubs", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  listClubs(params: { city?: string; q?: string; page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.city) qs.set("city", params.city);
+    if (params.q) qs.set("q", params.q);
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<ClubListResponse>(`/api/clubs${suffix}`, { headers: this.headers() });
+  }
+
+  getClub(clubId: string) {
+    return this.request<ClubOut>(`/api/clubs/${clubId}`, { headers: this.headers() });
+  }
+
+  joinClub(clubId: string) {
+    return this.request<ClubOut>(`/api/clubs/${clubId}/join`, { method: "POST", headers: this.headers() });
+  }
+
+  leaveClub(clubId: string) {
+    return this.request<void>(`/api/clubs/${clubId}/join`, { method: "DELETE", headers: this.headers() });
+  }
+
+  listClubMembers(clubId: string) {
+    return this.request<ClubMemberListResponse>(`/api/clubs/${clubId}/members`, { headers: this.headers() });
+  }
+
+  getClubLeaderboard(clubId: string, period: "week" | "month" = "week") {
+    return this.request<ClubLeaderboardResponse>(`/api/clubs/${clubId}/leaderboard?period=${period}`, {
+      headers: this.headers(),
+    });
+  }
+
+  listClubBadges(clubId: string) {
+    return this.request<ClubBadgeOut[]>(`/api/clubs/${clubId}/badges`, { headers: this.headers() });
+  }
+
+  createClubBadge(clubId: string, data: { slug: string; name: string; description: string; icon_url?: string | null }) {
+    return this.request<ClubBadgeOut>(`/api/clubs/${clubId}/badges`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  awardClubBadge(clubId: string, badgeId: string, userId: string) {
+    return this.request<void>(`/api/clubs/${clubId}/badges/${badgeId}/award/${userId}`, {
+      method: "POST",
+      headers: this.headers(),
+    });
+  }
+
+  listClubChallenges(clubId: string) {
+    return this.request<ClubChallengeListResponse>(`/api/clubs/${clubId}/challenges`, { headers: this.headers() });
+  }
+
+  createClubChallenge(clubId: string, data: { title: string; goal_km: number; start_date: string; end_date: string; reward_club_badge_id?: string | null }) {
+    return this.request<ClubChallengeOut>(`/api/clubs/${clubId}/challenges`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Events
+  // ---------------------------------------------------------------------------
+  createEvent(data: {
+    club_id?: string | null;
+    destination_id?: string | null;
+    title: string;
+    description?: string | null;
+    event_date: string;
+    meeting_point?: string | null;
+    meeting_latitude?: number | null;
+    meeting_longitude?: number | null;
+  }) {
+    return this.request<EventOut>("/api/events", {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  listEvents(params: { club_id?: string; upcoming_only?: boolean; page?: number; limit?: number } = {}) {
+    const qs = new URLSearchParams();
+    if (params.club_id) qs.set("club_id", params.club_id);
+    if (params.upcoming_only != null) qs.set("upcoming_only", String(params.upcoming_only));
+    if (params.page) qs.set("page", String(params.page));
+    if (params.limit) qs.set("limit", String(params.limit));
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return this.request<EventListResponse>(`/api/events${suffix}`, { headers: this.headers() });
+  }
+
+  getEvent(eventId: string) {
+    return this.request<EventOut>(`/api/events/${eventId}`, { headers: this.headers() });
+  }
+
+  setEventRsvp(eventId: string, status: RSVPStatus) {
+    return this.request<EventOut>(`/api/events/${eventId}/rsvp`, {
+      method: "PUT",
+      headers: this.headers(),
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  cancelEventRsvp(eventId: string) {
+    return this.request<void>(`/api/events/${eventId}/rsvp`, { method: "DELETE", headers: this.headers() });
+  }
+
+  listEventRsvps(eventId: string) {
+    return this.request<EventRSVPListResponse>(`/api/events/${eventId}/rsvps`, { headers: this.headers() });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Trips
+  // ---------------------------------------------------------------------------
+  createTrip(data: { name: string; description?: string | null }) {
+    return this.request<TripOut>("/api/trips", { method: "POST", headers: this.headers(), body: JSON.stringify(data) });
+  }
+
+  listMyTrips() {
+    return this.request<TripListResponse>("/api/trips", { headers: this.headers() });
+  }
+
+  getTrip(tripId: string) {
+    return this.request<TripOut>(`/api/trips/${tripId}`, { headers: this.headers() });
+  }
+
+  addTripDay(tripId: string, data: { ride_log_id: string; day_index: number }) {
+    return this.request<TripOut>(`/api/trips/${tripId}/days`, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify(data),
+    });
+  }
+
+  removeTripDay(tripId: string, rideLogId: string) {
+    return this.request<TripOut>(`/api/trips/${tripId}/days/${rideLogId}`, { method: "DELETE", headers: this.headers() });
+  }
+
+  deleteTrip(tripId: string) {
+    return this.request<void>(`/api/trips/${tripId}`, { method: "DELETE", headers: this.headers() });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Photo timeline, best efforts, regions, elevation profile, year in rydr,
+  // heatmaps, flyby
+  // ---------------------------------------------------------------------------
+  getMyRideLogs(limit = 50) {
+    return this.request<MyRideLogListResponse>(`/api/ride-logs/mine?limit=${limit}`, { headers: this.headers() });
+  }
+
+  getTimeline(userId: string, limit = 100) {
+    return this.request<TimelineResponse>(`/api/users/${userId}/timeline?limit=${limit}`, { headers: this.headers() });
+  }
+
+  getBestEfforts(userId: string) {
+    return this.request<BestEffortListResponse>(`/api/users/${userId}/best-efforts`, { headers: this.headers() });
+  }
+
+  listRegions() {
+    return this.request<RegionListResponse>("/api/destinations/regions", { headers: this.headers() });
+  }
+
+  getElevationProfile(routeId: string) {
+    return this.request<ElevationProfileOut>(`/api/routes/${routeId}/elevation-profile`, { headers: this.headers() });
+  }
+
+  getYearInRydr(userId: string, year?: number) {
+    const suffix = year ? `?year=${year}` : "";
+    return this.request<YearInRydrOut>(`/api/users/${userId}/year-in-rydr${suffix}`, { headers: this.headers() });
+  }
+
+  getUserHeatmap(userId: string) {
+    return this.request<HeatmapResponse>(`/api/heatmap/users/${userId}`, { headers: this.headers() });
+  }
+
+  getGlobalHeatmap() {
+    return this.request<HeatmapResponse>("/api/heatmap/global", { headers: this.headers() });
+  }
+
+  getFlybys(rideLogId: string) {
+    return this.request<FlybyListResponse>(`/api/ride-logs/${rideLogId}/flybys`, { headers: this.headers() });
   }
 }
 

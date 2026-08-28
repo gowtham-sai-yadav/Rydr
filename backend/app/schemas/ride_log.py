@@ -35,6 +35,9 @@ class RideMediaOut(BaseModel):
     media_type: MediaType
     uploaded_by_user_id: Optional[UUID] = None
     caption: Optional[str] = None
+    captured_latitude: Optional[float] = None
+    captured_longitude: Optional[float] = None
+    captured_at: Optional[datetime] = None
     created_at: datetime
 
     class Config:
@@ -85,11 +88,26 @@ class RideLogOut(BaseModel):
     road_condition: Optional[RoadCondition] = None
     recommended: Optional[bool] = None
     notes: Optional[str] = None
+    # Auto-recorded track stats — populated when the rider submits a
+    # recorded_track (see track_analysis.py); null for manually-logged
+    # rides with no GPS track.
+    distance_km: Optional[float] = None
+    moving_duration_seconds: Optional[int] = None
+    avg_speed_kmh: Optional[float] = None
+    elevation_gain_m: Optional[float] = None
+    terrain_type: Optional[str] = None
+    relative_effort: Optional[int] = None
+    matched_route_id: Optional[UUID] = None
+    recorded_track: Optional[List[Dict[str, Any]]] = None
     created_at: datetime
     updated_at: datetime
     media: List[RideMediaOut] = []
     rider: Optional[UserBrief] = None
     rating: Optional[RatingBrief] = None
+    # Populated only right after a recorded_track submission that broke a
+    # record — e.g. ["longest_ride", "best_month"] — so the frontend can
+    # pop a "New PR!" moment immediately after logging. Empty otherwise.
+    new_personal_records: List[str] = []
 
     class Config:
         from_attributes = True
@@ -125,6 +143,13 @@ class RideLogCreate(BaseModel):
     actual_start_ts: Optional[datetime] = None
 
 
+class TrackPoint(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    ts: Optional[str] = None
+    speed_kmh: Optional[float] = None
+
+
 class RideLogUpdate(BaseModel):
     actual_start_ts: Optional[datetime] = None
     actual_end_ts: Optional[datetime] = None
@@ -132,6 +157,30 @@ class RideLogUpdate(BaseModel):
     road_condition: Optional[RoadCondition] = None
     recommended: Optional[bool] = None
     notes: Optional[str] = Field(default=None, max_length=MAX_NOTES_LEN)
+    # Submitting this triggers services/track_analysis.py to (re)compute
+    # distance_km/moving_duration_seconds/avg_speed_kmh/elevation_gain_m/
+    # terrain_type/relative_effort server-side — those derived fields
+    # aren't independently settable, only recorded_track is accepted here.
+    recorded_track: Optional[List[TrackPoint]] = Field(default=None, max_length=20000)
+
+
+class RideLogCommentOut(BaseModel):
+    id: UUID
+    ride_log_id: UUID
+    body: str
+    created_at: datetime
+    author: UserBrief
+
+    class Config:
+        from_attributes = True
+
+
+class RideLogCommentCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
+class RideLogCommentListResponse(BaseModel):
+    comments: List[RideLogCommentOut] = []
 
 
 class CloudinarySignature(BaseModel):
@@ -150,3 +199,52 @@ class CloudinarySignature(BaseModel):
     # Mirror the assumption surface from M2 CostEstimate: anything not in
     # the strict types above gets stuffed in here for forward-compat.
     extras: Dict[str, Any] = {}
+
+
+class TimelineEntryOut(BaseModel):
+    """One photo in a rider's photo-tagged timeline — a RideMedia row
+    plus enough ride/destination context to place it on a map and in a
+    chronological feed without a second round-trip per photo."""
+
+    media_id: UUID
+    url: str
+    media_type: MediaType
+    caption: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    taken_at: datetime
+    ride_log_id: UUID
+    ride_plan_id: UUID
+    destination_name: Optional[str] = None
+
+
+class TimelineResponse(BaseModel):
+    entries: List[TimelineEntryOut] = []
+
+
+class MyRideLogOut(BaseModel):
+    """Trimmed shape for pickers (e.g. "add this ride as a trip day") —
+    enough to identify and label a ride log without the full detail
+    payload (media, comments, recorded_track)."""
+
+    id: UUID
+    ride_plan_id: UUID
+    destination_name: Optional[str] = None
+    distance_km: Optional[float] = None
+    actual_start_ts: Optional[datetime] = None
+    thumbnail_url: Optional[str] = None
+
+
+class MyRideLogListResponse(BaseModel):
+    logs: List[MyRideLogOut] = []
+
+
+class FlybyOut(BaseModel):
+    rider: UserBrief
+    other_ride_log_id: UUID
+    closest_distance_km: float
+    approx_time: Optional[datetime] = None
+
+
+class FlybyListResponse(BaseModel):
+    flybys: List[FlybyOut] = []

@@ -14,6 +14,7 @@ class BadgeOut(BaseModel):
     name: str
     description: str
     icon_url: Optional[str] = None
+    rarity: str = "common"
 
     class Config:
         from_attributes = True

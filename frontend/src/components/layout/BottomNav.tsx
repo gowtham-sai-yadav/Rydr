@@ -34,28 +34,36 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-canvas/95 backdrop-blur-sm border-t border-hairline z-50">
-      <div className="flex justify-around py-2">
+    <nav className="md:hidden fixed bottom-3 left-4 right-4 bg-canvas/80 backdrop-blur-lg border border-hairline-strong rounded-2xl z-50 shadow-2xl select-none">
+      <div className="absolute top-0 inset-x-0 h-[1px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
+      <div className="flex justify-around py-2.5 px-1">
         {navItems.map((item) => {
           const active = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center px-3 py-1 transition-colors ${
-                active ? "text-accent-gold" : "text-charcoal"
+              className={`flex flex-col items-center gap-0.5 px-3 py-1 transition-all duration-200 relative ${
+                active ? "text-accent-gold scale-[1.05]" : "text-mute hover:text-ink"
               }`}
             >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-              </svg>
-              <span className="text-[11px] mt-0.5">{item.label}</span>
+              <div className={`p-1.5 rounded-full transition-all duration-200 ${
+                active ? "bg-accent-gold/10" : ""
+              }`}>
+                <svg
+                  className="w-5.5 h-5.5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={active ? 2 : 1.5}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
+                </svg>
+              </div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider">{item.label}</span>
+              {active && (
+                <span className="absolute bottom-0 w-1 h-1 rounded-full bg-accent-gold shadow-[0_0_8px_var(--color-accent-gold)]" />
+              )}
             </Link>
           );
         })}
