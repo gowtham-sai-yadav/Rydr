@@ -60,6 +60,11 @@ class UserOut(BaseModel):
     followers_count: int = 0
     following_count: int = 0
     is_followed_by_me: bool = False
+    # Phase 4 W7. Exposed so the client can show or hide the moderation
+    # surface; the admin endpoints enforce it themselves regardless, so this
+    # is a UI hint and not the access control. Granted only by
+    # ``scripts/grant_admin.py`` — there is no endpoint that sets it.
+    is_admin: bool = False
 
     class Config:
         from_attributes = True
