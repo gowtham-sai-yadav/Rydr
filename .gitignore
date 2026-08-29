@@ -65,3 +65,12 @@ frontend/android/app/google-services.json
 *.keystore
 *.jks
 frontend/android/keystore.properties
+
+# Abandoned interpreter attempts from setup. Untracked, but ignore them
+# so they never get added by a wildcard.
+venv.python3.*
+
+# Assistant tooling notes generated inside the frontend workspace. The
+# root-level AGENTS.md and CLAUDE.md are the intentional ones.
+frontend/AGENTS.md
+frontend/CLAUDE.md
