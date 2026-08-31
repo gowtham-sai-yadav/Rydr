@@ -4,12 +4,14 @@ All wired in M1 at the schema level. Endpoint wiring lands in M6 (follow) and M7
 """
 from __future__ import annotations
 
+import enum
 import uuid
 
 from sqlalchemy import (
     CheckConstraint,
     Column,
     DateTime,
+    Enum as SQLEnum,
     ForeignKey,
     Index,
     String,
@@ -21,6 +23,15 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.database import Base
+
+
+class FollowStatus(str, enum.Enum):
+    # Public target (the default): a follow lands as accepted immediately.
+    accepted = "accepted"
+    # Private target: sits here until the target accepts/rejects it. A
+    # pending row does NOT count toward followers_count/is_followed_by_me/
+    # DM eligibility - those all filter on status == accepted.
+    pending = "pending"
 
 
 class Follow(Base):
@@ -35,6 +46,12 @@ class Follow(Base):
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         primary_key=True,
+    )
+    status = Column(
+        SQLEnum(FollowStatus, name="follow_status"),
+        nullable=False,
+        default=FollowStatus.accepted,
+        server_default=FollowStatus.accepted.value,
     )
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 

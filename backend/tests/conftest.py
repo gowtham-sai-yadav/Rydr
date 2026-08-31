@@ -174,6 +174,12 @@ def make_user(client, tag):
 
 
 @pytest.fixture
+def db_session(db):
+    """Alias for `db` — test_destinations.py predates that fixture's name."""
+    return db
+
+
+@pytest.fixture
 def auth():
     """Build an Authorization header from a token."""
     return lambda token: {"Authorization": f"Bearer {token}"}
@@ -195,3 +201,62 @@ def make_destination(db, tag):
         return d
 
     return _make
+
+
+# ---------------------------------------------------------------------------
+# Back-compat helpers for tests written against the pre-Phase-4-W7 fixture
+# API (plain importable functions taking `client` explicitly, rather than
+# pytest fixture injection). Kept rather than rewriting every call site —
+# same "old clients unaffected" reasoning as PersonalStatsOut keeping the
+# M3 field names. New tests should prefer the make_user/auth fixtures above.
+# ---------------------------------------------------------------------------
+def auth_headers(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def signup(client, email: str, name: str = "Rider", **extra) -> dict:
+    """Returns {"access_token": ..., "user": {...}} — the shape these older
+    tests expect, built from the same /api/auth/signup call make_user uses."""
+    payload = {"name": name, "email": email, "password": "pw12345678", **extra}
+    res = client.post("/api/auth/signup", json=payload)
+    assert res.status_code in (200, 201), res.text
+    body = res.json()
+    return {"access_token": body["access_token"], "user": body["user"]}
+
+
+def create_destination(client, token: str, name: str = "Dest", **extra) -> dict:
+    payload = {
+        "name": f"{name}-{uuid.uuid4().hex[:8]}",
+        "latitude": 13.3702,
+        "longitude": 77.6835,
+        **extra,
+    }
+    res = client.post(
+        "/api/destinations", json=payload, headers=auth_headers(token)
+    )
+    assert res.status_code in (200, 201), res.text
+    return res.json()
+
+
+def create_and_complete_ride(client, token: str, destination_id: str, planned_date: str) -> str:
+    """Creates a ride plan as captain and drives it planned -> in_progress ->
+    completed, so callers get an id that /api/ride-logs will accept."""
+    resp = client.post(
+        "/api/rides",
+        headers=auth_headers(token),
+        json={
+            "destination_id": destination_id,
+            "title": "Test ride",
+            "planned_date": planned_date,
+            "planned_start_time": "08:00:00",
+            "max_riders": 2,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    ride_id = resp.json()["id"]
+
+    resp = client.post(f"/api/rides/{ride_id}/start", headers=auth_headers(token))
+    assert resp.status_code == 200, resp.text
+    resp = client.post(f"/api/rides/{ride_id}/complete", headers=auth_headers(token))
+    assert resp.status_code == 200, resp.text
+    return ride_id

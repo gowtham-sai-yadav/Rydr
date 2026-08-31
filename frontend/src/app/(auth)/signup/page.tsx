@@ -47,24 +47,30 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="w-full max-w-md">
-      <div className="text-center mb-10">
-        <h1 className="display-xl mb-3">Rydr</h1>
-        <p className="text-charcoal body-md">Sign up to start planning rides.</p>
+    <div className="w-full max-w-md px-2">
+      <div className="text-center mb-8">
+        <h1 className="display-xl mb-3 bg-gradient-to-r from-accent-gold via-accent-orange to-accent-blue bg-clip-text text-transparent font-extrabold tracking-tighter drop-shadow-md select-none">
+          Rydr
+        </h1>
+        <p className="text-mute body-sm font-medium tracking-wide uppercase select-none opacity-80">
+          Create an account to start planning rides.
+        </p>
       </div>
 
-      <div className="card-bordered p-8">
-        <div className="flex items-center gap-2 mb-6">
-          <div className={`h-0.5 flex-1 rounded ${step >= 1 ? "bg-ink" : "bg-hairline-strong"}`} />
-          <div className={`h-0.5 flex-1 rounded ${step >= 2 ? "bg-ink" : "bg-hairline-strong"}`} />
+      <div className="card-bordered p-8 bg-surface-card/40 backdrop-blur-xl border border-hairline-strong shadow-2xl relative">
+        <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-accent-gold/40 to-transparent" />
+        
+        <div className="flex items-center gap-2 mb-6 select-none">
+          <div className={`h-[3px] flex-1 rounded transition-all duration-300 ${step >= 1 ? "bg-accent-gold" : "bg-hairline-strong"}`} />
+          <div className={`h-[3px] flex-1 rounded transition-all duration-300 ${step >= 2 ? "bg-accent-gold" : "bg-hairline-strong"}`} />
         </div>
 
-        <h2 className="heading-md text-ink mb-6">
+        <h2 className="heading-sm text-ink mb-6 font-semibold select-none">
           {step === 1 ? "Your details" : "Your bike"}
         </h2>
 
         {error && (
-          <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-md mb-4 text-sm">
+          <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-md mb-4 text-xs">
             {error}
           </div>
         )}
@@ -72,100 +78,100 @@ export default function SignupPage() {
         {step === 1 ? (
           <form onSubmit={handleNext} className="space-y-4">
             <div>
-              <label className="label-eyebrow block mb-2">Name</label>
+              <label className="label-eyebrow block mb-2 font-semibold">Name</label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="input"
+                className="input bg-surface-deep/60 border border-hairline-strong focus:border-accent-gold px-4 py-2.5 text-ink text-sm rounded-lg w-full transition-all duration-200"
                 placeholder="Your full name"
               />
             </div>
             <div>
-              <label className="label-eyebrow block mb-2">Email</label>
+              <label className="label-eyebrow block mb-2 font-semibold">Email</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="input"
+                className="input bg-surface-deep/60 border border-hairline-strong focus:border-accent-gold px-4 py-2.5 text-ink text-sm rounded-lg w-full transition-all duration-200"
                 placeholder="you@example.com"
               />
             </div>
             <div>
-              <label className="label-eyebrow block mb-2">Phone (optional)</label>
+              <label className="label-eyebrow block mb-2 font-semibold">Phone (optional)</label>
               <input
                 type="tel"
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="input"
+                className="input bg-surface-deep/60 border border-hairline-strong focus:border-accent-gold px-4 py-2.5 text-ink text-sm rounded-lg w-full transition-all duration-200"
                 placeholder="+91 98765 43210"
               />
             </div>
             <div>
-              <label className="label-eyebrow block mb-2">Password</label>
+              <label className="label-eyebrow block mb-2 font-semibold">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
-                className="input"
+                className="input bg-surface-deep/60 border border-hairline-strong focus:border-accent-gold px-4 py-2.5 text-ink text-sm rounded-lg w-full transition-all duration-200"
                 placeholder="Min 8 characters"
               />
             </div>
-            <button type="submit" className="btn btn-primary w-full h-11">
+            <button type="submit" className="btn btn-primary w-full h-11 rounded-lg text-sm font-semibold tracking-wider uppercase transition-all duration-200">
               Continue
             </button>
           </form>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="label-eyebrow block mb-2">Bike name</label>
+              <label className="label-eyebrow block mb-2 font-semibold">Bike name</label>
               <input
                 type="text"
                 value={bikeName}
                 onChange={(e) => setBikeName(e.target.value)}
-                className="input"
-                placeholder='"Shadow"'
+                className="input bg-surface-deep/60 border border-hairline-strong focus:border-accent-gold px-4 py-2.5 text-ink text-sm rounded-lg w-full transition-all duration-200"
+                placeholder="e.g. Shadow"
               />
             </div>
             <div>
-              <label className="label-eyebrow block mb-2">Model</label>
+              <label className="label-eyebrow block mb-2 font-semibold">Model</label>
               <input
                 type="text"
                 value={bikeModel}
                 onChange={(e) => setBikeModel(e.target.value)}
-                className="input"
+                className="input bg-surface-deep/60 border border-hairline-strong focus:border-accent-gold px-4 py-2.5 text-ink text-sm rounded-lg w-full transition-all duration-200"
                 placeholder="Honda CB650R"
               />
             </div>
             <div>
-              <label className="label-eyebrow block mb-2">Year</label>
+              <label className="label-eyebrow block mb-2 font-semibold">Year</label>
               <input
                 type="number"
                 value={bikeYear}
                 onChange={(e) => setBikeYear(e.target.value)}
-                className="input"
+                className="input bg-surface-deep/60 border border-hairline-strong focus:border-accent-gold px-4 py-2.5 text-ink text-sm rounded-lg w-full transition-all duration-200"
                 placeholder="2024"
               />
             </div>
-            <p className="caption">
+            <p className="caption select-none">
               You can add mileage and home location on your profile after sign-up — they power cost estimates.
             </p>
-            <div className="flex gap-3">
+            <div className="flex gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="btn btn-outline flex-1 h-11"
+                className="btn btn-outline flex-1 h-11 rounded-lg text-sm font-semibold tracking-wider uppercase transition-all duration-200"
               >
                 Back
               </button>
               <button
                 type="submit"
                 disabled={loading}
-                className="btn btn-primary flex-1 h-11"
+                className="btn btn-primary flex-1 h-11 rounded-lg text-sm font-semibold tracking-wider uppercase transition-all duration-200"
               >
                 {loading ? "Creating…" : "Create account"}
               </button>
@@ -173,9 +179,9 @@ export default function SignupPage() {
           </form>
         )}
 
-        <p className="text-center text-charcoal mt-6 text-sm">
+        <p className="text-center text-mute mt-6 text-xs select-none">
           Already have an account?{" "}
-          <Link href="/login" className="link font-medium">
+          <Link href="/login" className="text-accent-gold hover:underline font-semibold ml-1">
             Sign in
           </Link>
         </p>

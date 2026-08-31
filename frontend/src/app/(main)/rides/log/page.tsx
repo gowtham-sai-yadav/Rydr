@@ -1,18 +1,25 @@
 "use client";
 import { useState, useEffect, useCallback, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import { capturePhoto } from "@/lib/native/camera";
 import { isNative } from "@/lib/native/platform";
-import ShareCard from "@/components/share/ShareCard";
+import { ShareCardButton } from "@/components/share/ShareCardButton";
 import type {
+  FlybyOut,
+  RideLogCommentOut,
   RideLogOut,
   RidePlanOut,
 } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
 
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.round((seconds % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
 
 function RideLogPageInner() {
   // Phase 4 W9: the record id arrives as a query parameter rather than a
@@ -20,7 +27,6 @@ function RideLogPageInner() {
   // export for the Capacitor build. See lib/routes.ts for why.
   const id = useSearchParams().get("id") ?? "";
   const { user } = useAuth();
-  const router = useRouter();
 
   const [ride, setRide] = useState<RidePlanOut | null>(null);
   const [log, setLog] = useState<RideLogOut | null>(null);
@@ -46,6 +52,14 @@ function RideLogPageInner() {
   const [native, setNative] = useState(false);
   useEffect(() => setNative(isNative()), []);
 
+  // Comments
+  const [comments, setComments] = useState<RideLogCommentOut[]>([]);
+  const [commentDraft, setCommentDraft] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+
+  // Flyby
+  const [flybys, setFlybys] = useState<FlybyOut[]>([]);
+
   const reload = useCallback(async () => {
     try {
       // Load ride first to know destination + check membership
@@ -64,12 +78,46 @@ function RideLogPageInner() {
         setStars(fresh.rating.stars);
         setReview(fresh.rating.review ?? "");
       }
+      api
+        .getRideLogComments(fresh.id)
+        .then((res) => setComments(res.comments))
+        .catch(() => {});
+      if (fresh.recorded_track) {
+        api
+          .getFlybys(fresh.id)
+          .then((res) => setFlybys(res.flybys))
+          .catch(() => {});
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load ride log");
     } finally {
       setLoading(false);
     }
   }, [id]);
+
+  const postComment = async () => {
+    if (!log || !commentDraft.trim()) return;
+    setPostingComment(true);
+    try {
+      const created = await api.addRideLogComment(log.id, commentDraft.trim());
+      setComments((prev) => [...prev, created]);
+      setCommentDraft("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to post comment");
+    } finally {
+      setPostingComment(false);
+    }
+  };
+
+  const removeComment = async (commentId: string) => {
+    if (!log) return;
+    try {
+      await api.deleteRideLogComment(log.id, commentId);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete comment");
+    }
+  };
 
   useEffect(() => {
     reload();
@@ -222,7 +270,15 @@ function RideLogPageInner() {
         <Link href={routes.ride(ride.id)} className="text-accent-blue hover:text-accent-blue text-sm">
           ← {ride.title}
         </Link>
-        <h1 className="text-2xl font-bold text-ink mt-1">Log this ride</h1>
+        <div className="flex items-center justify-between mt-1">
+          <h1 className="text-2xl font-bold text-ink">Log this ride</h1>
+          <ShareCardButton
+            fetchImage={() => api.getRideLogCardImage(log.id)}
+            fileName={`rydr-ride-${ride.id}`}
+            shareTitle={ride.title}
+            shareText={`Check out my ride to ${ride.destination?.name ?? "somewhere great"} on Rydr`}
+          />
+        </div>
         {ride.destination && (
           <p className="text-mute text-sm">at {ride.destination.name}</p>
         )}
@@ -234,18 +290,79 @@ function RideLogPageInner() {
         </div>
       )}
 
-      {/* Share card (Phase 4 W4). Only once the log exists — the card is
-          rendered from the saved log, so offering it before the first save
-          would produce a 404. */}
-      {log && (
-        <div className="bg-surface-card rounded-xl p-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-medium text-ink">Share this ride</p>
-            <p className="text-[12px] text-mute">
-              An image card with the route, distance and your rating.
-            </p>
+      {log.new_personal_records.length > 0 && (
+        <div className="border border-accent-gold/40 bg-accent-gold/10 text-accent-gold px-4 py-3 rounded-lg text-sm font-semibold">
+          🏆 New personal record{log.new_personal_records.length > 1 ? "s" : ""}: {log.new_personal_records.join(", ")}
+        </div>
+      )}
+
+      {(log.distance_km != null || log.relative_effort != null) && (
+        <div className="bg-surface-card rounded-xl p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-ink">Ride stats</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+            {log.distance_km != null && (
+              <div>
+                <p className="text-xs text-mute uppercase tracking-wide">Distance</p>
+                <p className="text-ink font-semibold">{log.distance_km.toFixed(1)} km</p>
+              </div>
+            )}
+            {log.moving_duration_seconds != null && (
+              <div>
+                <p className="text-xs text-mute uppercase tracking-wide">Moving time</p>
+                <p className="text-ink font-semibold">{formatDuration(log.moving_duration_seconds)}</p>
+              </div>
+            )}
+            {log.avg_speed_kmh != null && (
+              <div>
+                <p className="text-xs text-mute uppercase tracking-wide">Avg speed</p>
+                <p className="text-ink font-semibold">{log.avg_speed_kmh.toFixed(0)} km/h</p>
+              </div>
+            )}
+            {log.elevation_gain_m != null && (
+              <div>
+                <p className="text-xs text-mute uppercase tracking-wide">Elevation gain</p>
+                <p className="text-ink font-semibold">{log.elevation_gain_m.toFixed(0)} m</p>
+              </div>
+            )}
+            {log.terrain_type && (
+              <div>
+                <p className="text-xs text-mute uppercase tracking-wide">Terrain</p>
+                <p className="text-ink font-semibold capitalize">{log.terrain_type}</p>
+              </div>
+            )}
+            {log.relative_effort != null && (
+              <div>
+                <p className="text-xs text-mute uppercase tracking-wide">Relative effort</p>
+                <p className="text-accent-gold font-semibold">{log.relative_effort} / 100</p>
+              </div>
+            )}
           </div>
-          <ShareCard id={log.id} kind="ride" title={ride.title} />
+          {log.matched_route_id && (
+            <p className="text-xs text-mute pt-2 border-t border-hairline-strong">
+              Matched to a saved route —{" "}
+              <Link href={`/journey/plan?route_id=${log.matched_route_id}`} className="text-accent-gold">
+                view route
+              </Link>
+            </p>
+          )}
+          {flybys.length > 0 && (
+            <div className="pt-3 border-t border-hairline-strong space-y-2">
+              <p className="text-xs text-mute uppercase tracking-wide">Riders who crossed your path</p>
+              {flybys.map((f) => (
+                <Link
+                  key={f.other_ride_log_id}
+                  href={routes.user(f.rider.id)}
+                  className="flex items-center gap-2 text-sm hover:opacity-80"
+                >
+                  <div className="w-6 h-6 rounded-full bg-ink text-canvas flex items-center justify-center text-[10px] font-bold">
+                    {f.rider.name.charAt(0)}
+                  </div>
+                  <span className="text-ink">{f.rider.name}</span>
+                  <span className="text-mute text-xs">— {(f.closest_distance_km * 1000).toFixed(0)}m away</span>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -469,6 +586,51 @@ function RideLogPageInner() {
         </button>
       </div>
 
+      {/* Comments */}
+      <div className="bg-surface-card rounded-xl p-6 space-y-4">
+        <h2 className="text-lg font-semibold text-ink">Comments</h2>
+        {comments.length === 0 && <p className="text-mute text-sm">No comments yet.</p>}
+        <div className="space-y-3">
+          {comments.map((c) => (
+            <div key={c.id} className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm text-ink">
+                  <span className="font-semibold">{c.author.name}</span>{" "}
+                  <span className="text-mute">{c.body}</span>
+                </p>
+              </div>
+              {c.author.id === user?.id && (
+                <button
+                  onClick={() => removeComment(c.id)}
+                  className="text-xs text-mute hover:text-accent-red shrink-0"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 pt-2 border-t border-hairline-strong">
+          <input
+            value={commentDraft}
+            onChange={(e) => setCommentDraft(e.target.value)}
+            placeholder="Add a comment…"
+            maxLength={2000}
+            className="flex-1 bg-surface-elevated border border-hairline-strong rounded-lg px-3 py-2 text-ink text-sm focus:outline-none focus:ring-2 focus:ring-ink/30"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") postComment();
+            }}
+          />
+          <button
+            onClick={postComment}
+            disabled={postingComment || !commentDraft.trim()}
+            className="bg-ink text-canvas disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-medium"
+          >
+            Post
+          </button>
+        </div>
+      </div>
+
       <Link
         href={routes.destination(ride.destination_id)}
         className="block text-center text-accent-blue hover:text-accent-blue text-sm py-2"
@@ -478,7 +640,6 @@ function RideLogPageInner() {
     </div>
   );
 }
-
 
 /**
  * Suspense boundary around RideLogPageInner.

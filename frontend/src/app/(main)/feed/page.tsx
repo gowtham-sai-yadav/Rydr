@@ -7,6 +7,8 @@
  * logged-out reader.
  */
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
@@ -82,29 +84,34 @@ export default function FeedPage() {
     <div className="max-w-2xl mx-auto space-y-5 pb-12 glow-orange">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-ink">Feed</h1>
-        {user && (
-          <div
-            role="tablist"
-            aria-label="Feed scope"
-            className="flex rounded-lg bg-surface-card border border-hairline p-0.5"
-          >
-            {(["all", "following"] as Scope[]).map((s) => (
-              <button
-                key={s}
-                role="tab"
-                aria-selected={scope === s}
-                onClick={() => setScope(s)}
-                className={`px-3 py-1.5 rounded-md text-[13px] font-medium capitalize transition-colors ${
-                  scope === s
-                    ? "bg-surface-elevated text-ink"
-                    : "text-charcoal hover:text-ink"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex items-center gap-3">
+          {user && (
+            <div
+              role="tablist"
+              aria-label="Feed scope"
+              className="flex rounded-lg bg-surface-card border border-hairline p-0.5"
+            >
+              {(["all", "following"] as Scope[]).map((s) => (
+                <button
+                  key={s}
+                  role="tab"
+                  aria-selected={scope === s}
+                  onClick={() => setScope(s)}
+                  className={`px-3 py-1.5 rounded-md text-[13px] font-medium capitalize transition-colors ${
+                    scope === s
+                      ? "bg-surface-elevated text-ink"
+                      : "text-charcoal hover:text-ink"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+          <Link href="/leaderboard" className="link text-sm font-medium md:hidden">
+            Leaderboard →
+          </Link>
+        </div>
       </div>
 
       {user && (
@@ -168,17 +175,26 @@ export default function FeedPage() {
         </div>
       )}
 
-      {posts.map((post) => (
-        <PostCard
-          key={post.id}
-          post={post}
-          viewer={user}
-          onDeleted={(id) => {
-            setPosts((p) => p.filter((x) => x.id !== id));
-            setTotal((t) => Math.max(0, t - 1));
-          }}
-        />
-      ))}
+      <AnimatePresence initial={false}>
+        {posts.map((post, i) => (
+          <motion.div
+            key={post.id}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3, delay: Math.min(i, 8) * 0.03 }}
+          >
+            <PostCard
+              post={post}
+              viewer={user}
+              onDeleted={(id) => {
+                setPosts((p) => p.filter((x) => x.id !== id));
+                setTotal((t) => Math.max(0, t - 1));
+              }}
+            />
+          </motion.div>
+        ))}
+      </AnimatePresence>
 
       {hasMore && (
         <button

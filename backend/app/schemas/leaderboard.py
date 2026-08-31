@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from app.schemas.user import UserBrief
+
 
 class RiderLeaderboardEntry(BaseModel):
     rank: int
@@ -59,3 +61,22 @@ class PersonalStatsOut(BaseModel):
     # measure from — the client should prompt for a home location rather than
     # showing "0 km ridden".
     has_home_location: bool
+
+
+class LocalLegendOut(BaseModel):
+    destination_id: UUID
+    user: Optional[UserBrief] = None
+    ride_count: int = 0
+    window_days: int = 90
+
+
+class WeeklyLeagueTier(BaseModel):
+    tier: str  # "gold" | "silver" | "bronze"
+    rank: int
+    user: UserBrief
+    distance_km: float
+
+
+class WeeklyLeagueResponse(BaseModel):
+    week_start: str
+    tiers: List[WeeklyLeagueTier] = []

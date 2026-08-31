@@ -25,9 +25,15 @@ from app.models.destination import (  # noqa: F401
     TerrainDifficulty,
 )
 from app.models.route import Route, RoutePoint  # noqa: F401
-from app.models.ride_log import MediaType, RideLog, RideMedia, RoadCondition  # noqa: F401
+from app.models.ride_log import (  # noqa: F401
+    MediaType,
+    RideLog,
+    RideLogComment,
+    RideMedia,
+    RoadCondition,
+)
 from app.models.social import Discussion, DiscussionComment, Follow  # noqa: F401
-from app.models.badge import Badge, UserBadge  # noqa: F401
+from app.models.badge import Badge, BadgeRarity, UserBadge  # noqa: F401
 from app.models.chat import ChatGroup, ChatMessage  # noqa: F401
 from app.models.report import (  # noqa: F401
     Report,
@@ -47,3 +53,16 @@ from app.models.notification import (  # noqa: F401
     Notification,
     NotificationType,
 )
+from app.models.direct_message import DMThread, DirectMessage  # noqa: F401
+from app.models.trip import Trip, TripRideLog  # noqa: F401
+from app.models.club import (  # noqa: F401
+    Club,
+    ClubBadge,
+    ClubChallenge,
+    ClubMembership,
+    ClubRole,
+    UserClubBadge,
+)
+from app.models.event import Event, EventRSVP, RSVPStatus  # noqa: F401
+from app.models.hazard import HAZARD_DECAY, HazardReport, HazardType  # noqa: F401
+from app.models.push_token import PushToken  # noqa: F401

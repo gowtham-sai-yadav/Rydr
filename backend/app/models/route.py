@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -35,6 +36,18 @@ class Route(Base):
     created_by_user_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Save & publish: a rider's own drawn route stays private (is_published
+    # False) until they choose to share it as a reusable "Rydr Route".
+    is_published = Column(Boolean, nullable=False, default=False, server_default="false")
+    distance_km = Column(Float, nullable=True)  # computed from points at save time
+    # Set when this route was captured from an actual completed ride
+    # (vs. drawn ahead of time in the planner) - lets route matching link
+    # a later ride log back to it without re-deriving the connection.
+    source_ride_log_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("ride_logs.id", ondelete="SET NULL"),
         nullable=True,
     )
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

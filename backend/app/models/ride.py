@@ -9,6 +9,7 @@ import enum
 import uuid
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Date,
     DateTime,
@@ -88,6 +89,17 @@ class Bike(Base):
         nullable=False,
         default=BikeType.any,
     )
+    # Gear tracking - cumulative km/rides since either the bike was added
+    # or the last service reset. Updated in ride_logs.py whenever a ride
+    # log gets a distance_km. service_interval_km is user-set (defaults to
+    # a common chain/tyre-check interval); the "due for service" signal is
+    # `total_km_since_service >= service_interval_km`, computed in the API
+    # layer rather than stored, so changing the interval doesn't need a
+    # backfill.
+    total_km_since_service = Column(Float, nullable=False, default=0)
+    total_km_lifetime = Column(Float, nullable=False, default=0)
+    service_interval_km = Column(Integer, nullable=False, default=3000)
+    last_serviced_at = Column(DateTime(timezone=True), nullable=True)
 
     owner = relationship("User", back_populates="bike")
 
@@ -129,7 +141,16 @@ class RidePlan(Base):
     )
     recommended_bike_type = Column(String(100), nullable=True)
     break_schedule = Column(Text, nullable=True)
-    max_riders = Column(Integer, nullable=False, default=10)
+    # Null = no cap ("no limit" option on ride creation). No client-side
+    # `default=` here deliberately - SQLAlchemy applies a Column default
+    # whenever the value is None at flush time, whether that None was
+    # explicit ("no limit" - what we need to preserve) or just omitted.
+    # The 10-rider default for the omitted case lives in RidePlanCreate
+    # (the API boundary) instead, where "not provided" is distinguishable.
+    max_riders = Column(Integer, nullable=True)
+    # False = join requests are auto-approved (capacity permitting) instead
+    # of sitting pending for the captain to act on.
+    requires_approval = Column(Boolean, nullable=False, default=True, server_default=text("true"))
     status = Column(
         SQLEnum(RidePlanStatus, name="ride_plan_status"),
         nullable=False,
