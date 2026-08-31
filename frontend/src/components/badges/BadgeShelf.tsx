@@ -1,8 +1,10 @@
 "use client";
 import { motion } from "framer-motion";
+import { useState } from "react";
 import { api } from "@/lib/api";
 import type { BadgeOut, UserBadgeOut } from "@/lib/api.types";
 import { ShareCardButton } from "@/components/share/ShareCardButton";
+import { BadgeDetailModal } from "./BadgeDetailModal";
 
 
 /**
@@ -63,6 +65,7 @@ function BadgeTile({
   locked,
   userBadgeId,
   index = 0,
+  onOpen,
 }: {
   badge: BadgeOut;
   earnedAt?: string;
@@ -70,23 +73,26 @@ function BadgeTile({
   /** Present only for earned badges — the id the share-card endpoint keys on. */
   userBadgeId?: string;
   index?: number;
+  onOpen: () => void;
 }) {
   const imageUrl = getBadgeIcon(badge.slug, badge.icon_url);
   const rarity = rarityStyle(badge.rarity);
 
   return (
-    <motion.div
+    <motion.button
+      type="button"
+      onClick={onOpen}
       initial={{ opacity: 0, scale: 0.85, y: 8 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       transition={{ duration: 0.3, delay: Math.min(index, 12) * 0.04 }}
       whileHover={locked ? undefined : { scale: 1.04 }}
-      className={`card-bordered p-5 flex flex-col items-center justify-between text-center bg-surface-card/45 border rounded-2xl shadow-lg relative min-h-[220px] transition-all duration-300 ${
+      className={`card-bordered p-5 flex flex-col items-center justify-between text-center bg-surface-card/45 border rounded-2xl shadow-lg relative min-h-[220px] transition-all duration-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-gold/60 ${
         locked ? "opacity-60 border-hairline-strong" : rarity.border
       }`}
-      title={
+      aria-label={
         locked
-          ? `${badge.name} — ${badge.description}`
-          : `${badge.name} — earned ${earnedAt ? formatEarnedDate(earnedAt) : ""}`
+          ? `${badge.name} — locked. ${badge.description}`
+          : `${badge.name} — earned. ${badge.description}`
       }
     >
       {locked ? (
@@ -133,24 +139,22 @@ function BadgeTile({
         ) : (
           <div className="h-3" />
         )}
-
-        {!locked && userBadgeId && (
-          <ShareCardButton
-            fetchImage={() => api.getBadgeCardImage(userBadgeId)}
-            fileName={`rydr-badge-${badge.slug}`}
-            shareTitle={badge.name}
-            shareText={`I earned the ${badge.name} badge on Rydr`}
-            label="Share Badge"
-            className="mt-3.5 w-full text-[10px] font-bold py-1.5 rounded-lg uppercase tracking-wider"
-          />
-        )}
+        {/* Share button moved to the detail modal — see BadgeShelf's
+            <BadgeDetailModal> below. Rendering it here would nest a button
+            inside a button, and clicking it would also open the modal. */}
       </div>
-    </motion.div>
+    </motion.button>
   );
 }
 
 
+type OpenTarget =
+  | { kind: "earned"; badge: BadgeOut; userBadgeId: string; earnedAt: string }
+  | { kind: "locked"; badge: BadgeOut };
+
 export function BadgeShelf({ earned, catalog, showLocked }: Props) {
+  const [open, setOpen] = useState<OpenTarget | null>(null);
+
   const earnedSlugs = new Set(
     earned.map((u) => u.badge?.slug).filter((s): s is string => !!s),
   );
@@ -163,10 +167,19 @@ export function BadgeShelf({ earned, catalog, showLocked }: Props) {
       : [];
 
   if (earned.length === 0 && locked.length === 0) {
-    return (
-      <p className="text-mute text-sm">No badges yet.</p>
-    );
+    return <p className="text-mute text-sm">No badges yet.</p>;
   }
+
+  const target = open?.badge ?? null;
+  const modalBadge = target
+    ? {
+        slug: target.slug,
+        name: target.name,
+        description: target.description,
+        rarity: target.rarity,
+        imageUrl: getBadgeIcon(target.slug, target.icon_url),
+      }
+    : null;
 
   return (
     <div className="space-y-6">
@@ -180,6 +193,14 @@ export function BadgeShelf({ earned, catalog, showLocked }: Props) {
                 earnedAt={ub.earned_at}
                 userBadgeId={ub.id}
                 index={i}
+                onOpen={() =>
+                  setOpen({
+                    kind: "earned",
+                    badge: ub.badge!,
+                    userBadgeId: ub.id,
+                    earnedAt: ub.earned_at,
+                  })
+                }
               />
             ) : null,
           )}
@@ -191,11 +212,36 @@ export function BadgeShelf({ earned, catalog, showLocked }: Props) {
           <p className="label-eyebrow text-stone">Locked Achievements</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {locked.map((b) => (
-              <BadgeTile key={b.id} badge={b} locked />
+              <BadgeTile
+                key={b.id}
+                badge={b}
+                locked
+                onOpen={() => setOpen({ kind: "locked", badge: b })}
+              />
             ))}
           </div>
         </div>
       )}
+
+      <BadgeDetailModal
+        open={open !== null}
+        onOpenChange={(v) => (v ? undefined : setOpen(null))}
+        badge={modalBadge}
+        earnedAt={open?.kind === "earned" ? open.earnedAt : undefined}
+        locked={open?.kind === "locked"}
+        actions={
+          open?.kind === "earned" ? (
+            <ShareCardButton
+              fetchImage={() => api.getBadgeCardImage(open.userBadgeId)}
+              fileName={`rydr-badge-${open.badge.slug}`}
+              shareTitle={open.badge.name}
+              shareText={`I earned the ${open.badge.name} badge on Rydr`}
+              label="Share badge"
+              className="w-full text-xs font-semibold py-2 rounded-[var(--radius-button)] uppercase tracking-wider"
+            />
+          ) : null
+        }
+      />
     </div>
   );
 }

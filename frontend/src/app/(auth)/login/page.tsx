@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
+import { Button, Input, Alert } from "@/components/ui";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -17,7 +18,7 @@ export default function LoginPage() {
     try {
       await login(email, password);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Sign in failed");
     } finally {
       setLoading(false);
     }
@@ -26,63 +27,72 @@ export default function LoginPage() {
   return (
     <div className="w-full max-w-md px-2">
       <div className="text-center mb-8">
-        <h1 className="display-xl mb-3 bg-gradient-to-r from-accent-gold via-accent-orange to-accent-blue bg-clip-text text-transparent font-extrabold tracking-tighter drop-shadow-md select-none">
+        <h1 className="font-display text-5xl font-black tracking-tighter text-accent-gold select-none">
           Rydr
         </h1>
-        <p className="text-mute body-sm font-medium tracking-wide uppercase select-none opacity-80">
-          Scouted Trails. Logged Journeys. Ride Joined.
-        </p>
+        <p className="mt-3 text-mute text-sm">Where riders find their next road.</p>
       </div>
 
-      <div className="card-bordered p-8 bg-surface-card/40 backdrop-blur-xl border border-hairline-strong shadow-2xl relative">
-        <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-accent-gold/40 to-transparent" />
-        <h2 className="heading-sm text-ink mb-6 font-semibold select-none">
+      <div className="rounded-[var(--radius-card)] bg-surface-card border border-hairline-strong backdrop-blur-xl p-6 sm:p-8 shadow-2xl relative">
+        <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/40 to-transparent" />
+        <h2 className="font-display text-lg font-semibold text-ink mb-5">
           Welcome back
         </h2>
 
         {error && (
-          <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-md mb-4 text-xs">
-            {error}
+          <div className="mb-4">
+            <Alert variant="destructive">{error}</Alert>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="label-eyebrow block mb-2 font-semibold">Email Address</label>
-            <input
+            <label
+              htmlFor="email"
+              className="block mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-mute"
+            >
+              Email
+            </label>
+            <Input
+              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="input bg-surface-deep/60 border border-hairline-strong focus:border-accent-gold px-4 py-3 text-ink text-sm rounded-lg w-full transition-all duration-200"
               placeholder="you@example.com"
+              autoComplete="email"
             />
           </div>
 
           <div>
-            <label className="label-eyebrow block mb-2 font-semibold">Password</label>
-            <input
+            <label
+              htmlFor="password"
+              className="block mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-mute"
+            >
+              Password
+            </label>
+            <Input
+              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="input bg-surface-deep/60 border border-hairline-strong focus:border-accent-gold px-4 py-3 text-ink text-sm rounded-lg w-full transition-all duration-200"
               placeholder="••••••••"
+              autoComplete="current-password"
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn btn-primary w-full h-11 rounded-lg text-sm font-semibold tracking-wider uppercase transition-all duration-200"
-          >
-            {loading ? "Igniting Engine…" : "Start Engine (Sign in)"}
-          </button>
+          <Button type="submit" size="lg" className="w-full" disabled={loading}>
+            {loading ? "Signing in…" : "Sign in"}
+          </Button>
         </form>
 
         <p className="text-center text-mute mt-6 text-xs">
           New here?{" "}
-          <Link href="/signup" className="text-accent-gold hover:underline font-semibold ml-1">
+          <Link
+            href="/signup"
+            className="text-accent-gold font-semibold hover:underline underline-offset-4"
+          >
             Create an account
           </Link>
         </p>
