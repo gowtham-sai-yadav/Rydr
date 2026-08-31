@@ -8,6 +8,7 @@ import { BadgeShelf } from "@/components/badges/BadgeShelf";
 import { PersonalRecordsPanel } from "@/components/profile/PersonalRecordsPanel";
 import { BestEffortsPanel } from "@/components/profile/BestEffortsPanel";
 import { routes } from "@/lib/routes";
+import Avatar from "@/components/ui/Avatar";
 
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
@@ -169,9 +170,11 @@ export default function ProfilePage() {
         <div className="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/40 to-transparent" />
         <div className="absolute bottom-6 left-6 right-6 flex flex-col sm:flex-row items-center sm:items-end gap-4 z-10">
           <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-accent-gold via-accent-orange to-accent-blue p-[3px] shadow-xl">
-            <div className="w-full h-full rounded-full bg-surface-deep flex items-center justify-center text-3xl font-bold font-display text-ink uppercase">
-              {user.name.charAt(0)}
-            </div>
+            <Avatar
+              name={user.name}
+              avatarUrl={user.avatar_url}
+              size="full"
+            />
           </div>
           <div className="text-center sm:text-left flex-1 space-y-1">
             <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-ink uppercase">{user.name}</h1>
@@ -196,14 +199,11 @@ export default function ProfilePage() {
           <div className="space-y-2">
             {followRequests.map((edge) => (
               <div key={edge.user.id} className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-ink text-canvas flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden">
-                  {edge.user.avatar_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={edge.user.avatar_url} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    edge.user.name.charAt(0)
-                  )}
-                </div>
+                <Avatar
+                  name={edge.user.name}
+                  avatarUrl={edge.user.avatar_url}
+                  size="md"
+                />
                 <p className="flex-1 text-sm text-ink font-medium truncate">{edge.user.name}</p>
                 <button
                   onClick={() => handleFollowRequest(edge.user.id, "accept")}
