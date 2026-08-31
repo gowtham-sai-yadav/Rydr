@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { Plus } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import RideCard from "@/components/rides/RideCard";
@@ -8,6 +9,15 @@ import type {
   MineRideOut,
   RidePlanSummary,
 } from "@/lib/api.types";
+import {
+  Alert,
+  Button,
+  Spinner,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui";
+import { cn } from "@/lib/cn";
 
 
 type MainTab = "feed" | "mine";
@@ -58,36 +68,20 @@ export default function RidesPage() {
     mainTab === "feed" ? feedRides : myRides;
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="max-w-5xl mx-auto space-y-6 pb-12">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex gap-1 bg-surface-card rounded-lg p-1">
-          <button
-            onClick={() => setMainTab("feed")}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              mainTab === "feed" ? "bg-accent-gold text-canvas" : "text-mute hover:text-ink"
-            }`}
-          >
-            Feed
-          </button>
-          <button
-            onClick={() => setMainTab("mine")}
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-              mainTab === "mine" ? "bg-accent-gold text-canvas" : "text-mute hover:text-ink"
-            }`}
-          >
-            My Rides
-          </button>
-        </div>
+        <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as MainTab)}>
+          <TabsList>
+            <TabsTrigger value="feed">Feed</TabsTrigger>
+            <TabsTrigger value="mine">My rides</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
-        <Link
-          href="/rides/create"
-          className="bg-accent-gold text-canvas hover:bg-accent-gold/90 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Plan a ride
-        </Link>
+        <Button asChild size="default">
+          <Link href="/rides/create">
+            <Plus className="h-4 w-4" /> Plan a ride
+          </Link>
+        </Button>
       </div>
 
       {/* Filters */}
@@ -109,29 +103,28 @@ export default function RidesPage() {
             <button
               key={f}
               onClick={() => setMyFilter(f)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium capitalize whitespace-nowrap transition-colors ${
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors",
                 myFilter === f
                   ? "bg-accent-gold text-canvas"
-                  : "bg-surface-card text-mute hover:text-ink"
-              }`}
+                  : "bg-surface-elevated text-mute hover:text-ink",
+              )}
             >
-              {f.replace("_", " ")}
+              {f === "all"
+                ? "All"
+                : f === "in_progress"
+                  ? "In progress"
+                  : f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
         </div>
       )}
 
-      {error && (
-        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
+      {error && <Alert variant="destructive">{error}</Alert>}
 
       {/* Results */}
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
-        </div>
+        <Spinner size="lg" block />
       ) : rides.length === 0 ? (
         <div className="text-center py-12">
           <p className="text-mute">

@@ -23,6 +23,7 @@ export { Alert, AlertTitle, AlertDescription, type AlertProps } from "./Alert";
 export { Spinner } from "./Spinner";
 export { Skeleton } from "./Skeleton";
 export { Metric } from "./Metric";
+export { BorderBeam } from "./BorderBeam";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./Tabs";
 export {
   Dialog,

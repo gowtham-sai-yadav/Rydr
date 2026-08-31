@@ -4,6 +4,13 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
+import {
+  Alert,
+  Spinner,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui";
 
 type Mode = "mine" | "global";
 
@@ -67,37 +74,29 @@ export default function HeatmapPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-ink uppercase">
-          Ridden Ground
+        <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-ink">
+          Where you&apos;ve ridden
         </h1>
-        <div className="flex gap-1.5 bg-surface-card/40 border border-hairline-strong p-1 rounded-xl">
-          <button
-            onClick={() => setMode("mine")}
-            className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider ${
-              mode === "mine" ? "bg-accent-gold text-canvas" : "text-mute hover:text-ink"
-            }`}
-          >
-            My Rides
-          </button>
-          <button
-            onClick={() => setMode("global")}
-            className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider ${
-              mode === "global" ? "bg-accent-gold text-canvas" : "text-mute hover:text-ink"
-            }`}
-          >
-            Everyone
-          </button>
-        </div>
+        <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
+          <TabsList>
+            <TabsTrigger value="mine">My rides</TabsTrigger>
+            <TabsTrigger value="global">Everyone</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
-      {error && <p className="text-accent-red text-sm">{error}</p>}
-      {!loading && <p className="text-mute text-xs">Drawn from {rideCount} tracked ride{rideCount === 1 ? "" : "s"}.</p>}
+      {error && <Alert variant="destructive">{error}</Alert>}
+      {!loading && (
+        <p className="text-mute text-xs">
+          Drawn from {rideCount} tracked ride{rideCount === 1 ? "" : "s"}.
+        </p>
+      )}
 
-      <div className="rounded-2xl overflow-hidden border border-hairline-strong shadow-2xl relative">
+      <div className="rounded-[var(--radius-card)] overflow-hidden border border-hairline-strong relative">
         <div ref={containerRef} style={{ height: 520 }} />
         {loading && (
           <div className="absolute inset-0 flex items-center justify-center bg-canvas/60">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
+            <Spinner size="lg" />
           </div>
         )}
       </div>

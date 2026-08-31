@@ -15,6 +15,7 @@ import { ElevationProfileChart } from "@/components/rides/ElevationProfileChart"
 import { routes } from "@/lib/routes";
 import Avatar from "@/components/ui/Avatar";
 import RemoteImage from "@/components/ui/RemoteImage";
+import { Metric } from "@/components/ui";
 
 
 function RideDetailPageInner() {
@@ -191,7 +192,7 @@ function RideDetailPageInner() {
                     ? "border-accent-green/40 bg-accent-green/10 text-accent-green font-bold tracking-wider"
                     : "border-accent-red/40 bg-accent-red/10 text-accent-red font-bold tracking-wider"
             } text-[9px] px-2.5 py-1 rounded-full uppercase select-none`}>
-              {ride.status === "in_progress" ? "LIVE SIGNAL" : ride.status.replace("_", " ")}
+              {ride.status === "in_progress" ? "In progress" : ride.status.replace("_", " ")}
             </span>
             <span className="bg-surface-deep/80 border border-hairline-strong text-ink text-[9px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wider select-none">
               {ride.visibility}
@@ -209,22 +210,22 @@ function RideDetailPageInner() {
             <div className="card-bordered p-4 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg flex flex-wrap items-center justify-between gap-4">
               <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
               <div className="space-y-0.5">
-                <h4 className="text-[10px] text-mute font-bold uppercase tracking-widest select-none">Telemetry Command Deck</h4>
-                <p className="text-xs text-ink font-semibold">You are directing this active telemetry session</p>
+                <h4 className="text-[10px] text-mute font-bold uppercase tracking-widest select-none">Ride controls</h4>
+                <p className="text-xs text-ink font-semibold">You&apos;re leading this ride right now.</p>
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={loadParticipants}
                   className="bg-surface-deep hover:bg-surface-elevated text-ink px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider border border-hairline-strong transition-all duration-200"
                 >
-                  Manage Roster
+                  Manage riders
                 </button>
                 <button
                   onClick={handleComplete}
                   disabled={busy}
                   className="bg-accent-green text-canvas hover:bg-accent-green/90 disabled:opacity-50 px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-200 shadow-[0_4px_12px_rgba(34,197,94,0.15)]"
                 >
-                  Complete Ride
+                  Complete ride
                 </button>
                 <button
                   onClick={handleCancel}
@@ -239,7 +240,7 @@ function RideDetailPageInner() {
 
           {/* Interactive Split Pane Dashboard */}
           <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
-            {/* Map Telemetry Card */}
+            {/* Map card */}
             <div className="lg:col-span-3 card-bordered bg-surface-card/30 backdrop-blur-md rounded-2xl overflow-hidden shadow-lg p-5">
               {ride.destination && (
                 <LiveRideMap rideId={ride.id} destination={ride.destination} routeId={ride.route_id} />
@@ -252,11 +253,11 @@ function RideDetailPageInner() {
               </div>
             )}
 
-            {/* Squadron Communications Card */}
+            {/* Ride chat */}
             <div className="lg:col-span-2 card-bordered bg-surface-card/30 backdrop-blur-md rounded-2xl shadow-lg p-5 flex flex-col h-[560px]">
               <h3 className="text-xs font-bold text-accent-blue tracking-widest uppercase mb-4 select-none flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-accent-blue animate-ping" />
-                Crew Comms
+                Ride chat
               </h3>
               <div className="flex-1 overflow-hidden relative rounded-xl border border-hairline bg-surface-deep/45">
                 {ride.chat_group_id && (isCaptain || myStatus === "approved") ? (
@@ -283,48 +284,60 @@ function RideDetailPageInner() {
               {ride.description && (
                 <p className="text-sm leading-relaxed text-body">{ride.description}</p>
               )}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
-                <div>
-                  <p className="text-[10px] text-mute uppercase font-semibold tracking-wider select-none">Planned Date</p>
-                  <p className="text-ink font-bold text-xs uppercase mt-1">{ride.planned_date}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-mute uppercase font-semibold tracking-wider select-none">Start Time</p>
-                  <p className="text-ink font-bold text-xs uppercase mt-1">
-                    {ride.planned_start_time.slice(0, 5)}
-                    {ride.estimated_end_time ? ` – ${ride.estimated_end_time.slice(0, 5)}` : ""}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-mute uppercase font-semibold tracking-wider select-none">Machine Specs</p>
-                  <p className="text-ink font-bold text-xs mt-1">{ride.recommended_bike_type || "Any Type"}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-mute uppercase font-semibold tracking-wider select-none">Crew Roster</p>
-                  <p className="text-ink font-bold text-xs mt-1">
-                    {ride.max_riders === null ? (
-                      <>
-                        {ride.participant_count} <span className="text-mute font-normal text-[9px] uppercase">/ No Cap</span>
-                      </>
-                    ) : (
-                      `${ride.participant_count} / ${ride.max_riders}`
-                    )}
-                  </p>
-                  {/* Phase 4 W6: max_riders is now enforced, so the number has
-                      consequences and the state worth surfacing is whether
-                      there is room. seats_available comes from the API,
-                      which knows the captain occupies one of the seats. */}
-                  {ride.max_riders !== null && (
-                    ride.seats_available > 0 ? (
-                      <p className="text-[9px] text-accent-green font-semibold uppercase tracking-wider mt-1">
-                        {ride.seats_available} seat{ride.seats_available === 1 ? "" : "s"} left
-                      </p>
-                    ) : (
-                      <p className="text-[9px] text-accent-orange font-semibold uppercase tracking-wider mt-1">
-                        Full{ride.waitlist_count > 0 && ` · ${ride.waitlist_count} waiting`}
-                      </p>
-                    )
+              {/* Metric strip — Rydr's dashboard-typography signature.
+                  The number carries the weight; the label is small-caps
+                  annotation. Applied consistently across the app. */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 pt-2">
+                <Metric
+                  label="Date"
+                  value={new Date(ride.planned_date + "T00:00:00").toLocaleDateString(
+                    undefined,
+                    { day: "numeric", month: "short" },
                   )}
+                  size="default"
+                />
+                <Metric
+                  label="Start"
+                  value={ride.planned_start_time.slice(0, 5)}
+                  unit={
+                    ride.estimated_end_time
+                      ? `— ${ride.estimated_end_time.slice(0, 5)}`
+                      : undefined
+                  }
+                  size="default"
+                />
+                <div className="flex flex-col gap-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-widest text-mute select-none">
+                    Recommended bike
+                  </span>
+                  <span className="text-ink font-semibold text-sm">
+                    {ride.recommended_bike_type || "Any"}
+                  </span>
+                </div>
+                <div>
+                  <Metric
+                    label="Riders"
+                    value={ride.participant_count}
+                    unit={
+                      ride.max_riders === null
+                        ? "no cap"
+                        : `/ ${ride.max_riders}`
+                    }
+                    size="default"
+                  />
+                  {ride.max_riders !== null &&
+                    (ride.seats_available > 0 ? (
+                      <p className="text-[10px] text-accent-green font-semibold uppercase tracking-widest mt-1.5">
+                        {ride.seats_available} seat
+                        {ride.seats_available === 1 ? "" : "s"} left
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-accent-orange font-semibold uppercase tracking-widest mt-1.5">
+                        Full
+                        {ride.waitlist_count > 0 &&
+                          ` · ${ride.waitlist_count} waiting`}
+                      </p>
+                    ))}
                 </div>
               </div>
 
@@ -340,7 +353,7 @@ function RideDetailPageInner() {
             {ride.chat_group_id && (isCaptain || myStatus === "approved") && (
               <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg h-[400px] flex flex-col">
                 <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-blue/20 to-transparent" />
-                <h3 className="text-xs font-bold text-accent-blue tracking-widest uppercase mb-4 select-none">Squadron Chat</h3>
+                <h3 className="text-xs font-bold text-accent-blue tracking-widest uppercase mb-4 select-none">Ride chat</h3>
                 <div className="flex-1 overflow-hidden relative rounded-xl border border-hairline bg-surface-deep/45">
                   <RideChatPanel groupId={ride.chat_group_id} readOnly={ride.status === "cancelled"} />
                 </div>
@@ -348,13 +361,13 @@ function RideDetailPageInner() {
             )}
           </div>
 
-          {/* Right Column: HUD Controller, Destination & Captain Details */}
+          {/* Right column: Actions, destination & captain */}
           <div className="lg:col-span-1 space-y-6">
 
-            {/* HUD Command Console Card */}
+            {/* Actions */}
             <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
               <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-orange/20 to-transparent" />
-              <h3 className="text-xs font-bold text-accent-orange tracking-widest uppercase select-none">Console Deck</h3>
+              <h3 className="text-xs font-bold text-accent-orange tracking-widest uppercase select-none">Actions</h3>
 
               <div className="space-y-3 pt-2">
                 {/* Non-captain triggers */}

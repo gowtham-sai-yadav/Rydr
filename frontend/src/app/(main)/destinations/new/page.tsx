@@ -4,6 +4,81 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import type { TagListResponse } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
+import {
+  Alert,
+  Button,
+  Card,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Spinner,
+  Textarea,
+} from "@/components/ui";
+import { cn } from "@/lib/cn";
+
+function SectionHeader({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div className="mb-4">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-mute">
+        {label}
+      </p>
+      {hint && <p className="text-xs text-mute mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+function FieldLabel({
+  htmlFor,
+  children,
+  required,
+}: {
+  htmlFor?: string;
+  children: React.ReactNode;
+  required?: boolean;
+}) {
+  return (
+    <label
+      htmlFor={htmlFor}
+      className="block mb-1.5 text-xs font-semibold text-body"
+    >
+      {children}
+      {required && <span className="text-accent-gold ml-0.5">*</span>}
+    </label>
+  );
+}
+
+function TagChip({
+  label,
+  active,
+  onToggle,
+  accent = "gold",
+}: {
+  label: string;
+  active: boolean;
+  onToggle: () => void;
+  accent?: "gold" | "blue";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={active}
+      className={cn(
+        "text-xs px-3 py-1.5 rounded-full font-medium transition-colors duration-[120ms] border",
+        active
+          ? accent === "gold"
+            ? "bg-accent-gold/15 border-accent-gold text-accent-gold"
+            : "bg-accent-blue/15 border-accent-blue text-accent-blue"
+          : "bg-surface-elevated border-hairline-strong text-mute hover:text-ink hover:border-accent-gold/40",
+      )}
+    >
+      {label}
+    </button>
+  );
+}
 
 function NewDestinationForm() {
   const router = useRouter();
@@ -11,13 +86,14 @@ function NewDestinationForm() {
 
   const [tags, setTags] = useState<TagListResponse>({ vibe: [], vehicle_fit: [] });
 
-  // Prefilled when arriving from the India-wide place search
   const [name, setName] = useState(searchParams.get("name") || "");
   const [description, setDescription] = useState("");
   const [region, setRegion] = useState(searchParams.get("region") || "");
   const [latitude, setLatitude] = useState(searchParams.get("latitude") || "");
   const [longitude, setLongitude] = useState(searchParams.get("longitude") || "");
-  const [terrain, setTerrain] = useState<"chill" | "moderate" | "rough">("moderate");
+  const [terrain, setTerrain] = useState<"chill" | "moderate" | "rough">(
+    "moderate",
+  );
   const [foodCost, setFoodCost] = useState("");
   const [entryCost, setEntryCost] = useState("");
   const [bestSeason, setBestSeason] = useState("");
@@ -29,20 +105,19 @@ function NewDestinationForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Geocoding status
   const [geocoding, setGeocoding] = useState(false);
   const [geocodeStatus, setGeocodeStatus] = useState("");
 
   useEffect(() => {
     api.listTags().then(setTags).catch(() => {
-      // Non-blocking — tags are optional on submission
+      /* tags are optional on submit */
     });
   }, []);
 
   const handleAutoGeocode = async () => {
     if (!name) return;
     setGeocoding(true);
-    setGeocodeStatus("Searching coordinates...");
+    setGeocodeStatus("Searching coordinates…");
     try {
       const searchTerms = region ? `${name}, ${region}` : name;
       const res = await fetch(
@@ -50,9 +125,9 @@ function NewDestinationForm() {
         {
           headers: {
             "Accept-Language": "en",
-            "User-Agent": "RydrApp-DeveloperAgent"
-          }
-        }
+            "User-Agent": "RydrApp-DeveloperAgent",
+          },
+        },
       );
       if (!res.ok) throw new Error("Network response error");
       const data = await res.json();
@@ -60,37 +135,36 @@ function NewDestinationForm() {
         const item = data[0];
         setLatitude(parseFloat(item.lat).toFixed(6));
         setLongitude(parseFloat(item.lon).toFixed(6));
-        setGeocodeStatus("Coordinates successfully resolved!");
+        setGeocodeStatus("Coordinates found.");
         if (!region && item.display_name) {
           const parts = item.display_name.split(", ");
           const statePart = parts[parts.length - 3] || parts[parts.length - 2];
           if (statePart) setRegion(statePart);
         }
-      } else {
-        if (region) {
-          // Fallback without region
-          const resFallback = await fetch(
-            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name)}&format=json&limit=1`,
-            {
-              headers: {
-                "Accept-Language": "en",
-                "User-Agent": "RydrApp-DeveloperAgent"
-              }
-            }
-          );
-          const dataFallback = await resFallback.json();
-          if (dataFallback && dataFallback.length > 0) {
-            const item = dataFallback[0];
-            setLatitude(parseFloat(item.lat).toFixed(6));
-            setLongitude(parseFloat(item.lon).toFixed(6));
-            setGeocodeStatus("Coordinates resolved (region fallback)!");
-            return;
-          }
+      } else if (region) {
+        const resFallback = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name)}&format=json&limit=1`,
+          {
+            headers: {
+              "Accept-Language": "en",
+              "User-Agent": "RydrApp-DeveloperAgent",
+            },
+          },
+        );
+        const dataFallback = await resFallback.json();
+        if (dataFallback && dataFallback.length > 0) {
+          const item = dataFallback[0];
+          setLatitude(parseFloat(item.lat).toFixed(6));
+          setLongitude(parseFloat(item.lon).toFixed(6));
+          setGeocodeStatus("Coordinates found (without region).");
+          return;
         }
-        setGeocodeStatus("Location not found. Please enter coordinates manually.");
+        setGeocodeStatus("No match. Enter coordinates by hand.");
+      } else {
+        setGeocodeStatus("No match. Enter coordinates by hand.");
       }
     } catch {
-      setGeocodeStatus("Failed to query coordinate server.");
+      setGeocodeStatus("Couldn't reach the geocoder. Try again in a moment.");
     } finally {
       setGeocoding(false);
     }
@@ -112,7 +186,9 @@ function NewDestinationForm() {
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      setError("Latitude and longitude are required (use coordinates auto-detector or paste manually).");
+      setError(
+        "Latitude and longitude are required. Use auto-detect or paste them from Google Maps.",
+      );
       return;
     }
 
@@ -146,259 +222,272 @@ function NewDestinationForm() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto pb-16 space-y-8 relative">
-      <div className="text-center sm:text-left">
-        <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-ink uppercase">Add a destination</h1>
-        <p className="text-xs text-mute font-semibold tracking-wider uppercase mt-1 select-none">Share a new riding spot with the community</p>
-      </div>
+    <div className="max-w-2xl mx-auto pb-16">
+      <header className="mb-8">
+        <h1 className="font-display text-3xl font-bold tracking-tight text-ink">
+          Add a destination
+        </h1>
+        <p className="text-sm text-mute mt-1.5">
+          Share a spot you know. Riders will see it in Discover and can plan
+          rides to it.
+        </p>
+      </header>
 
       {error && (
-        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-xl text-xs font-semibold uppercase tracking-wider shadow-lg">
-          {error}
+        <div className="mb-6">
+          <Alert variant="destructive">{error}</Alert>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        
+      <form onSubmit={handleSubmit} className="space-y-5">
         {/* Basics */}
-        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
-          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
-          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none">Basics</h2>
-          
-          <div>
-            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Name *</label>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onBlur={() => {
-                if (name && !latitude && !longitude) {
-                  handleAutoGeocode();
-                }
-              }}
-              required
-              maxLength={200}
-              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-              placeholder="e.g. Nandi Hills"
-            />
-            {name && (
-              <button
-                type="button"
-                onClick={handleAutoGeocode}
-                disabled={geocoding}
-                className="mt-2 text-[10px] font-bold text-accent-gold uppercase tracking-widest hover:underline transition-all duration-200"
-              >
-                {geocoding ? "Detecting coordinates..." : "Auto-detect lat/lng from name →"}
-              </button>
-            )}
-            {geocodeStatus && (
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-stone mt-1">{geocodeStatus}</p>
-            )}
-          </div>
+        <Card padding="default">
+          <SectionHeader label="Basics" />
+          <div className="space-y-4">
+            <div>
+              <FieldLabel htmlFor="dest-name" required>
+                Name
+              </FieldLabel>
+              <Input
+                id="dest-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={() => {
+                  if (name && !latitude && !longitude) handleAutoGeocode();
+                }}
+                required
+                maxLength={200}
+                placeholder="Nandi Hills"
+              />
+              {name && (
+                <button
+                  type="button"
+                  onClick={handleAutoGeocode}
+                  disabled={geocoding}
+                  className="mt-2 text-xs font-semibold text-accent-gold hover:underline underline-offset-4 disabled:opacity-50"
+                >
+                  {geocoding
+                    ? "Detecting coordinates…"
+                    : "Auto-detect coordinates from name →"}
+                </button>
+              )}
+              {geocodeStatus && (
+                <p className="text-xs text-mute mt-1">{geocodeStatus}</p>
+              )}
+            </div>
 
-          <div>
-            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Region</label>
-            <input
-              value={region}
-              onChange={(e) => setRegion(e.target.value)}
-              maxLength={100}
-              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-              placeholder="e.g. Karnataka"
-            />
-          </div>
+            <div>
+              <FieldLabel htmlFor="dest-region">Region</FieldLabel>
+              <Input
+                id="dest-region"
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+                maxLength={100}
+                placeholder="Karnataka"
+              />
+            </div>
 
-          <div>
-            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-              placeholder="What makes it special?"
-            />
+            <div>
+              <FieldLabel htmlFor="dest-description">Description</FieldLabel>
+              <Textarea
+                id="dest-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                placeholder="What makes it worth the ride?"
+              />
+            </div>
           </div>
-        </div>
+        </Card>
 
-        {/* Location Coordinates */}
-        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
-          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-blue/20 to-transparent" />
-          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none">Location</h2>
-          
+        {/* Location */}
+        <Card padding="default">
+          <SectionHeader
+            label="Location"
+            hint="Copy from Google Maps or use auto-detect above."
+          />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Latitude *</label>
-              <input
+              <FieldLabel htmlFor="dest-lat" required>
+                Latitude
+              </FieldLabel>
+              <Input
+                id="dest-lat"
                 value={latitude}
                 onChange={(e) => setLatitude(e.target.value)}
                 required
                 placeholder="13.3702"
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
               />
             </div>
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Longitude *</label>
-              <input
+              <FieldLabel htmlFor="dest-lng" required>
+                Longitude
+              </FieldLabel>
+              <Input
+                id="dest-lng"
                 value={longitude}
                 onChange={(e) => setLongitude(e.target.value)}
                 required
                 placeholder="77.6835"
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
               />
             </div>
           </div>
-          <p className="text-[10px] text-stone font-semibold uppercase tracking-wider select-none">
-            Tip: copy coordinates from Google Maps, or let our auto-detector handle it when you enter the name above.
-          </p>
-        </div>
+        </Card>
 
         {/* Tags */}
-        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
-          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-green/20 to-transparent" />
-          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none font-display">Tags</h2>
-          
-          <div className="space-y-4">
+        <Card padding="default">
+          <SectionHeader label="Tags" />
+          <div className="space-y-5">
             <div>
-              <p className="text-[9px] font-bold text-accent-gold tracking-widest uppercase mb-2">Vibe</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-mute mb-2">
+                Vibe
+              </p>
               <div className="flex flex-wrap gap-2">
-                {tags.vibe.map((t) => {
-                  const active = selectedTags.has(t.slug);
-                  return (
-                    <button
-                      key={t.slug}
-                      type="button"
-                      onClick={() => toggle(t.slug)}
-                      className={`text-[10px] px-3.5 py-1.5 rounded-full font-bold uppercase tracking-wider transition-all duration-200 border ${
-                        active
-                          ? "bg-gradient-to-r from-accent-gold/25 to-accent-orange/15 border-accent-gold/50 text-accent-gold shadow-[0_0_12px_rgba(212,175,55,0.25)] scale-[1.03]"
-                          : "bg-surface-deep/60 border-hairline-strong text-mute hover:border-accent-gold/45 hover:text-ink hover:scale-[1.02]"
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  );
-                })}
+                {tags.vibe.map((t) => (
+                  <TagChip
+                    key={t.slug}
+                    label={t.label}
+                    active={selectedTags.has(t.slug)}
+                    onToggle={() => toggle(t.slug)}
+                    accent="gold"
+                  />
+                ))}
               </div>
             </div>
-            
             <div>
-              <p className="text-[9px] font-bold text-accent-blue tracking-widest uppercase mb-2">Vehicle fit</p>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-mute mb-2">
+                Vehicle fit
+              </p>
               <div className="flex flex-wrap gap-2">
-                {tags.vehicle_fit.map((t) => {
-                  const active = selectedTags.has(t.slug);
-                  return (
-                    <button
-                      key={t.slug}
-                      type="button"
-                      onClick={() => toggle(t.slug)}
-                      className={`text-[10px] px-3.5 py-1.5 rounded-full font-bold uppercase tracking-wider transition-all duration-200 border ${
-                        active
-                          ? "bg-gradient-to-r from-accent-blue/25 to-accent-blue/10 border-accent-blue/50 text-accent-blue shadow-[0_0_12px_rgba(6,182,212,0.25)] scale-[1.03]"
-                          : "bg-surface-deep/60 border-hairline-strong text-mute hover:border-accent-blue/45 hover:text-ink hover:scale-[1.02]"
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  );
-                })}
+                {tags.vehicle_fit.map((t) => (
+                  <TagChip
+                    key={t.slug}
+                    label={t.label}
+                    active={selectedTags.has(t.slug)}
+                    onToggle={() => toggle(t.slug)}
+                    accent="blue"
+                  />
+                ))}
               </div>
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Practical info */}
-        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
-          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-orange/20 to-transparent" />
-          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none">Practical info</h2>
-          
+        <Card padding="default">
+          <SectionHeader label="Practical info" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Terrain</label>
-              <select
+              <FieldLabel>Terrain</FieldLabel>
+              <Select
                 value={terrain}
-                onChange={(e) => setTerrain(e.target.value as typeof terrain)}
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
+                onValueChange={(v) => setTerrain(v as typeof terrain)}
               >
-                <option value="chill" className="bg-canvas text-ink">Chill</option>
-                <option value="moderate" className="bg-canvas text-ink">Moderate</option>
-                <option value="rough" className="bg-canvas text-ink">Rough</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="chill">Chill</SelectItem>
+                  <SelectItem value="moderate">Moderate</SelectItem>
+                  <SelectItem value="rough">Rough</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Food cost (₹)</label>
-              <input
+              <FieldLabel htmlFor="dest-food">Food cost (₹)</FieldLabel>
+              <Input
+                id="dest-food"
                 type="number"
                 value={foodCost}
                 onChange={(e) => setFoodCost(e.target.value)}
                 min={0}
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-                placeholder="e.g. 250"
+                placeholder="250"
               />
             </div>
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Entry cost (₹)</label>
-              <input
+              <FieldLabel htmlFor="dest-entry">Entry cost (₹)</FieldLabel>
+              <Input
+                id="dest-entry"
                 type="number"
                 value={entryCost}
                 onChange={(e) => setEntryCost(e.target.value)}
                 min={0}
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-                placeholder="e.g. 50"
+                placeholder="50"
               />
             </div>
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Best season</label>
-              <input
+              <FieldLabel htmlFor="dest-season">Best season</FieldLabel>
+              <Input
+                id="dest-season"
                 value={bestSeason}
                 onChange={(e) => setBestSeason(e.target.value)}
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-                placeholder="e.g. Oct–Mar"
+                placeholder="Oct–Mar"
               />
             </div>
-            <div className="col-span-1 sm:col-span-2">
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Best time of day</label>
-              <input
+            <div className="sm:col-span-2">
+              <FieldLabel htmlFor="dest-time">Best time of day</FieldLabel>
+              <Input
+                id="dest-time"
                 value={bestTimeOfDay}
                 onChange={(e) => setBestTimeOfDay(e.target.value)}
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-                placeholder="e.g. Pre-dawn for sunrise"
+                placeholder="Pre-dawn for sunrise"
               />
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Media */}
-        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
-          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
-          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none font-display">Photos</h2>
-          
-          <div>
-            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Hero image URL</label>
-            <input
-              value={heroMediaUrl}
-              onChange={(e) => setHeroMediaUrl(e.target.value)}
-              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-              placeholder="https://..."
-            />
+        <Card padding="default">
+          <SectionHeader label="Photos" hint="Optional — you can add these later." />
+          <div className="space-y-4">
+            <div>
+              <FieldLabel htmlFor="dest-hero">Hero image URL</FieldLabel>
+              <Input
+                id="dest-hero"
+                value={heroMediaUrl}
+                onChange={(e) => setHeroMediaUrl(e.target.value)}
+                placeholder="https://…"
+              />
+            </div>
+            <div>
+              <FieldLabel htmlFor="dest-gallery">
+                Gallery URLs (one per line, up to 20)
+              </FieldLabel>
+              <Textarea
+                id="dest-gallery"
+                value={galleryRaw}
+                onChange={(e) => setGalleryRaw(e.target.value)}
+                rows={3}
+                placeholder={"https://…\nhttps://…"}
+              />
+            </div>
           </div>
-          
-          <div>
-            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Gallery URLs (one per line, max 20)</label>
-            <textarea
-              value={galleryRaw}
-              onChange={(e) => setGalleryRaw(e.target.value)}
-              rows={3}
-              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-              placeholder="https://...&#10;https://..."
-            />
-          </div>
-        </div>
+        </Card>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 font-bold py-3.5 rounded-xl uppercase text-xs tracking-wider transition-all duration-200 shadow-[0_4px_14px_rgba(212,175,55,0.15)]"
-        >
-          {loading ? "Submitting…" : "Add destination"}
-        </button>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={() => router.back()}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            size="lg"
+            disabled={loading}
+            className="sm:min-w-[12rem]"
+          >
+            {loading ? (
+              <>
+                <Spinner size="sm" /> Submitting…
+              </>
+            ) : (
+              "Add destination"
+            )}
+          </Button>
+        </div>
       </form>
     </div>
   );
@@ -406,7 +495,13 @@ function NewDestinationForm() {
 
 export default function NewDestinationPage() {
   return (
-    <Suspense fallback={<div className="text-mute text-center py-8">Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className="py-16">
+          <Spinner size="lg" block />
+        </div>
+      }
+    >
       <NewDestinationForm />
     </Suspense>
   );

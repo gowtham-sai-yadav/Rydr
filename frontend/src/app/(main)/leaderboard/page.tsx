@@ -26,6 +26,19 @@ import type {
 import { routes } from "@/lib/routes";
 import Avatar from "@/components/ui/Avatar";
 import RemoteImage from "@/components/ui/RemoteImage";
+import {
+  Alert,
+  BorderBeam,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Spinner,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui";
 
 type Tab = "riders" | "destinations" | "league";
 
@@ -109,62 +122,45 @@ export default function LeaderboardPage() {
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-16 relative glow-orange">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-ink uppercase">
+        <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-ink">
           Leaderboard
         </h1>
 
-        {/* Tab triggers */}
-        <div
-          className="flex gap-1.5 bg-surface-card/40 border border-hairline-strong p-1 rounded-xl"
-          role="tablist"
-          aria-label="Leaderboard category"
-        >
-          {(["riders", "destinations", "league"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              role="tab"
-              aria-selected={tab === t}
-              onClick={() => setTab(t)}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider transition-all duration-200 ${
-                tab === t
-                  ? "bg-accent-gold text-canvas shadow-lg shadow-accent-gold/15"
-                  : "text-mute hover:text-ink"
-              }`}
-            >
-              {t === "riders" ? "Riders" : t === "destinations" ? "Destinations" : "Weekly League"}
-            </button>
-          ))}
-        </div>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+          <TabsList>
+            <TabsTrigger value="riders">Riders</TabsTrigger>
+            <TabsTrigger value="destinations">Destinations</TabsTrigger>
+            <TabsTrigger value="league">Weekly league</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {tab !== "league" && (
         <div className="flex flex-wrap items-center gap-3">
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value as LeaderboardPeriod)}
-            aria-label="Period"
-            className="select text-xs py-1.5"
-          >
-            {PERIODS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+          <Select value={period} onValueChange={(v) => setPeriod(v as LeaderboardPeriod)}>
+            <SelectTrigger className="h-9 w-40 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PERIODS.map((p) => (
+                <SelectItem key={p.value} value={p.value}>
+                  {p.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {tab === "riders" && user && myRank != null && (
-            <span className="text-[13px] text-mute ml-auto">You&apos;re #{myRank}</span>
+            <span className="text-sm text-mute ml-auto">
+              You&apos;re <span className="mono font-semibold text-ink">#{myRank}</span>
+            </span>
           )}
         </div>
       )}
 
-      {error && (
-        <p className="text-[13px] text-accent-red bg-surface-card rounded-lg p-3">{error}</p>
-      )}
+      {error && <Alert variant="destructive">{error}</Alert>}
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
-        </div>
+        <Spinner size="lg" block />
       ) : (
         <div className="grid grid-cols-1 gap-8">
           {/* Riders */}
@@ -231,7 +227,7 @@ export default function LeaderboardPage() {
                         </Link>
 
                         <div
-                          className={`w-full rounded-t-xl border border-b-0 border-hairline-strong p-3 text-center flex flex-col justify-end ${
+                          className={`relative w-full rounded-t-xl border border-b-0 border-hairline-strong p-3 text-center flex flex-col justify-end overflow-hidden ${
                             isGold
                               ? "h-32 bg-surface-card/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
                               : isSilver
@@ -239,10 +235,16 @@ export default function LeaderboardPage() {
                                 : "h-20 bg-surface-card/20"
                           }`}
                         >
-                          <p className="text-xs font-bold text-mute uppercase tracking-wider">
-                            {entry.estimated_distance_km} km
+                          {isGold && <BorderBeam />}
+                          <div className="relative flex items-baseline justify-center gap-1">
+                            <span className={`metric-value ${isGold ? "text-2xl text-accent-gold" : "text-lg text-ink"}`}>
+                              {entry.estimated_distance_km}
+                            </span>
+                            <span className="metric-unit">km</span>
+                          </div>
+                          <p className="relative text-[10px] text-stone mt-0.5">
+                            <span className="mono text-body">{entry.rides}</span> rides
                           </p>
-                          <p className="text-[10px] text-stone">{entry.rides} rides</p>
                         </div>
                       </motion.div>
                     );
@@ -280,8 +282,16 @@ export default function LeaderboardPage() {
                                   )}
                                 </p>
                               </div>
-                              <span className="mono text-xs font-bold text-stone uppercase shrink-0">
-                                {entry.estimated_distance_km} km · {entry.rides} rides
+                              <span className="flex items-baseline gap-2 shrink-0">
+                                <span className="metric-value text-sm text-ink">
+                                  {entry.estimated_distance_km}
+                                </span>
+                                <span className="metric-unit">km</span>
+                                <span className="text-stone">·</span>
+                                <span className="metric-value text-sm text-body">
+                                  {entry.rides}
+                                </span>
+                                <span className="metric-unit">rides</span>
                               </span>
                             </Link>
                           </li>

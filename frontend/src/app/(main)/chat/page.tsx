@@ -1,10 +1,18 @@
 "use client";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { MessageSquare } from "lucide-react";
 import { api } from "@/lib/api";
 import type { ChatGroupOut, DMThreadOut } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
 import Avatar from "@/components/ui/Avatar";
+import {
+  Alert,
+  Spinner,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui";
 
 type Tab = "rides" | "messages";
 
@@ -39,45 +47,35 @@ export default function ChatPage() {
   const unreadThreads = threads.filter((t) => t.unread_count > 0).length;
 
   if (loading) {
-    return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-ink/20 border-t-ink" />
-      </div>
-    );
+    return <Spinner size="lg" block />;
   }
 
   return (
     <div className="max-w-2xl mx-auto pb-12">
-      <h1 className="text-2xl font-bold text-ink mb-6">Chat</h1>
+      <h1 className="font-display text-2xl font-bold text-ink tracking-tight mb-6">
+        Chat
+      </h1>
 
       {error && (
-        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg mb-4 text-sm">
-          {error}
+        <div className="mb-4">
+          <Alert variant="destructive">{error}</Alert>
         </div>
       )}
 
-      <div className="flex gap-2 mb-6" role="tablist" aria-label="Chat category">
-        <button
-          role="tab"
-          aria-selected={tab === "rides"}
-          onClick={() => setTab("rides")}
-          className={`chip ${tab === "rides" ? "chip-active" : ""}`}
-        >
-          Group Rides
-        </button>
-        <button
-          role="tab"
-          aria-selected={tab === "messages"}
-          onClick={() => setTab("messages")}
-          className={`chip relative ${tab === "messages" ? "chip-active" : ""}`}
-        >
-          Messages
-          {unreadThreads > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-accent-red text-ink text-[10px] leading-4 font-semibold flex items-center justify-center">
-              {unreadThreads}
-            </span>
-          )}
-        </button>
+      <div className="mb-6">
+        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+          <TabsList>
+            <TabsTrigger value="rides">Group rides</TabsTrigger>
+            <TabsTrigger value="messages" className="relative">
+              Messages
+              {unreadThreads > 0 && (
+                <span className="ml-1 min-w-[18px] h-[18px] px-1 rounded-full bg-accent-red text-canvas text-[10px] leading-none font-bold flex items-center justify-center">
+                  {unreadThreads}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {tab === "rides" ? (
@@ -98,12 +96,9 @@ export default function ChatPage() {
           <div className="space-y-2">
             {groups.map((group) => (
               <Link key={group.id} href={routes.chatRoom(group.id)}>
-                <div className="bg-surface-card rounded-xl p-4 hover:bg-surface-elevated hover:ring-1 hover:ring-hairline-strong transition-all cursor-pointer flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-full bg-surface-elevated flex items-center justify-center shrink-0">
-                    <svg className="w-6 h-6 text-accent-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                            d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
+                <div className="bg-surface-card border border-hairline rounded-[var(--radius-card)] p-4 hover:bg-surface-elevated hover:border-hairline-strong transition-colors cursor-pointer flex items-center gap-4">
+                  <div className="w-11 h-11 rounded-full bg-accent-gold/10 border border-accent-gold/20 flex items-center justify-center shrink-0">
+                    <MessageSquare className="w-5 h-5 text-accent-gold" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-ink font-medium truncate">{group.name}</h3>

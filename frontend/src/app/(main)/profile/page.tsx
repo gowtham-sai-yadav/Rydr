@@ -685,7 +685,7 @@ export default function ProfilePage() {
               Photo Timeline
             </Link>
             <Link href="/heatmap" className="flex-1 text-center bg-surface-elevated hover:bg-surface-elevated text-ink px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider">
-              Ridden Ground
+              Ride Map
             </Link>
           </div>
         </div>

@@ -1,19 +1,65 @@
 "use client";
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import type { DestinationSummary } from "@/lib/api.types";
 import { DatePicker } from "@/components/ui/DatePicker";
 import { TimePicker } from "@/components/ui/TimePicker";
 import { DestinationAutocomplete } from "@/components/destinations/DestinationAutocomplete";
 import { routes } from "@/lib/routes";
+import {
+  Alert,
+  Button,
+  Card,
+  Input,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Spinner,
+  Textarea,
+} from "@/components/ui";
 
+// One consistent header on every form section — small caps eyebrow above,
+// the section body underneath. Keeps rides/create / destinations/new /
+// rides/log visually the same shape.
+function SectionHeader({ label, hint }: { label: string; hint?: string }) {
+  return (
+    <div className="mb-4">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-mute">
+        {label}
+      </p>
+      {hint && <p className="text-xs text-mute mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+function FieldLabel({
+  htmlFor,
+  children,
+  required,
+}: {
+  htmlFor?: string;
+  children: React.ReactNode;
+  required?: boolean;
+}) {
+  return (
+    <label
+      htmlFor={htmlFor}
+      className="block mb-1.5 text-xs font-semibold text-body"
+    >
+      {children}
+      {required && <span className="text-accent-gold ml-0.5">*</span>}
+    </label>
+  );
+}
 
 function CreateRideForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Destination picker — fetched once on mount.
   const [destinations, setDestinations] = useState<DestinationSummary[]>([]);
   const [destinationsLoading, setDestinationsLoading] = useState(true);
 
@@ -28,7 +74,9 @@ function CreateRideForm() {
   const [plannedStartTime, setPlannedStartTime] = useState("");
   const [estimatedEndTime, setEstimatedEndTime] = useState("");
   const [visibility, setVisibility] = useState<"group" | "solo">("group");
-  const [difficulty, setDifficulty] = useState<"easy" | "moderate" | "hard" | "expert">("moderate");
+  const [difficulty, setDifficulty] = useState<
+    "easy" | "moderate" | "hard" | "expert"
+  >("moderate");
   const [recommendedBikeType, setRecommendedBikeType] = useState("");
   const [breakSchedule, setBreakSchedule] = useState("");
   const [maxRiders, setMaxRiders] = useState("10");
@@ -42,7 +90,9 @@ function CreateRideForm() {
     api
       .listDestinations({ limit: 50 })
       .then((res) => setDestinations(res.destinations))
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load destinations"))
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : "Failed to load destinations"),
+      )
       .finally(() => setDestinationsLoading(false));
   }, []);
 
@@ -55,7 +105,6 @@ function CreateRideForm() {
     }
     setLoading(true);
     try {
-      // Backend wants HH:MM:SS; <input type="time"> emits HH:MM — pad seconds.
       const padSeconds = (t: string) => (t.length === 5 ? `${t}:00` : t);
       const ride = await api.createRide({
         destination_id: destinationId,
@@ -67,7 +116,12 @@ function CreateRideForm() {
         estimated_end_time: estimatedEndTime ? padSeconds(estimatedEndTime) : null,
         visibility,
         difficulty_level: difficulty,
-        max_riders: visibility === "solo" ? 1 : noRiderLimit ? null : parseInt(maxRiders) || 10,
+        max_riders:
+          visibility === "solo"
+            ? 1
+            : noRiderLimit
+              ? null
+              : parseInt(maxRiders) || 10,
         requires_approval: requiresApproval,
         recommended_bike_type: recommendedBikeType || null,
         break_schedule: breakSchedule || null,
@@ -82,99 +136,108 @@ function CreateRideForm() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 pb-16 relative">
-      <div className="text-center sm:text-left">
-        <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-ink uppercase">Plan a Ride</h1>
-        <p className="text-xs text-mute font-semibold tracking-wider uppercase mt-1 select-none">Establish a new telemetry log and recruit other riders</p>
-      </div>
+    <div className="max-w-2xl mx-auto pb-16">
+      <header className="mb-8">
+        <h1 className="font-display text-3xl font-bold tracking-tight text-ink">
+          Plan a ride
+        </h1>
+        <p className="text-sm text-mute mt-1.5">
+          Pick a destination, pick a time. Riders can find and join it from the
+          feed.
+        </p>
+      </header>
 
       {error && (
-        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-xl text-xs font-semibold uppercase tracking-wider shadow-lg">
-          {error}
+        <div className="mb-6">
+          <Alert variant="destructive">{error}</Alert>
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-5">
         {/* Destination */}
-        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
-          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
-          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none">Destination</h2>
-          <div>
-            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Where to? *</label>
-            <DestinationAutocomplete
-              destinations={destinations}
-              loading={destinationsLoading}
-              value={destinationId}
-              onChange={setDestinationId}
-            />
-            <div className="flex justify-between items-center mt-2 flex-wrap gap-2">
-              <p className="text-[10px] text-stone font-semibold tracking-wide uppercase select-none">
-                Don&apos;t see your spot?{" "}
-                <a href="/destinations/new" className="text-accent-gold hover:underline">
-                  Add a destination
-                </a>
-              </p>
-              {destinationId && (
-                <p className="text-[10px] font-semibold tracking-wide uppercase select-none">
-                  {routeId ? (
-                    <span className="text-accent-green">✓ Route attached</span>
-                  ) : (
-                    <a
-                      href={`/journey/plan?destination=${destinationId}`}
-                      className="text-accent-gold hover:underline"
-                    >
-                      Plan route waypoints →
-                    </a>
-                  )}
-                </p>
-              )}
-            </div>
+        <Card padding="default">
+          <SectionHeader label="Destination" />
+          <FieldLabel required>Where to?</FieldLabel>
+          <DestinationAutocomplete
+            destinations={destinations}
+            loading={destinationsLoading}
+            value={destinationId}
+            onChange={setDestinationId}
+          />
+          <div className="flex flex-wrap items-center justify-between gap-2 mt-2 text-xs">
+            <span className="text-mute">
+              Not in the list?{" "}
+              <Link
+                href="/destinations/new"
+                className="text-accent-gold hover:underline underline-offset-4 font-medium"
+              >
+                Add a destination
+              </Link>
+            </span>
+            {destinationId && (
+              <span>
+                {routeId ? (
+                  <span className="text-accent-green font-medium">
+                    ✓ Route attached
+                  </span>
+                ) : (
+                  <Link
+                    href={`/journey/plan?destination=${destinationId}`}
+                    className="text-accent-gold hover:underline underline-offset-4 font-medium"
+                  >
+                    Plan a route →
+                  </Link>
+                )}
+              </span>
+            )}
           </div>
-        </div>
+        </Card>
 
         {/* Basic info */}
-        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
-          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-blue/20 to-transparent" />
-          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none">Ride Details</h2>
-          <div>
-            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Title *</label>
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              required
-              maxLength={200}
-              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-              placeholder="e.g. Sunday sunrise to Nandi"
-            />
+        <Card padding="default">
+          <SectionHeader label="Ride details" />
+          <div className="space-y-4">
+            <div>
+              <FieldLabel htmlFor="ride-title" required>
+                Title
+              </FieldLabel>
+              <Input
+                id="ride-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                required
+                maxLength={200}
+                placeholder="Sunday sunrise to Nandi"
+              />
+            </div>
+            <div>
+              <FieldLabel htmlFor="ride-description">Description</FieldLabel>
+              <Textarea
+                id="ride-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+                placeholder="Pace, meet point, what to bring…"
+              />
+            </div>
+            <div>
+              <FieldLabel htmlFor="ride-thumbnail">Thumbnail URL</FieldLabel>
+              <Input
+                id="ride-thumbnail"
+                value={thumbnailUrl}
+                onChange={(e) => setThumbnailUrl(e.target.value)}
+                placeholder="https://…"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={3}
-              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-              placeholder="Pace, meet point, what to bring…"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Thumbnail URL</label>
-            <input
-              value={thumbnailUrl}
-              onChange={(e) => setThumbnailUrl(e.target.value)}
-              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-              placeholder="https://..."
-            />
-          </div>
-        </div>
+        </Card>
 
         {/* Schedule */}
-        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
-          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-green/20 to-transparent" />
-          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none">Schedule</h2>
+        <Card padding="default">
+          <SectionHeader label="Schedule" />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Date *</label>
+              <FieldLabel required>Date</FieldLabel>
               <DatePicker
                 value={plannedDate}
                 onChange={setPlannedDate}
@@ -183,7 +246,7 @@ function CreateRideForm() {
               />
             </div>
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Start *</label>
+              <FieldLabel required>Start</FieldLabel>
               <TimePicker
                 value={plannedStartTime}
                 onChange={setPlannedStartTime}
@@ -192,7 +255,7 @@ function CreateRideForm() {
               />
             </div>
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">End (est.)</label>
+              <FieldLabel>End (est.)</FieldLabel>
               <TimePicker
                 value={estimatedEndTime}
                 onChange={setEstimatedEndTime}
@@ -200,47 +263,56 @@ function CreateRideForm() {
               />
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Configuration */}
-        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
-          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-orange/20 to-transparent" />
-          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none">Configuration</h2>
+        <Card padding="default">
+          <SectionHeader label="Who can join" />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Visibility</label>
-              <select
+              <FieldLabel>Visibility</FieldLabel>
+              <Select
                 value={visibility}
-                onChange={(e) => setVisibility(e.target.value as "group" | "solo")}
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
+                onValueChange={(v) => setVisibility(v as "group" | "solo")}
               >
-                <option value="group" className="bg-canvas text-ink">Group ride (public)</option>
-                <option value="solo" className="bg-canvas text-ink">Solo (just me)</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="group">Group ride</SelectItem>
+                  <SelectItem value="solo">Solo</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Difficulty</label>
-              <select
+              <FieldLabel>Difficulty</FieldLabel>
+              <Select
                 value={difficulty}
-                onChange={(e) => setDifficulty(e.target.value as typeof difficulty)}
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
+                onValueChange={(v) =>
+                  setDifficulty(v as typeof difficulty)
+                }
               >
-                <option value="easy" className="bg-canvas text-ink">Easy</option>
-                <option value="moderate" className="bg-canvas text-ink">Moderate</option>
-                <option value="hard" className="bg-canvas text-ink">Hard</option>
-                <option value="expert" className="bg-canvas text-ink">Expert</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="easy">Easy</SelectItem>
+                  <SelectItem value="moderate">Moderate</SelectItem>
+                  <SelectItem value="hard">Hard</SelectItem>
+                  <SelectItem value="expert">Expert</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Max riders</label>
-              <input
+              <FieldLabel htmlFor="ride-max">Max riders</FieldLabel>
+              <Input
+                id="ride-max"
                 type="number"
                 value={maxRiders}
                 onChange={(e) => setMaxRiders(e.target.value)}
                 min={1}
                 max={200}
                 disabled={visibility === "solo" || noRiderLimit}
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm disabled:opacity-50 focus:outline-none transition-all duration-200"
               />
               <label className="flex items-center gap-2 mt-2 text-xs text-mute select-none">
                 <input
@@ -254,66 +326,93 @@ function CreateRideForm() {
               </label>
             </div>
           </div>
-          <div className="pt-2">
-            <label className="flex items-start gap-3 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={requiresApproval}
-                onChange={(e) => setRequiresApproval(e.target.checked)}
-                disabled={visibility === "solo"}
-                className="mt-0.5 rounded border-hairline-strong text-accent-gold focus:ring-accent-gold/30 disabled:opacity-50"
-              />
-              <span>
-                <span className="block text-xs text-ink font-semibold uppercase tracking-wider">
-                  Require approval to join
-                </span>
-                <span className="block text-[11px] text-mute mt-0.5">
-                  {requiresApproval
-                    ? "Riders request to join and you approve or reject each one."
-                    : "Anyone who taps “Join” is in immediately — no approval step, capacity permitting."}
-                </span>
+
+          <label className="flex items-start gap-3 mt-5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={requiresApproval}
+              onChange={(e) => setRequiresApproval(e.target.checked)}
+              disabled={visibility === "solo"}
+              className="mt-0.5 rounded border-hairline-strong text-accent-gold focus:ring-accent-gold/30 disabled:opacity-50"
+            />
+            <span>
+              <span className="block text-sm text-ink font-medium">
+                Require approval to join
               </span>
-            </label>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              <span className="block text-xs text-mute mt-0.5">
+                {requiresApproval
+                  ? "Riders request to join; you approve or reject each one."
+                  : "Anyone who taps Join is in immediately, capacity permitting."}
+              </span>
+            </span>
+          </label>
+        </Card>
+
+        {/* Optional details */}
+        <Card padding="default">
+          <SectionHeader label="Optional" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Recommended bike type</label>
-              <input
+              <FieldLabel htmlFor="ride-bike">
+                Recommended bike type
+              </FieldLabel>
+              <Input
+                id="ride-bike"
                 value={recommendedBikeType}
                 onChange={(e) => setRecommendedBikeType(e.target.value)}
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-                placeholder="e.g. Adventure, 150cc+"
+                placeholder="Adventure, 150cc+…"
               />
             </div>
             <div>
-              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Break schedule</label>
-              <input
+              <FieldLabel htmlFor="ride-break">Break schedule</FieldLabel>
+              <Input
+                id="ride-break"
                 value={breakSchedule}
                 onChange={(e) => setBreakSchedule(e.target.value)}
-                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
-                placeholder="e.g. Tea at km 30"
+                placeholder="Tea at km 30"
               />
             </div>
           </div>
-        </div>
+        </Card>
 
-        <button
-          type="submit"
-          disabled={loading || destinationsLoading}
-          className="w-full bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 font-bold py-3.5 rounded-xl uppercase text-xs tracking-wider transition-all duration-200 shadow-[0_4px_14px_rgba(212,175,55,0.15)]"
-        >
-          {loading ? "Creating ride…" : "Create Ride"}
-        </button>
+        <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={() => router.back()}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            size="lg"
+            disabled={loading || destinationsLoading}
+            className="sm:min-w-[10rem]"
+          >
+            {loading ? (
+              <>
+                <Spinner size="sm" /> Creating…
+              </>
+            ) : (
+              "Create ride"
+            )}
+          </Button>
+        </div>
       </form>
     </div>
   );
 }
 
-
 export default function CreateRidePage() {
-  // useSearchParams must be inside a Suspense boundary in app router.
   return (
-    <Suspense fallback={<div className="text-mute text-center py-8">Loading…</div>}>
+    <Suspense
+      fallback={
+        <div className="text-mute text-center py-16">
+          <Spinner size="lg" block />
+        </div>
+      }
+    >
       <CreateRideForm />
     </Suspense>
   );

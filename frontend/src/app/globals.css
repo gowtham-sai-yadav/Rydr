@@ -511,6 +511,24 @@
   100% { transform: translateX(100%); }
 }
 
+/* BorderBeam — rotating conic gradient in the border box. Requires the
+   custom property to be registered so it interpolates as an angle rather
+   than an unparsable string. Kept in globals.css so any surface can hook
+   the animation without re-declaring it. */
+@property --rydr-beam-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes rydr-beam-rotate {
+  to { --rydr-beam-angle: 360deg; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="rydr-beam-rotate"] {
+    animation: none !important;
+  }
+}
+
 /* Respect the OS-level reduced-motion setting. Instant open/close, no
    translate or scale. Every primitive inherits this automatically. */
 @media (prefers-reduced-motion: reduce) {
