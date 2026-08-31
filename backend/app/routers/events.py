@@ -88,7 +88,7 @@ def list_events(
         query = query.filter(Event.club_id == club_id)
     if upcoming_only:
         query = query.filter(Event.event_date >= datetime.now(timezone.utc))
-    total = query.with_entities(func.count()).scalar() or 0
+    total = query.with_entities(func.count(Event.id)).scalar() or 0
     rows = query.order_by(Event.event_date.asc()).offset((page - 1) * limit).limit(limit).all()
     return EventListResponse(
         events=[_to_out(db, e, viewer) for e in rows], total=total, page=page, limit=limit

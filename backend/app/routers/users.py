@@ -567,7 +567,7 @@ def list_follow_requests(
     base = db.query(Follow).filter(
         Follow.followed_id == user.id, Follow.status == FollowStatus.pending
     )
-    total = base.with_entities(func.count()).scalar() or 0
+    total = base.with_entities(func.count(Follow.id)).scalar() or 0
     rows = (
         base.options(selectinload(Follow.follower))
         .order_by(Follow.created_at.desc(), Follow.follower_id.asc())
@@ -668,7 +668,7 @@ def _paginated_follow_list(
     # Accepted only - a pending request into a private account isn't a
     # real follower/following edge yet.
     base = db.query(Follow).filter(filter_field == filter_value, Follow.status == FollowStatus.accepted)
-    total = base.with_entities(func.count()).scalar() or 0
+    total = base.with_entities(func.count(Follow.id)).scalar() or 0
     rows = (
         base.options(selectinload(relationship_to_load))
         .order_by(
