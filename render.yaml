@@ -1,0 +1,60 @@
+# Render Blueprint - provisions the database and the API in one apply.
+#
+#   Render dashboard -> New -> Blueprint -> point at this repo
+#
+# The frontend is NOT here: it deploys to Vercel, which is better at Next.js
+# than a container host and is free. See docs/DEPLOYMENT.md.
+#
+# Note on the free database tier: Render expires free Postgres instances after
+# 30 days and then deletes them. If this needs to stay up past a demo, either
+# take the paid tier or point DATABASE_URL at a Neon free database, which does
+# not expire. Both paths are in the runbook.
+
+databases:
+  - name: rydr-db
+    databaseName: rydr
+    user: rydr
+    plan: free
+
+services:
+  - type: web
+    name: rydr-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/health/ready
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rydr-db
+          property: connectionString
+      # Generated once by Render and then held constant. Rotating it would
+      # invalidate every issued JWT and sign every user out.
+      - key: SECRET_KEY
+        generateValue: true
+      - key: APP_ENV
+        value: prod
+      # Must list the deployed frontend origin or every browser call fails
+      # CORS. Set after the Vercel deploy exists.
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "10080"
+      - key: LOG_LEVEL
+        value: INFO
+      # Seed catalogue + demo activity on first boot. Turn off once the
+      # database holds anything real.
+      - key: SEED_ON_START
+        value: "true"
+      # Empty keeps OpenStreetMap. Set a token to move tiles, routing and
+      # geocoding to Mapbox - required before real traffic, see the runbook.
+      - key: MAPBOX_TOKEN
+        sync: false
+      # Blank disables signed uploads; media can still be attached by URL.
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false

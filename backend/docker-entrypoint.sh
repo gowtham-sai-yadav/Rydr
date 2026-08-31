@@ -47,6 +47,9 @@ if [ "${SEED_ON_START:-false}" = "true" ]; then
   echo "[entrypoint] seeding demo data..."
   python -m app.seed || echo "[entrypoint] seed failed (non-fatal)"
   python scripts/seed_badges.py || echo "[entrypoint] badge seed failed (non-fatal)"
+  # Activity data: rides, logs, feed posts, ratings, chat. Without this the
+  # feed, leaderboards and stats render as empty states on a fresh deploy.
+  python scripts/seed_demo.py || echo "[entrypoint] demo seed failed (non-fatal)"
 fi
 
 echo "[entrypoint] starting: $*"

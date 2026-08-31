@@ -216,8 +216,13 @@ def build_activity(db, riders: list[User]) -> dict:
         # Fall back to the closest handful rather than skipping a rider whose
         # city has nothing catalogued within the radius.
         if len(near) < 3:
-            near = sorted(dests, key=lambda d: haversine_km(
+            closest = sorted(dests, key=lambda d: haversine_km(
                 u.home_latitude, u.home_longitude, d.latitude, d.longitude))[:6]
+            # Bounded: a rider whose nearest catalogued destination is 1,400km
+            # away gets no rides rather than a 2,800km "day trip".
+            near = [d for d in closest
+                    if haversine_km(u.home_latitude, u.home_longitude,
+                                    d.latitude, d.longitude) <= 600]
         nearby[u.id] = near
     stats = dict(rides=0, logs=0, posts=0, comments=0, likes=0, ratings=0, msgs=0, follows=0)
 
@@ -233,7 +238,9 @@ def build_activity(db, riders: list[User]) -> dict:
     # Rides spread backwards over ~10 weeks so streaks and "this month" work.
     for week in range(10):
         for _ in range(random.randint(2, 4)):
-            captain = random.choice(everyone)
+            captain = random.choice([u for u in everyone if nearby[u.id]] or everyone)
+            if not nearby[captain.id]:
+                continue
             dest = random.choice(nearby[captain.id])
             when = TODAY - timedelta(days=week * 7 + random.randint(0, 6))
             title = random.choice(RIDE_TITLES).format(d=dest.name)

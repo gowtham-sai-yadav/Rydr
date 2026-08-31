@@ -22,6 +22,7 @@ import re
 from datetime import date, datetime, time, timedelta, timezone
 
 from app.database import SessionLocal
+from app.services.geo import haversine_km
 from app.models.badge import Badge, BadgeRarity
 from app.models.destination import (
     Destination,
@@ -998,10 +999,46 @@ def _build_feed_activity(db, users: list[User], destinations: list[Destination])
     # with a terrain-matched photo (same destination image bank as the
     # destination cards themselves, so a ride log for a coastal spot shows a
     # coastal photo, not whatever a random seed happened to return). ---
+    # Destinations are picked from within a plausible one-way radius of the
+    # rider's home rather than at random across the country. Choosing freely
+    # from all 43 paired a Kochi rider with a Himalayan pass and produced
+    # 4,000km "day rides", which made every figure on the leaderboard and the
+    # stats dashboard read as obviously generated.
+    max_one_way_km = 350
+
+    def _reachable(user):
+        if user.home_latitude is None or user.home_longitude is None:
+            return destinations
+        near = [
+            d for d in destinations
+            if haversine_km(user.home_latitude, user.home_longitude,
+                            d.latitude, d.longitude) <= max_one_way_km
+        ]
+        # Fall back to the closest few for a rider whose city has nothing
+        # catalogued nearby - but only if those are themselves within a
+        # long-but-real day's reach. A Guwahati rider's nearest catalogued
+        # destination is 1,400km away; giving them that ride puts a
+        # 2,800km "day trip" on the leaderboard. Better they have no rides.
+        if len(near) < 3:
+            closest = sorted(
+                destinations,
+                key=lambda d: haversine_km(user.home_latitude, user.home_longitude,
+                                           d.latitude, d.longitude),
+            )[:6]
+            near = [
+                d for d in closest
+                if haversine_km(user.home_latitude, user.home_longitude,
+                                d.latitude, d.longitude) <= 600
+            ]
+        return near
+
     ride_logs: list[RideLog] = []
     for user in users:
+        reachable = _reachable(user)
+        if not reachable:
+            continue
         for _ in range(rng.randint(1, 2)):
-            dest = rng.choice(destinations)
+            dest = rng.choice(reachable)
             days_ago = rng.randint(1, 45)
             planned = date.today() - timedelta(days=days_ago)
             plan = RidePlan(
@@ -1069,7 +1106,8 @@ def _build_feed_activity(db, users: list[User], destinations: list[Destination])
         post = Post(
             author_id=log.rider_id,
             ride_log_id=log.id,
-            caption=caption,
+            destination_id=dest.id,
+            body=caption,
             created_at=now - timedelta(days=rng.randint(0, 13), hours=rng.randint(0, 23)),
         )
         db.add(post)
@@ -1086,7 +1124,8 @@ def _build_feed_activity(db, users: list[User], destinations: list[Destination])
             caption = template.format(dest=dest.name)
             post = Post(
                 author_id=user.id,
-                caption=caption,
+                destination_id=dest.id,
+                body=caption,
                 created_at=now - timedelta(days=rng.randint(0, 13), hours=rng.randint(0, 23)),
             )
             db.add(post)
