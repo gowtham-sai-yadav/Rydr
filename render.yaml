@@ -47,6 +47,11 @@ services:
       # database holds anything real.
       - key: SEED_ON_START
         value: "true"
+      # Set to "true" for one deploy to rebuild the demo activity from
+      # scratch, then set it back. Left on, every deploy wipes and rebuilds
+      # the generated rides, posts, clubs and events.
+      - key: SEED_FRESH
+        value: "false"
       # Empty keeps OpenStreetMap. Set a token to move tiles, routing and
       # geocoding to Mapbox - required before real traffic, see the runbook.
       - key: MAPBOX_TOKEN

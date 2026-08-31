@@ -47,9 +47,22 @@ if [ "${SEED_ON_START:-false}" = "true" ]; then
   echo "[entrypoint] seeding demo data..."
   python -m app.seed || echo "[entrypoint] seed failed (non-fatal)"
   python scripts/seed_badges.py || echo "[entrypoint] badge seed failed (non-fatal)"
-  # Activity data: rides, logs, feed posts, ratings, chat. Without this the
-  # feed, leaderboards and stats render as empty states on a fresh deploy.
-  python scripts/seed_demo.py || echo "[entrypoint] demo seed failed (non-fatal)"
+  # Activity data: rides, logs, feed posts, ratings, chat, clubs and events.
+  # Without this the feed, leaderboards, clubs and stats render as empty
+  # states on a fresh deploy.
+  #
+  # SEED_FRESH regenerates instead of topping up. The plain run is additive:
+  # it skips anything already present but still generates a new batch of
+  # rides, so repeated deploys pile activity up. --fresh clears what a
+  # previous run of this script made -- and only that; rides and posts
+  # created through the app are matched by neither purge -- then rebuilds.
+  # Off by default because it deletes, which is not something to do
+  # implicitly on a service that might hold data someone cares about.
+  if [ "${SEED_FRESH:-false}" = "true" ]; then
+    python scripts/seed_demo.py --fresh || echo "[entrypoint] demo seed failed (non-fatal)"
+  else
+    python scripts/seed_demo.py || echo "[entrypoint] demo seed failed (non-fatal)"
+  fi
 fi
 
 echo "[entrypoint] starting: $*"
