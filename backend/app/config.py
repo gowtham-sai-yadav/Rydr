@@ -64,6 +64,12 @@ class Settings(BaseSettings):
 
     MAPBOX_TOKEN: str = ""
 
+    # Bias geocoding to one country (ISO 3166-1 alpha-2, comma-separated
+    # for several). Every destination in the catalogue is in India, so an
+    # unbiased search made "Coorg" return a Colorado business above the
+    # actual Kodagu district. Set to "" to search worldwide.
+    GEOCODE_COUNTRIES: str = "in"
+
     # Public demo endpoints. Both ask for courteous use and rate-limit
     # accordingly, which is why routes are cached in-process and every call
     # has a hard timeout with a graceful fallback. Point these at a

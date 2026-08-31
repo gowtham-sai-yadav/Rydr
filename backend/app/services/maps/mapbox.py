@@ -5,10 +5,18 @@ reconciliation ships OpenStreetMap by default so the project needs no account
 and has no usage ceiling to watch, and keeps this adapter so switching is a
 matter of setting one environment variable.
 
-It is written against the documented Mapbox API shapes. Because no token was
-issued for this project, it has been exercised against recorded response
-shapes rather than the live service — that distinction is recorded here rather
-than left for someone to discover. The OSM path is the one with live coverage.
+Verified against the live Mapbox API on 2026-09-01 with a public (pk.*) token:
+tiles, Directions, Geocoding and Static Images all returned successfully, and
+a Bengaluru to Nandi Hills route came back at 61.2km / 100min against a real
+distance of roughly 60km. Before that date this adapter had only been checked
+against recorded response shapes.
+
+The token reaches the browser: ``tile_config`` embeds it in the tile URL, which
+``/api/maps/config`` hands to the frontend. That is why it must be a public
+token and never a secret (sk.*) one. It also must not carry Mapbox URL
+restrictions — those are enforced via the Referer header, which the
+server-side Directions, Geocoding and Static Image calls below do not send, so
+a restricted token would 403 exactly those three.
 """
 from __future__ import annotations
 
@@ -95,9 +103,12 @@ class MapboxProvider(MapProvider):
 
     def geocode(self, query: str, limit: int = 5) -> List[GeocodeResult]:
         encoded = urllib.parse.quote(query)
+        params = {"limit": limit, "access_token": settings.MAPBOX_TOKEN}
+        countries = settings.GEOCODE_COUNTRIES.strip()
+        if countries:
+            params["country"] = countries
         payload = get_json(
-            f"{_API}/geocoding/v5/mapbox.places/{encoded}.json",
-            {"limit": limit, "access_token": settings.MAPBOX_TOKEN},
+            f"{_API}/geocoding/v5/mapbox.places/{encoded}.json", params
         )
         features = (payload or {}).get("features") if isinstance(payload, dict) else None
         if not features:
