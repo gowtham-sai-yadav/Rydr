@@ -46,7 +46,12 @@ class Club(Base):
     memberships = relationship("ClubMembership", back_populates="club", cascade="all, delete-orphan")
     badges = relationship("ClubBadge", back_populates="club", cascade="all, delete-orphan")
     challenges = relationship("ClubChallenge", back_populates="club", cascade="all, delete-orphan")
-    events = relationship("Event", back_populates="club")
+    # events.club_id is declared ondelete="CASCADE"; without a matching
+    # ORM cascade SQLAlchemy NULLs the FK before the database ever sees
+    # the delete, leaving club-less events behind instead of removing
+    # them. The two have to agree.
+    events = relationship("Event", back_populates="club",
+                          cascade="all, delete-orphan")
 
 
 class ClubMembership(Base):
