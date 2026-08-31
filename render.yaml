@@ -6,9 +6,13 @@
 # than a container host and is free. See docs/DEPLOYMENT.md.
 #
 # Note on the free database tier: Render expires free Postgres instances after
-# 30 days and then deletes them. If this needs to stay up past a demo, either
-# take the paid tier or point DATABASE_URL at a Neon free database, which does
-# not expire. Both paths are in the runbook.
+# 30 days and then deletes them, which is why DATABASE_URL is no longer bound
+# to the block below. It is set by hand, and currently points at a Supabase
+# database that does not expire. See docs/DEPLOYMENT.md.
+#
+# The `databases:` block is kept so the Blueprint still provisions a local
+# option and so rolling back is pasting one connection string. Delete it once
+# the external database has proven itself.
 
 databases:
   - name: rydr-db
@@ -25,10 +29,14 @@ services:
     plan: free
     healthCheckPath: /api/health/ready
     envVars:
+      # Set in the dashboard, not bound to the block above: `fromDatabase`
+      # overwrites whatever is set by hand on every Blueprint sync, so the two
+      # cannot coexist. Must be the *session* pooler string (IPv4, port 5432);
+      # Supabase's direct connection is IPv6-only and Render has no IPv6
+      # egress, and its transaction pooler on 6543 disables prepared
+      # statements, which breaks Alembic.
       - key: DATABASE_URL
-        fromDatabase:
-          name: rydr-db
-          property: connectionString
+        sync: false
       # Generated once by Render and then held constant. Rotating it would
       # invalidate every issued JWT and sign every user out.
       - key: SECRET_KEY
