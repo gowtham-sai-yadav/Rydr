@@ -8,7 +8,9 @@ Rydr helps a rider, especially a new or solo one, answer "where should I ride th
 
 ## Status
 
-**Phase 4 web app: feature-complete.** All planned web features are implemented, migrated, and tested. The Android wrap (Capacitor shell, native camera/push, Play Store release) is a separate, not-yet-started phase.
+**Phase 4 web app: feature-complete.** All planned web features are implemented, migrated, and tested.
+
+Mobile exists in two forms and neither has been compiled on a machine with the Android SDK yet: a Capacitor shell wrapping a static export of this frontend (`frontend/android`, see `docs/plan/phase4-android-release.md`), and an Expo/React Native app in `mobile/`. Signing and the Play Store release are still outstanding for both.
 
 ---
 
@@ -17,7 +19,7 @@ Rydr helps a rider, especially a new or solo one, answer "where should I ride th
 ### Destination discovery
 - Searchable, filterable destination catalogue (distance, vibe, cost, vehicle fit)
 - Destination detail pages with tags, aggregate rating, nearby stops, and cost estimate
-- Map view with Mapbox pins (falls back to a plain list when no Mapbox token is configured)
+- Map view with clustered pins on OpenStreetMap tiles via Leaflet, plus route preview and a journey planner
 
 ### Community layer
 - Ratings and written reviews per destination
@@ -51,7 +53,7 @@ Rydr helps a rider, especially a new or solo one, answer "where should I ride th
 | Auth | JWT (python-jose), bcrypt (passlib) |
 | Real-time | FastAPI WebSockets (chat) |
 | Media | Cloudinary (signed uploads) |
-| Maps | Mapbox GL JS (optional, falls back gracefully without a token) |
+| Maps | Leaflet + OpenStreetMap tiles, OSRM routing, Nominatim geocoding; a Mapbox adapter activates when `MAPBOX_TOKEN` is set |
 | Images | Pillow (server-rendered shareable cards) |
 
 ---
@@ -169,7 +171,7 @@ Copied from `backend/.env.example` on first run.
 | Variable | Default | Description |
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Backend base URL (browser-exposed) |
-| `NEXT_PUBLIC_MAPBOX_TOKEN` | empty | Optional. Without it, the destination map renders a plain list instead of a Mapbox map. |
+| `MAPBOX_TOKEN` | empty | Backend-side. Empty uses OpenStreetMap for tiles, routing and geocoding; setting it switches every map call to Mapbox. |
 
 ---
 
