@@ -22,8 +22,6 @@ pgdata/
 
 venv/
 
-# Added by code-review-graph
-.code-review-graph/
 
 # Dev server logs from run.sh --dev
 .logs/
@@ -72,5 +70,13 @@ venv.python3.*
 
 # Assistant tooling notes generated inside the frontend workspace. The
 # root-level AGENTS.md and CLAUDE.md are the intentional ones.
-frontend/AGENTS.md
-frontend/CLAUDE.md
+
+# Assistant / editor tooling. Kept out of version control so the repository
+# contains the project and not the local development harness. These files
+# remain on disk for whoever configured them.
+.claude/
+.codex/
+.mcp.json
+AGENTS.md
+CLAUDE.md
+.code-review-graph/
