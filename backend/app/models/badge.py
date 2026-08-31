@@ -4,11 +4,13 @@ Catalog seeded in M1. Awarding logic lands in M8.
 """
 from __future__ import annotations
 
+import enum
 import uuid
 
 from sqlalchemy import (
     Column,
     DateTime,
+    Enum as SQLEnum,
     ForeignKey,
     String,
     UniqueConstraint,
@@ -20,6 +22,13 @@ from sqlalchemy.sql import func
 from app.database import Base
 
 
+class BadgeRarity(str, enum.Enum):
+    common = "common"
+    rare = "rare"
+    epic = "epic"
+    legendary = "legendary"
+
+
 class Badge(Base):
     __tablename__ = "badges"
 
@@ -28,6 +37,12 @@ class Badge(Base):
     name = Column(String(100), nullable=False)
     description = Column(String(255), nullable=False)
     icon_url = Column(String(500), nullable=True)
+    rarity = Column(
+        SQLEnum(BadgeRarity, name="badge_rarity"),
+        nullable=False,
+        default=BadgeRarity.common,
+        server_default=BadgeRarity.common.value,
+    )
 
     user_badges = relationship("UserBadge", back_populates="badge")
 

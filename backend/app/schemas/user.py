@@ -34,6 +34,10 @@ class BikeOut(BaseModel):
     engine_cc: Optional[int] = None
     mileage_kmpl: Optional[float] = None
     type: BikeType
+    total_km_since_service: float = 0
+    total_km_lifetime: float = 0
+    service_interval_km: int = 3000
+    last_serviced_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -59,10 +63,27 @@ class UserOut(BaseModel):
     # query return zero rows naturally).
     followers_count: int = 0
     following_count: int = 0
+    # Gates the DM "Message" button on its own (one-directional, Twitter-
+    # style) - you don't need this person to follow you back to message
+    # them, just to follow them yourself.
     is_followed_by_me: bool = False
-    # Phase 4 W7. Exposed so the client can show or hide the moderation
-    # surface; the admin endpoints enforce it themselves regardless, so this
-    # is a UI hint and not the access control. Granted only by
+    # Informational only now (not a DM gate) - whether this profile follows
+    # the viewer back.
+    follows_me: bool = False
+    is_private: bool = False
+    # True when the viewer has an outstanding follow request into this
+    # (private) profile that hasn't been accepted/rejected yet - lets the
+    # frontend show "Requested" instead of "Follow".
+    has_pending_follow_request: bool = False
+    privacy_zone_radius_km: Optional[float] = None
+    is_verified_rider: bool = False
+    # Real column on the model, used internally for moderation/report-queue
+    # gating (routers/reports.py's require_admin) but never actually
+    # exposed here until this merge — every admin-gated UI element on both
+    # frontends had been silently unreachable via this field. Phase 4 W7:
+    # exposed so the client can show or hide the moderation surface; the
+    # admin endpoints enforce it themselves regardless, so this is a UI
+    # hint and not the access control. Granted only by
     # ``scripts/grant_admin.py`` — there is no endpoint that sets it.
     is_admin: bool = False
 
@@ -81,6 +102,8 @@ class UserUpdate(BaseModel):
     # subsequent radius/distance/cost call for the user.
     home_latitude: Optional[float] = Field(default=None, ge=-90, le=90)
     home_longitude: Optional[float] = Field(default=None, ge=-180, le=180)
+    is_private: Optional[bool] = None
+    privacy_zone_radius_km: Optional[float] = Field(default=None, ge=0, le=50)
 
 
 class BikeUpdate(BaseModel):
@@ -90,6 +113,7 @@ class BikeUpdate(BaseModel):
     engine_cc: Optional[int] = None
     mileage_kmpl: Optional[float] = None
     type: Optional[BikeType] = None
+    service_interval_km: Optional[int] = None
 
 
 class UserStatsOut(BaseModel):
@@ -103,3 +127,8 @@ class UserStatsOut(BaseModel):
     rides_captained: int
     rides_joined: int
     rides_completed: int
+
+
+class PushTokenRegister(BaseModel):
+    token: str = Field(min_length=1, max_length=255)
+    platform: Optional[str] = Field(default=None, max_length=20)

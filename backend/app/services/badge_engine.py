@@ -34,6 +34,7 @@ breaking the other.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, timedelta
 from typing import Callable, Dict, List, Tuple
 from uuid import UUID
 
@@ -49,7 +50,7 @@ from app.models.ride import (
     RidePlan,
     RidePlanParticipant,
 )
-from app.models.ride_log import RideLog
+from app.models.ride_log import RideLog, RideMedia
 from app.services import notifications as notification_service
 
 
@@ -76,6 +77,16 @@ class UserBadgeStats:
     rides_captained: int
     rides_joined: int
     has_five_star_rating: bool
+    # Double-ride badge: logged 2+ rides on the same calendar day at least once.
+    has_double_ride_day: bool
+    # Consistency badges: longest run of consecutive calendar months with
+    # at least one ride log, counting back from the current month.
+    consecutive_months_with_a_ride: int
+    total_distance_km: float
+    has_century_ride: bool  # any single ride log >= 100km
+    has_dawn_patrol_ride: bool  # any ride log started before 07:00
+    photo_count: int
+    distinct_destinations_visited: int
 
 
 def compute_stats(db: Session, user_id: UUID) -> UserBadgeStats:
@@ -126,11 +137,80 @@ def compute_stats(db: Session, user_id: UUID) -> UserBadgeStats:
         is not None
     )
 
+    # Ride-log dates, used for both the double-ride-day and consecutive-
+    # months checks below. actual_start_ts falls back to created_at for
+    # logs that never got a start time recorded.
+    log_dates = [
+        (row[0] or row[1]).date()
+        for row in db.query(RideLog.actual_start_ts, RideLog.created_at)
+        .filter(RideLog.rider_id == user_id)
+        .all()
+    ]
+
+    has_double_ride_day = False
+    if log_dates:
+        counts: dict[date, int] = {}
+        for d in log_dates:
+            counts[d] = counts.get(d, 0) + 1
+        has_double_ride_day = any(c >= 2 for c in counts.values())
+
+    months_with_ride = {(d.year, d.month) for d in log_dates}
+    consecutive_months = 0
+    cursor = date.today().replace(day=1)
+    while (cursor.year, cursor.month) in months_with_ride:
+        consecutive_months += 1
+        cursor = (cursor - timedelta(days=1)).replace(day=1)
+
+    total_distance = (
+        db.query(func.coalesce(func.sum(RideLog.distance_km), 0.0))
+        .filter(RideLog.rider_id == user_id)
+        .scalar()
+        or 0.0
+    )
+
+    has_century_ride = (
+        db.query(RideLog.id)
+        .filter(RideLog.rider_id == user_id, RideLog.distance_km >= 100)
+        .limit(1)
+        .first()
+        is not None
+    )
+
+    has_dawn_patrol = any(
+        d[0] is not None and d[0].time().hour < 7
+        for d in db.query(RideLog.actual_start_ts)
+        .filter(RideLog.rider_id == user_id, RideLog.actual_start_ts.isnot(None))
+        .all()
+    )
+
+    photo_count = (
+        db.query(func.count(RideMedia.id))
+        .join(RideLog, RideLog.id == RideMedia.ride_log_id)
+        .filter(RideLog.rider_id == user_id)
+        .scalar()
+        or 0
+    )
+
+    distinct_destinations = (
+        db.query(func.count(func.distinct(RidePlan.destination_id)))
+        .join(RideLog, RideLog.ride_plan_id == RidePlan.id)
+        .filter(RideLog.rider_id == user_id)
+        .scalar()
+        or 0
+    )
+
     return UserBadgeStats(
         rides_completed=int(rides_completed),
         rides_captained=int(rides_captained),
         rides_joined=int(rides_joined),
         has_five_star_rating=has_five_star,
+        has_double_ride_day=has_double_ride_day,
+        consecutive_months_with_a_ride=consecutive_months,
+        total_distance_km=float(total_distance),
+        has_century_ride=has_century_ride,
+        has_dawn_patrol_ride=has_dawn_patrol,
+        photo_count=int(photo_count),
+        distinct_destinations_visited=int(distinct_destinations),
     )
 
 
@@ -150,6 +230,14 @@ BADGE_PREDICATES: Dict[str, Callable[[UserBadgeStats], bool]] = {
     "captain-silver": lambda s: s.rides_captained >= 5,
     "joiner-bronze": lambda s: s.rides_joined >= 3,
     "star-rider": lambda s: s.rides_completed >= 3 and s.has_five_star_rating,
+    "double-trouble": lambda s: s.has_double_ride_day,
+    "consistency-6": lambda s: s.consecutive_months_with_a_ride >= 6,
+    "consistency-12": lambda s: s.consecutive_months_with_a_ride >= 12,
+    "century-club": lambda s: s.has_century_ride,
+    "distance-1000": lambda s: s.total_distance_km >= 1000,
+    "dawn-patrol": lambda s: s.has_dawn_patrol_ride,
+    "storyteller": lambda s: s.photo_count >= 10,
+    "destination-collector": lambda s: s.distinct_destinations_visited >= 5,
 }
 
 
@@ -201,6 +289,10 @@ def evaluate_user_badges(db: Session, user_id: UUID) -> List[Tuple[UUID, str, st
         )
         inserted_id = db.execute(stmt).scalar_one_or_none()
         if inserted_id is not None:
+            # on_conflict_do_nothing means a re-run that finds nothing new
+            # inserts nothing here, so this only ever fires for genuinely
+            # new awards. Notification is sent by the caller (safe_evaluate)
+            # once it has the full (badge_id, slug, name) tuple.
             awarded.append((badge_id, slug, name))
 
     if awarded:

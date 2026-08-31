@@ -270,6 +270,7 @@ def create_ride(
         recommended_bike_type=payload.recommended_bike_type,
         break_schedule=payload.break_schedule,
         max_riders=payload.max_riders,
+        requires_approval=payload.requires_approval,
         status=RidePlanStatus.planned,
     )
     db.add(ride)
@@ -706,26 +707,71 @@ def join_ride(
                 detail="Previous join request was rejected by the captain",
             )
 
+    # Capacity hardening: a request made while the ride is already full
+    # (approved-participant count >= max_riders) lands as ``waitlisted``
+    # instead of ``pending``/``approved``, so the captain's queue only shows
+    # requests they can actually act on today. Re-checked on every
+    # join/re-join (left -> pending/waitlisted) since capacity can change
+    # between calls. max_riders=None means no cap - never waitlists.
+    ride_capacity.lock_ride(db, ride_id)
+    is_full = ride.max_riders is not None and ride_capacity.seats_taken(db, ride_id) >= ride.max_riders
+    if is_full:
+        target_status = ParticipantStatus.waitlisted
+    elif not ride.requires_approval:
+        # Open ride: joining is instant, no captain action needed.
+        target_status = ParticipantStatus.approved
+    else:
+        target_status = ParticipantStatus.pending
+
+    # A brand-new join or a re-join after leaving is a genuinely new
+    # request worth notifying the captain about; re-POSTing while already
+    # pending/waitlisted is idempotent and stays silent.
+    is_new_request = existing is None or existing.status == ParticipantStatus.left
+
     # Atomic upsert. Pre-check above returns the clean 4xx for approved /
-    # rejected; this path is for new joins and pending → pending (idempotent)
-    # and left → pending (re-join after leaving).
+    # rejected; this path is for new joins and pending/waitlisted ->
+    # pending/waitlisted (idempotent) and left -> pending/waitlisted
+    # (re-join after leaving).
     stmt = (
         pg_insert(RidePlanParticipant)
         .values(
             ride_plan_id=ride_id,
             user_id=user.id,
-            status=ParticipantStatus.pending,
+            status=target_status,
         )
         .on_conflict_do_update(
             constraint="uq_participant_ride_user",
             set_=dict(
-                status=ParticipantStatus.pending,
+                status=target_status,
                 updated_at=func.now(),
             ),
         )
         .returning(RidePlanParticipant.id)
     )
     participant_id = db.execute(stmt).scalar_one()
+
+    if is_new_request:
+        if target_status == ParticipantStatus.approved:
+            notification_service.safe_notify(
+                db,
+                user_id=ride.captain_id,
+                type=NotificationType.ride_join_approved,
+                title=f"{user.name} joined your ride \"{ride.title}\"",
+                actor_id=user.id,
+                entity_type=EntityType.ride,
+                entity_id=ride.id,
+            )
+        else:
+            notification_service.safe_notify(
+                db,
+                user_id=ride.captain_id,
+                type=NotificationType.ride_join_requested,
+                title=f"{user.name} requested to join your ride \"{ride.title}\"",
+                actor_id=user.id,
+                entity_type=EntityType.ride,
+                entity_id=ride.id,
+            )
+
     db.commit()
 
     participant = (

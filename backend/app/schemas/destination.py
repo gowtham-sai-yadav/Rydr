@@ -90,6 +90,17 @@ class DestinationListResponse(BaseModel):
     limit: int
 
 
+class RegionSummary(BaseModel):
+    region: str
+    destination_count: int
+    avg_rating: float
+    hero_media_url: Optional[str] = None
+
+
+class RegionListResponse(BaseModel):
+    regions: List[RegionSummary] = []
+
+
 class DestinationOut(BaseModel):
     id: UUID
     name: str

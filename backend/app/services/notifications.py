@@ -39,6 +39,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models.notification import EntityType, Notification, NotificationType
+from app.services.push_service import send_push
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,10 @@ def notify(
     )
     db.add(row)
     db.flush()
+    # Best-effort, same tolerance as the row write itself - a push firing
+    # for a row whose surrounding transaction later rolls back is a rare,
+    # harmless false notification, not a data-integrity concern.
+    send_push(db, user_id=user_id, title=title, body=body or "")
     return row
 
 

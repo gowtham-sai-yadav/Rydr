@@ -81,6 +81,14 @@ class NotificationType(str, enum.Enum):
     # Moderation
     report_resolved = "report_resolved"
 
+    # Direct messages / private-account follow requests (M6). Kept distinct
+    # from new_follower: that fires on an immediate (public-account) follow,
+    # these cover the DM channel and the pending-request lifecycle a private
+    # account needs.
+    dm_received = "dm_received"
+    follow_requested = "follow_requested"
+    follow_accepted = "follow_accepted"
+
 
 class EntityType(str, enum.Enum):
     """What a notification points at."""

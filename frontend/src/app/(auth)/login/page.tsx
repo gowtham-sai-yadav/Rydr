@@ -24,44 +24,49 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="w-full max-w-md">
-      <div className="text-center mb-10">
-        <h1 className="display-xl mb-3">Rydr</h1>
-        <p className="text-charcoal body-md">
-          Destinations and rides, for people who ride.
+    <div className="w-full max-w-md px-2">
+      <div className="text-center mb-8">
+        <h1 className="display-xl mb-3 bg-gradient-to-r from-accent-gold via-accent-orange to-accent-blue bg-clip-text text-transparent font-extrabold tracking-tighter drop-shadow-md select-none">
+          Rydr
+        </h1>
+        <p className="text-mute body-sm font-medium tracking-wide uppercase select-none opacity-80">
+          Scouted Trails. Logged Journeys. Ride Joined.
         </p>
       </div>
 
-      <div className="card-bordered p-8">
-        <h2 className="heading-md text-ink mb-6">Welcome back</h2>
+      <div className="card-bordered p-8 bg-surface-card/40 backdrop-blur-xl border border-hairline-strong shadow-2xl relative">
+        <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-accent-gold/40 to-transparent" />
+        <h2 className="heading-sm text-ink mb-6 font-semibold select-none">
+          Welcome back
+        </h2>
 
         {error && (
-          <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-md mb-4 text-sm">
+          <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-md mb-4 text-xs">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="label-eyebrow block mb-2">Email</label>
+            <label className="label-eyebrow block mb-2 font-semibold">Email Address</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="input"
+              className="input bg-surface-deep/60 border border-hairline-strong focus:border-accent-gold px-4 py-3 text-ink text-sm rounded-lg w-full transition-all duration-200"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label className="label-eyebrow block mb-2">Password</label>
+            <label className="label-eyebrow block mb-2 font-semibold">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="input"
+              className="input bg-surface-deep/60 border border-hairline-strong focus:border-accent-gold px-4 py-3 text-ink text-sm rounded-lg w-full transition-all duration-200"
               placeholder="••••••••"
             />
           </div>
@@ -69,15 +74,15 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="btn btn-primary w-full h-11"
+            className="btn btn-primary w-full h-11 rounded-lg text-sm font-semibold tracking-wider uppercase transition-all duration-200"
           >
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? "Igniting Engine…" : "Start Engine (Sign in)"}
           </button>
         </form>
 
-        <p className="text-center text-charcoal mt-6 text-sm">
+        <p className="text-center text-mute mt-6 text-xs">
           New here?{" "}
-          <Link href="/signup" className="link font-medium">
+          <Link href="/signup" className="text-accent-gold hover:underline font-semibold ml-1">
             Create an account
           </Link>
         </p>

@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { useChatSocket } from "@/lib/hooks/useChatSocket";
 import type { ChatGroupOut, ChatMessageOut } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
+import ReportButton from "@/components/moderation/ReportButton";
 
 
 // Phase 4 W6: the socket carries messages when it is up. This poll is the
@@ -280,9 +281,14 @@ function ChatRoomPageInner() {
                   >
                     {msg.body}
                   </div>
-                  <p className={`text-xs text-stone mt-1 ${isMine ? "text-right" : ""}`}>
-                    {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                  </p>
+                  <div className={`flex items-center gap-2 mt-1 ${isMine ? "justify-end" : ""}`}>
+                    <p className="text-xs text-stone">
+                      {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                    {!isMine && (
+                      <ReportButton contentType="chat_message" contentId={msg.id} label="Report" className="text-[10px]" />
+                    )}
+                  </div>
                 </div>
               </div>
             );

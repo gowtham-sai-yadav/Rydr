@@ -9,6 +9,7 @@
  */
 import { useState } from "react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 
 import { api } from "@/lib/api";
 import type { PostCommentOut, PostOut, UserOut } from "@/lib/api.types";
@@ -36,6 +37,7 @@ function relativeTime(iso: string): string {
 export default function PostCard({ post, viewer, onDeleted }: Props) {
   const [liked, setLiked] = useState(post.liked_by_me === true);
   const [likeCount, setLikeCount] = useState(post.like_count);
+  const [justRevved, setJustRevved] = useState(false);
   const [commentCount, setCommentCount] = useState(post.comment_count);
   const [comments, setComments] = useState<PostCommentOut[] | null>(null);
   const [commentDraft, setCommentDraft] = useState("");
@@ -52,6 +54,10 @@ export default function PostCard({ post, viewer, onDeleted }: Props) {
     const prevCount = likeCount;
     setLiked(!prevLiked);
     setLikeCount(prevCount + (prevLiked ? -1 : 1));
+    if (!prevLiked) {
+      setJustRevved(true);
+      setTimeout(() => setJustRevved(false), 500);
+    }
     try {
       const res = prevLiked
         ? await api.unlikePost(post.id)
@@ -206,19 +212,37 @@ export default function PostCard({ post, viewer, onDeleted }: Props) {
       )}
 
       <footer className="mt-4 flex items-center gap-4 text-[13px]">
-        <button
-          onClick={toggleLike}
-          disabled={!viewer}
-          aria-pressed={liked}
-          // Anonymous readers get a neutral, disabled control rather than an
-          // unliked heart that implies they have a session.
-          className={`flex items-center gap-1.5 py-2 pr-3 transition-colors disabled:opacity-40 disabled:cursor-default ${
-            liked ? "text-accent-red" : "text-charcoal hover:text-ink"
-          }`}
-        >
-          <span aria-hidden>{liked ? "♥" : "♡"}</span>
-          <span>{likeCount}</span>
-        </button>
+        <div className="relative">
+          <motion.button
+            onClick={toggleLike}
+            disabled={!viewer}
+            aria-pressed={liked}
+            whileTap={{ scale: 0.85 }}
+            animate={justRevved ? { scale: [1, 1.35, 1] } : { scale: 1 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            // Anonymous readers get a neutral, disabled control rather than an
+            // unliked heart that implies they have a session.
+            className={`flex items-center gap-1.5 py-2 pr-3 transition-colors disabled:opacity-40 disabled:cursor-default ${
+              liked ? "text-accent-red" : "text-charcoal hover:text-ink"
+            }`}
+          >
+            <span aria-hidden>{liked ? "♥" : "♡"}</span>
+            <span>{likeCount}</span>
+          </motion.button>
+          <AnimatePresence>
+            {justRevved && (
+              <motion.span
+                initial={{ opacity: 1, scale: 0.4, y: 0 }}
+                animate={{ opacity: 0, scale: 1.6, y: -14 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="pointer-events-none absolute -top-1 left-0 text-accent-red text-xs font-semibold"
+              >
+                +1 rev
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
 
         <button
           onClick={loadComments}

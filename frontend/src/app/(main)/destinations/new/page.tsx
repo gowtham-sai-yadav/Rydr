@@ -1,21 +1,22 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import type { TagListResponse } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
 
-
-export default function NewDestinationPage() {
+function NewDestinationForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [tags, setTags] = useState<TagListResponse>({ vibe: [], vehicle_fit: [] });
 
-  const [name, setName] = useState("");
+  // Prefilled when arriving from the India-wide place search
+  const [name, setName] = useState(searchParams.get("name") || "");
   const [description, setDescription] = useState("");
-  const [region, setRegion] = useState("");
-  const [latitude, setLatitude] = useState("");
-  const [longitude, setLongitude] = useState("");
+  const [region, setRegion] = useState(searchParams.get("region") || "");
+  const [latitude, setLatitude] = useState(searchParams.get("latitude") || "");
+  const [longitude, setLongitude] = useState(searchParams.get("longitude") || "");
   const [terrain, setTerrain] = useState<"chill" | "moderate" | "rough">("moderate");
   const [foodCost, setFoodCost] = useState("");
   const [entryCost, setEntryCost] = useState("");
@@ -28,11 +29,72 @@ export default function NewDestinationPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Geocoding status
+  const [geocoding, setGeocoding] = useState(false);
+  const [geocodeStatus, setGeocodeStatus] = useState("");
+
   useEffect(() => {
     api.listTags().then(setTags).catch(() => {
       // Non-blocking — tags are optional on submission
     });
   }, []);
+
+  const handleAutoGeocode = async () => {
+    if (!name) return;
+    setGeocoding(true);
+    setGeocodeStatus("Searching coordinates...");
+    try {
+      const searchTerms = region ? `${name}, ${region}` : name;
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(searchTerms)}&format=json&limit=1`,
+        {
+          headers: {
+            "Accept-Language": "en",
+            "User-Agent": "RydrApp-DeveloperAgent"
+          }
+        }
+      );
+      if (!res.ok) throw new Error("Network response error");
+      const data = await res.json();
+      if (data && data.length > 0) {
+        const item = data[0];
+        setLatitude(parseFloat(item.lat).toFixed(6));
+        setLongitude(parseFloat(item.lon).toFixed(6));
+        setGeocodeStatus("Coordinates successfully resolved!");
+        if (!region && item.display_name) {
+          const parts = item.display_name.split(", ");
+          const statePart = parts[parts.length - 3] || parts[parts.length - 2];
+          if (statePart) setRegion(statePart);
+        }
+      } else {
+        if (region) {
+          // Fallback without region
+          const resFallback = await fetch(
+            `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(name)}&format=json&limit=1`,
+            {
+              headers: {
+                "Accept-Language": "en",
+                "User-Agent": "RydrApp-DeveloperAgent"
+              }
+            }
+          );
+          const dataFallback = await resFallback.json();
+          if (dataFallback && dataFallback.length > 0) {
+            const item = dataFallback[0];
+            setLatitude(parseFloat(item.lat).toFixed(6));
+            setLongitude(parseFloat(item.lon).toFixed(6));
+            setGeocodeStatus("Coordinates resolved (region fallback)!");
+            return;
+          }
+        }
+        setGeocodeStatus("Location not found. Please enter coordinates manually.");
+      }
+    } catch {
+      setGeocodeStatus("Failed to query coordinate server.");
+    } finally {
+      setGeocoding(false);
+    }
+  };
 
   const toggle = (slug: string) => {
     setSelectedTags((prev) => {
@@ -50,7 +112,7 @@ export default function NewDestinationPage() {
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      setError("Latitude and longitude are required (paste from Google Maps URL).");
+      setError("Latitude and longitude are required (use coordinates auto-detector or paste manually).");
       return;
     }
 
@@ -84,178 +146,219 @@ export default function NewDestinationPage() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto pb-12">
-      <h1 className="text-2xl font-bold text-ink mb-2">Add a destination</h1>
-      <p className="text-mute text-sm mb-6">
-        Share a place you love. Right-click on Google Maps to copy lat/lng coordinates.
-      </p>
+    <div className="max-w-3xl mx-auto pb-16 space-y-8 relative">
+      <div className="text-center sm:text-left">
+        <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-ink uppercase">Add a destination</h1>
+        <p className="text-xs text-mute font-semibold tracking-wider uppercase mt-1 select-none">Share a new riding spot with the community</p>
+      </div>
 
       {error && (
-        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-lg mb-4 text-sm">
+        <div className="border border-accent-red/30 bg-accent-red/5 text-accent-red px-4 py-3 rounded-xl text-xs font-semibold uppercase tracking-wider shadow-lg">
           {error}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        
         {/* Basics */}
-        <div className="bg-surface-card rounded-xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-ink">Basics</h2>
+        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
+          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
+          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none">Basics</h2>
+          
           <div>
-            <label className="block text-sm text-mute mb-1">Name *</label>
+            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Name *</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onBlur={() => {
+                if (name && !latitude && !longitude) {
+                  handleAutoGeocode();
+                }
+              }}
               required
               maxLength={200}
-              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
+              placeholder="e.g. Nandi Hills"
             />
+            {name && (
+              <button
+                type="button"
+                onClick={handleAutoGeocode}
+                disabled={geocoding}
+                className="mt-2 text-[10px] font-bold text-accent-gold uppercase tracking-widest hover:underline transition-all duration-200"
+              >
+                {geocoding ? "Detecting coordinates..." : "Auto-detect lat/lng from name →"}
+              </button>
+            )}
+            {geocodeStatus && (
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-stone mt-1">{geocodeStatus}</p>
+            )}
           </div>
+
           <div>
-            <label className="block text-sm text-mute mb-1">Region</label>
+            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Region</label>
             <input
               value={region}
               onChange={(e) => setRegion(e.target.value)}
               maxLength={100}
-              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
               placeholder="e.g. Karnataka"
             />
           </div>
+
           <div>
-            <label className="block text-sm text-mute mb-1">Description</label>
+            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Description</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={3}
-              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
               placeholder="What makes it special?"
             />
           </div>
         </div>
 
-        {/* Location */}
-        <div className="bg-surface-card rounded-xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-ink">Location</h2>
-          <div className="grid grid-cols-2 gap-4">
+        {/* Location Coordinates */}
+        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
+          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-blue/20 to-transparent" />
+          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none">Location</h2>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-mute mb-1">Latitude *</label>
+              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Latitude *</label>
               <input
                 value={latitude}
                 onChange={(e) => setLatitude(e.target.value)}
                 required
                 placeholder="13.3702"
-                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
               />
             </div>
             <div>
-              <label className="block text-sm text-mute mb-1">Longitude *</label>
+              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Longitude *</label>
               <input
                 value={longitude}
                 onChange={(e) => setLongitude(e.target.value)}
                 required
                 placeholder="77.6835"
-                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
               />
             </div>
           </div>
-          <p className="text-xs text-stone">
-            Tip: in Google Maps, right-click the spot, then click on the coordinates that appear at the top to copy them.
+          <p className="text-[10px] text-stone font-semibold uppercase tracking-wider select-none">
+            Tip: copy coordinates from Google Maps, or let our auto-detector handle it when you enter the name above.
           </p>
         </div>
 
         {/* Tags */}
-        <div className="bg-surface-card rounded-xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-ink">Tags</h2>
-          <div>
-            <p className="text-xs text-mute uppercase mb-2">Vibe</p>
-            <div className="flex flex-wrap gap-2">
-              {tags.vibe.map((t) => (
-                <button
-                  key={t.slug}
-                  type="button"
-                  onClick={() => toggle(t.slug)}
-                  className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
-                    selectedTags.has(t.slug)
-                      ? "bg-ink text-canvas"
-                      : "bg-surface-elevated text-body hover:bg-surface-elevated"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
+          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-green/20 to-transparent" />
+          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none font-display">Tags</h2>
+          
+          <div className="space-y-4">
+            <div>
+              <p className="text-[9px] font-bold text-accent-gold tracking-widest uppercase mb-2">Vibe</p>
+              <div className="flex flex-wrap gap-2">
+                {tags.vibe.map((t) => {
+                  const active = selectedTags.has(t.slug);
+                  return (
+                    <button
+                      key={t.slug}
+                      type="button"
+                      onClick={() => toggle(t.slug)}
+                      className={`text-[10px] px-3.5 py-1.5 rounded-full font-bold uppercase tracking-wider transition-all duration-200 border ${
+                        active
+                          ? "bg-gradient-to-r from-accent-gold/25 to-accent-orange/15 border-accent-gold/50 text-accent-gold shadow-[0_0_12px_rgba(212,175,55,0.25)] scale-[1.03]"
+                          : "bg-surface-deep/60 border-hairline-strong text-mute hover:border-accent-gold/45 hover:text-ink hover:scale-[1.02]"
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-          <div>
-            <p className="text-xs text-mute uppercase mb-2">Vehicle fit</p>
-            <div className="flex flex-wrap gap-2">
-              {tags.vehicle_fit.map((t) => (
-                <button
-                  key={t.slug}
-                  type="button"
-                  onClick={() => toggle(t.slug)}
-                  className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors ${
-                    selectedTags.has(t.slug)
-                      ? "bg-ink text-canvas"
-                      : "bg-surface-elevated text-body hover:bg-surface-elevated"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+            
+            <div>
+              <p className="text-[9px] font-bold text-accent-blue tracking-widest uppercase mb-2">Vehicle fit</p>
+              <div className="flex flex-wrap gap-2">
+                {tags.vehicle_fit.map((t) => {
+                  const active = selectedTags.has(t.slug);
+                  return (
+                    <button
+                      key={t.slug}
+                      type="button"
+                      onClick={() => toggle(t.slug)}
+                      className={`text-[10px] px-3.5 py-1.5 rounded-full font-bold uppercase tracking-wider transition-all duration-200 border ${
+                        active
+                          ? "bg-gradient-to-r from-accent-blue/25 to-accent-blue/10 border-accent-blue/50 text-accent-blue shadow-[0_0_12px_rgba(6,182,212,0.25)] scale-[1.03]"
+                          : "bg-surface-deep/60 border-hairline-strong text-mute hover:border-accent-blue/45 hover:text-ink hover:scale-[1.02]"
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Practical info */}
-        <div className="bg-surface-card rounded-xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-ink">Practical info</h2>
-          <div className="grid grid-cols-2 gap-4">
+        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
+          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-orange/20 to-transparent" />
+          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none">Practical info</h2>
+          
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-mute mb-1">Terrain</label>
+              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Terrain</label>
               <select
                 value={terrain}
                 onChange={(e) => setTerrain(e.target.value as typeof terrain)}
-                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
               >
-                <option value="chill">Chill</option>
-                <option value="moderate">Moderate</option>
-                <option value="rough">Rough</option>
+                <option value="chill" className="bg-canvas text-ink">Chill</option>
+                <option value="moderate" className="bg-canvas text-ink">Moderate</option>
+                <option value="rough" className="bg-canvas text-ink">Rough</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm text-mute mb-1">Food cost (₹)</label>
+              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Food cost (₹)</label>
               <input
                 type="number"
                 value={foodCost}
                 onChange={(e) => setFoodCost(e.target.value)}
                 min={0}
-                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
+                placeholder="e.g. 250"
               />
             </div>
             <div>
-              <label className="block text-sm text-mute mb-1">Entry cost (₹)</label>
+              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Entry cost (₹)</label>
               <input
                 type="number"
                 value={entryCost}
                 onChange={(e) => setEntryCost(e.target.value)}
                 min={0}
-                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
+                placeholder="e.g. 50"
               />
             </div>
             <div>
-              <label className="block text-sm text-mute mb-1">Best season</label>
+              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Best season</label>
               <input
                 value={bestSeason}
                 onChange={(e) => setBestSeason(e.target.value)}
-                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
                 placeholder="e.g. Oct–Mar"
               />
             </div>
-            <div className="col-span-2">
-              <label className="block text-sm text-mute mb-1">Best time of day</label>
+            <div className="col-span-1 sm:col-span-2">
+              <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Best time of day</label>
               <input
                 value={bestTimeOfDay}
                 onChange={(e) => setBestTimeOfDay(e.target.value)}
-                className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+                className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
                 placeholder="e.g. Pre-dawn for sunrise"
               />
             </div>
@@ -263,24 +366,27 @@ export default function NewDestinationPage() {
         </div>
 
         {/* Media */}
-        <div className="bg-surface-card rounded-xl p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-ink">Photos</h2>
+        <div className="card-bordered p-6 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg space-y-4">
+          <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-gold/20 to-transparent" />
+          <h2 className="text-sm font-bold text-ink uppercase tracking-wider select-none font-display">Photos</h2>
+          
           <div>
-            <label className="block text-sm text-mute mb-1">Hero image URL</label>
+            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Hero image URL</label>
             <input
               value={heroMediaUrl}
               onChange={(e) => setHeroMediaUrl(e.target.value)}
-              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
               placeholder="https://..."
             />
           </div>
+          
           <div>
-            <label className="block text-sm text-mute mb-1">Gallery URLs (one per line, max 20)</label>
+            <label className="block text-xs text-mute font-semibold uppercase tracking-wider mb-2">Gallery URLs (one per line, max 20)</label>
             <textarea
               value={galleryRaw}
               onChange={(e) => setGalleryRaw(e.target.value)}
               rows={3}
-              className="w-full bg-surface-elevated border border-hairline-strong rounded-lg px-4 py-2.5 text-ink focus:outline-none focus:ring-2 focus:ring-ink/30"
+              className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200"
               placeholder="https://...&#10;https://..."
             />
           </div>
@@ -289,11 +395,19 @@ export default function NewDestinationPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full bg-ink text-canvas hover:bg-surface-light disabled:opacity-50 font-semibold py-3 rounded-lg transition-colors"
+          className="w-full bg-accent-gold text-canvas hover:bg-accent-gold/90 disabled:opacity-50 font-bold py-3.5 rounded-xl uppercase text-xs tracking-wider transition-all duration-200 shadow-[0_4px_14px_rgba(212,175,55,0.15)]"
         >
           {loading ? "Submitting…" : "Add destination"}
         </button>
       </form>
     </div>
+  );
+}
+
+export default function NewDestinationPage() {
+  return (
+    <Suspense fallback={<div className="text-mute text-center py-8">Loading…</div>}>
+      <NewDestinationForm />
+    </Suspense>
   );
 }

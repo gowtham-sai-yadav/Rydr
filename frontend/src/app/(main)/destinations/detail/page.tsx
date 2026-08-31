@@ -5,9 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import RoutePreview from "@/components/map/RoutePreview";
+import DestinationMap from "@/components/destinations/DestinationMap";
 import type {
   CostEstimate,
   DestinationOut,
+  LocalLegendOut,
   RatingOut,
 } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
@@ -23,6 +25,7 @@ function DestinationDetailPageInner() {
   const [destination, setDestination] = useState<DestinationOut | null>(null);
   const [ratings, setRatings] = useState<RatingOut[]>([]);
   const [cost, setCost] = useState<CostEstimate | null>(null);
+  const [localLegend, setLocalLegend] = useState<LocalLegendOut | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -37,6 +40,7 @@ function DestinationDetailPageInner() {
         if (cancelled) return;
         setDestination(destRes);
         setRatings(ratingsRes.ratings);
+        api.getLocalLegend(id).then((legend) => { if (!cancelled) setLocalLegend(legend); }).catch(() => {});
 
         // Cost estimate — only if the user is logged in with a home location.
         if (user?.home_latitude && user?.home_longitude) {
@@ -125,6 +129,20 @@ function DestinationDetailPageInner() {
         </div>
       )}
 
+      {/* Location */}
+      <DestinationMap
+        destinations={[
+          {
+            id: destination.id,
+            name: destination.name,
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+            region: destination.region,
+          },
+        ]}
+        height={220}
+      />
+
       {/* Practical info */}
       <div className="bg-surface-card rounded-xl p-6 grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div>
@@ -153,7 +171,6 @@ function DestinationDetailPageInner() {
         </div>
       </div>
 
-      {/* Cost estimate */}
       {/* Route preview (Phase 4 W2) — sits above the cost panel because
           distance is what the cost is derived from. */}
       <RoutePreview
@@ -166,6 +183,7 @@ function DestinationDetailPageInner() {
         }
       />
 
+      {/* Cost estimate */}
       {cost && (
         <div className="bg-surface-card rounded-xl p-6">
           <h2 className="text-lg font-semibold text-ink mb-2">Cost estimate (from your home)</h2>
@@ -211,6 +229,12 @@ function DestinationDetailPageInner() {
         >
           Plan a ride here
         </Link>
+        <Link
+          href={`/journey/plan?destination=${destination.id}`}
+          className="bg-surface-elevated hover:bg-surface-elevated text-ink px-6 py-3 rounded-lg font-medium"
+        >
+          Plan route
+        </Link>
         <a
           href={mapsUrl}
           target="_blank"
@@ -220,6 +244,24 @@ function DestinationDetailPageInner() {
           Open in Google Maps
         </a>
       </div>
+
+      {/* Local Legend */}
+      {localLegend?.user && (
+        <Link
+          href={routes.user(localLegend.user.id)}
+          className="flex items-center gap-3 bg-accent-gold/10 border border-accent-gold/30 rounded-xl p-4 hover:bg-accent-gold/15 transition-colors"
+        >
+          <span className="text-2xl">👑</span>
+          <div>
+            <p className="text-xs text-accent-gold uppercase tracking-wide font-semibold">
+              Local Legend — last {localLegend.window_days} days
+            </p>
+            <p className="text-ink font-semibold text-sm">
+              {localLegend.user.name} · {localLegend.ride_count} ride{localLegend.ride_count === 1 ? "" : "s"}
+            </p>
+          </div>
+        </Link>
+      )}
 
       {/* Recent riders */}
       {destination.recent_rider_count > 0 && (
