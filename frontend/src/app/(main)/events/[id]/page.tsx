@@ -3,6 +3,7 @@ import { useState, useEffect, use, useCallback } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import type { EventOut, EventRSVPOut, RSVPStatus } from "@/lib/api.types";
+import Avatar from "@/components/ui/Avatar";
 
 const RSVP_OPTIONS: { value: RSVPStatus; label: string }[] = [
   { value: "going", label: "Going" },
@@ -102,9 +103,11 @@ export default function EventDetailPage({ params }: { params: Promise<{ id: stri
                 href={`/users/${r.user.id}`}
                 className="flex items-center gap-3 bg-surface-card rounded-lg px-4 py-2.5 hover:bg-surface-elevated/40"
               >
-                <div className="w-7 h-7 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
-                  {r.user.name.charAt(0)}
-                </div>
+                <Avatar
+                  name={r.user.name}
+                  avatarUrl={r.user.avatar_url}
+                  size="xs"
+                />
                 <span className="text-ink text-sm">{r.user.name}</span>
               </Link>
             ))
