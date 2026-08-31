@@ -286,6 +286,15 @@ alembic current
 | [`docs/plan/`](./docs/plan) | Per-milestone implementation plans (destination discovery, ride planning, chat, follow system, badges, and more) |
 | [`docs/review/`](./docs/review) | Post-implementation audits per milestone |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | System architecture overview |
+| [`docs/plan/phase4-completion.md`](./docs/plan/phase4-completion.md) | What Phase 4 shipped, the regression results, and the known limitations |
+| [`docs/plan/phase4-android-release.md`](./docs/plan/phase4-android-release.md) | Android build, signing, Firebase and Play Console checklist |
+| [`PHASE3_PLAN.md`](./PHASE3_PLAN.md) | Phase 3 scope, milestones and design decisions |
+| [`phase2.pdf`](./phase2.pdf) | Phase 2, system design and proof of concept |
+| [`file final.pdf`](./file%20final.pdf) | Phase 1, problem identification and PRD |
+
+The two PDFs and `PHASE3_PLAN.md` are the earlier phase deliverables. They are
+kept in the repository so the full project history reads in one place, and are
+superseded by the Phase 4 documents above wherever the two disagree.
 
 ---
 
