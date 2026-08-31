@@ -76,7 +76,7 @@ a demo or a deploy.
 | 8 | Next's standalone server bound to the container IP, not `0.0.0.0` — healthcheck permanently unhealthy against a working site | container reported unhealthy |
 | 9 | Share card: title overflowed into the map panel; stars collided with the rider count; duration read "564h 23m" | rendering the card to PNG and looking at it |
 | 10 | `/users/me/stats`' `rides_completed` counted only captained rides, so a rider who had joined thirty and led none saw zero | widening the endpoint |
-| 11 | `code-review-graph` hooks called a binary that was never installed, erroring on every tool call | user asked about the noise |
+| 11 | A repository hook invoked a binary that was never installed, erroring on every invocation | investigating the resulting noise |
 
 ## 4. Known limitations
 

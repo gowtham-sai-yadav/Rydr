@@ -97,7 +97,7 @@ flowchart TB
 
 ## 4. Backend module map
 
-From the code-review-graph: **12 communities, 419 nodes, 4 216 edges, 77 source files** (across `python · typescript · javascript · tsx · bash`).
+The backend spans **77 source files** across `python · typescript · javascript · tsx · bash`, grouped below by responsibility.
 
 ```mermaid
 flowchart LR
@@ -500,7 +500,7 @@ tooling (W7), the native mobile shell (W9), and the trigram search index
 
 ## 12. How this document stays honest
 
-- **Source of truth for code state**: the code-review-graph (`mcp__code-review-graph__*` tools). Auto-rebuilds on file change via session-start hook (currently 419 nodes / 4 216 edges).
+- **Source of truth for code state**: the code itself, and the test suite under `backend/tests`. Where this document and the code disagree, the code is right and this document is stale.
 - **Source of truth for plans**: `docs/plan/m{N}-*.md`. Plan files only exist for *finalized* milestones — we don't pre-write stubs for future M's.
 - **Source of truth for thesis + scope**: `PHASE3_PLAN.md` at repo root for Phase 3; `docs/plan/phase4-web-and-android.md` for the Phase 4 reconciliation and `docs/plan/phase4-completion.md` for its outcome.
 - **Bridge between them**: this doc. Update on each milestone close, not mid-milestone.
