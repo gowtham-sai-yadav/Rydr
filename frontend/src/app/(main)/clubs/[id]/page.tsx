@@ -9,6 +9,7 @@ import type {
   ClubMemberOut,
   ClubOut,
 } from "@/lib/api.types";
+import Avatar from "@/components/ui/Avatar";
 
 type Tab = "members" | "leaderboard" | "badges" | "challenges";
 
@@ -126,9 +127,11 @@ export default function ClubDetailPage({ params }: { params: Promise<{ id: strin
               href={`/users/${m.user.id}`}
               className="flex items-center gap-3 bg-surface-card rounded-lg px-4 py-3 hover:bg-surface-elevated/40"
             >
-              <div className="w-8 h-8 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
-                {m.user.name.charAt(0)}
-              </div>
+              <Avatar
+                name={m.user.name}
+                avatarUrl={m.user.avatar_url}
+                size="sm"
+              />
               <span className="text-ink text-sm font-medium flex-1">{m.user.name}</span>
               {m.role === "admin" && (
                 <span className="text-[10px] font-bold uppercase tracking-wider text-accent-gold">Admin</span>
@@ -163,9 +166,11 @@ export default function ClubDetailPage({ params }: { params: Promise<{ id: strin
                 className="flex items-center gap-3 bg-surface-card rounded-lg px-4 py-3 hover:bg-surface-elevated/40"
               >
                 <span className="text-mute text-xs font-bold w-6 text-center">#{entry.rank}</span>
-                <div className="w-8 h-8 rounded-full bg-ink text-canvas flex items-center justify-center text-xs font-bold">
-                  {entry.user.name.charAt(0)}
-                </div>
+                <Avatar
+                  name={entry.user.name}
+                  avatarUrl={entry.user.avatar_url}
+                  size="sm"
+                />
                 <span className="text-ink text-sm font-medium flex-1">{entry.user.name}</span>
                 <span className="text-accent-gold text-xs font-bold">{entry.distance_km.toFixed(0)} km</span>
               </Link>

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import type { FollowEdgeOut } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
+import Avatar from "@/components/ui/Avatar";
 
 
 function FollowersListPageInner() {
@@ -56,18 +57,11 @@ function FollowersListPageInner() {
               href={routes.user(e.user.id)}
               className="flex items-center gap-3 bg-surface-card hover:bg-surface-elevated rounded-xl p-4 transition-colors"
             >
-              <div className="w-10 h-10 rounded-full bg-ink text-canvas flex items-center justify-center font-bold">
-                {e.user.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={e.user.avatar_url}
-                    alt={e.user.name}
-                    className="w-full h-full rounded-full object-cover"
-                  />
-                ) : (
-                  e.user.name.charAt(0)
-                )}
-              </div>
+              <Avatar
+                name={e.user.name}
+                avatarUrl={e.user.avatar_url}
+                size="md"
+              />
               <div className="flex-1">
                 <p className="text-ink font-medium">{e.user.name}</p>
                 <p className="text-stone text-xs">

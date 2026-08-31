@@ -13,6 +13,8 @@ import { RideChatPanel } from "@/components/rides/RideChatPanel";
 import { LiveRideMap } from "@/components/rides/LiveRideMap";
 import { ElevationProfileChart } from "@/components/rides/ElevationProfileChart";
 import { routes } from "@/lib/routes";
+import Avatar from "@/components/ui/Avatar";
+import RemoteImage from "@/components/ui/RemoteImage";
 
 
 function RideDetailPageInner() {
@@ -164,21 +166,16 @@ function RideDetailPageInner() {
 
       {/* Hero Header Banner */}
       <div className="relative rounded-2xl overflow-hidden h-64 border border-hairline-strong shadow-lg select-none">
-        {ride.thumbnail_url || ride.destination?.hero_media_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={ride.thumbnail_url || ride.destination?.hero_media_url || ""}
-            alt={ride.title}
-            className="w-full h-full object-cover brightness-[0.6] filter saturate-[0.9]"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-surface-card text-stone">
-            <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <RemoteImage
+          src={ride.thumbnail_url || ride.destination?.hero_media_url}
+          name={ride.title}
+          priority
+          className="brightness-[0.6] filter saturate-[0.9]"
+          fallback={<svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.2}
                     d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-            </svg>
-          </div>
-        )}
+            </svg>}
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/40 to-transparent" />
         <div className="absolute bottom-6 left-6 right-6">
           <div className="flex flex-wrap items-center gap-2 mb-3">
@@ -483,9 +480,11 @@ function RideDetailPageInner() {
                 className="block card-bordered p-4 bg-surface-card/30 backdrop-blur-md rounded-2xl relative shadow-lg hover:border-accent-blue/45 transition-all duration-300 flex items-center gap-4"
               >
                 <div className="absolute top-0 inset-x-0 h-[1.5px] bg-gradient-to-r from-transparent via-accent-blue/20 to-transparent" />
-                <div className="w-10 h-10 rounded-full bg-surface-deep border border-hairline flex items-center justify-center text-sm font-bold font-display text-ink uppercase">
-                  {ride.captain.name.charAt(0)}
-                </div>
+                <Avatar
+                  name={ride.captain.name}
+                  avatarUrl={ride.captain.avatar_url}
+                  size="md"
+                />
                 <div className="space-y-0.5">
                   <p className="text-[9px] text-mute uppercase font-bold tracking-widest select-none">Riding Captain</p>
                   <h4 className="text-ink font-bold text-xs uppercase tracking-wide">{ride.captain.name}</h4>
@@ -516,9 +515,11 @@ function RideDetailPageInner() {
               {participants.map((p) => (
                 <div key={p.id} className="flex items-center justify-between bg-surface-deep/60 rounded-xl p-3 border border-hairline-strong">
                   <Link href={routes.user(p.user_id)} className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                    <div className="w-8 h-8 rounded-full bg-surface-elevated flex items-center justify-center text-xs font-bold font-display text-ink uppercase">
-                      {p.user?.name?.charAt(0) || "?"}
-                    </div>
+                    <Avatar
+                      name={p.user?.name}
+                      avatarUrl={p.user?.avatar_url}
+                      size="sm"
+                    />
                     <div>
                       <p className="text-ink text-xs font-bold uppercase tracking-wider">{p.user?.name || "Unknown"}</p>
                       <p className="text-mute text-[9px] uppercase tracking-wider mt-0.5">{p.status}</p>

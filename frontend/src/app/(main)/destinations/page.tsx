@@ -12,6 +12,7 @@ import type {
   TagListResponse,
 } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
+import RemoteImage from "@/components/ui/RemoteImage";
 
 type SortMode = "rating" | "distance" | "popularity";
 
@@ -419,20 +420,14 @@ export default function DestinationsPage() {
               className="group bg-surface-card/30 backdrop-blur-md rounded-2xl overflow-hidden border border-hairline-strong hover:border-accent-gold/40 hover:-translate-y-1.5 transition-all duration-300 shadow-lg hover:shadow-2xl flex flex-col relative"
             >
               <div className="aspect-video bg-surface-deep relative overflow-hidden">
-                {d.hero_media_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={d.hero_media_url}
-                    alt={d.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-surface-elevated to-surface-deep">
-                    <svg className="w-8 h-8 text-stone" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <RemoteImage
+                  src={d.hero_media_url}
+                  name={d.name}
+                  className="group-hover:scale-105 transition-transform duration-500 ease-out"
+                  fallback={<svg className="w-8 h-8 text-stone" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-                    </svg>
-                  </div>
-                )}
+                    </svg>}
+                />
                 {d.distance_km != null && (
                   <span className="absolute top-3 right-3 bg-canvas/80 backdrop-blur-md text-ink text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border border-hairline-strong">
                     {d.distance_km} km

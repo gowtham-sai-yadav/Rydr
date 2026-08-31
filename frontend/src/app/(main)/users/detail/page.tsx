@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import type { UserBadgeOut, UserOut } from "@/lib/api.types";
 import { BadgeShelf } from "@/components/badges/BadgeShelf";
 import { routes } from "@/lib/routes";
+import Avatar from "@/components/ui/Avatar";
 
 function UserProfilePageInner() {
   // Phase 4 W9: the record id arrives as a query parameter rather than a
@@ -131,18 +132,11 @@ function UserProfilePageInner() {
 
       {/* Header */}
       <div className="bg-surface-card rounded-xl p-6 flex flex-col sm:flex-row gap-4 items-center sm:items-start">
-        <div className="w-20 h-20 rounded-full bg-ink text-canvas flex items-center justify-center text-3xl font-bold">
-          {profile.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={profile.avatar_url}
-              alt={profile.name}
-              className="w-full h-full rounded-full object-cover"
-            />
-          ) : (
-            profile.name.charAt(0)
-          )}
-        </div>
+        <Avatar
+          name={profile.name}
+          avatarUrl={profile.avatar_url}
+          size="xl"
+        />
         <div className="flex-1 text-center sm:text-left">
           <h1 className="text-2xl font-bold text-ink flex items-center gap-2 justify-center sm:justify-start">
             {profile.name}
