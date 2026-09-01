@@ -83,10 +83,12 @@ class OsmProvider(MapProvider):
         )
 
     def geocode(self, query: str, limit: int = 5) -> List[GeocodeResult]:
-        payload = get_json(
-            f"{settings.NOMINATIM_BASE_URL}/search",
-            {"q": query, "format": "jsonv2", "limit": limit},
-        )
+        params = {"q": query, "format": "jsonv2", "limit": limit}
+        countries = settings.GEOCODE_COUNTRIES.strip()
+        if countries:
+            # Nominatim spells it "countrycodes"; Mapbox spells it "country".
+            params["countrycodes"] = countries
+        payload = get_json(f"{settings.NOMINATIM_BASE_URL}/search", params)
         if not isinstance(payload, list):
             return []
 

@@ -293,8 +293,8 @@ USERS = [
         },
     },
     {
-        "name": "Casey Storm",
-        "email": "casey@ryder.com",
+        "name": "Ashok Yemineni",
+        "email": "ashok@ryder.com",
         "phone": "+91 98765 40004",
         "bio": "Track day regular turned touring rider. 10 years in the saddle.",
         "home_city": "Mumbai", "home_latitude": 19.0760, "home_longitude": 72.8777,
@@ -425,8 +425,8 @@ USERS = [
         },
     },
     {
-        "name": "Divya Menon",
-        "email": "divya@ryder.com",
+        "name": "Swapnil Saurav",
+        "email": "swapnil@ryder.com",
         "phone": "+91 98765 40016",
         "bio": "Coastal rider through and through. ECR at dawn is my favourite kind of therapy.",
         "home_city": "Coimbatore", "home_latitude": 11.0168, "home_longitude": 76.9558,

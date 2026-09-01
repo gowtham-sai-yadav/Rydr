@@ -69,7 +69,7 @@ def seed(db) -> None:  # noqa: C901
     alex = db.query(User).filter(User.email == "alex@ryder.com").one()
     sam = db.query(User).filter(User.email == "sam@ryder.com").one()
     jordan = db.query(User).filter(User.email == "jordan@ryder.com").one()
-    casey = db.query(User).filter(User.email == "casey@ryder.com").one()
+    casey = db.query(User).filter(User.email == "ashok@ryder.com").one()
 
     print(f"Found deb: {deb.id} ({deb.name})")
 

@@ -126,7 +126,7 @@ def list_clubs(
         query = query.filter(func.lower(Club.city) == city.lower())
     if q:
         query = query.filter(Club.name.ilike(f"%{q}%"))
-    total = query.with_entities(func.count()).scalar() or 0
+    total = query.with_entities(func.count(Club.id)).scalar() or 0
     rows = query.order_by(Club.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
     return ClubListResponse(
         clubs=[_to_out(db, c, viewer) for c in rows], total=total, page=page, limit=limit

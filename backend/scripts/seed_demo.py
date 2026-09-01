@@ -40,7 +40,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.database import SessionLocal  # noqa: E402
 from app.models.badge import UserBadge  # noqa: E402
 from app.models.chat import ChatGroup, ChatMessage  # noqa: E402
+from app.models.club import (  # noqa: E402
+    Club,
+    ClubBadge,
+    ClubChallenge,
+    ClubMembership,
+    ClubRole,
+    UserClubBadge,
+)
 from app.models.destination import Destination, Rating  # noqa: E402
+from app.models.event import Event, EventRSVP, RSVPStatus  # noqa: E402
 from app.models.post import Post, PostComment, PostLike, PostMedia  # noqa: E402
 from app.models.ride import (  # noqa: E402
     ParticipantStatus,
@@ -237,12 +246,33 @@ def build_activity(db, riders: list[User]) -> dict:
 
     # Rides spread backwards over ~10 weeks so streaks and "this month" work.
     for week in range(10):
-        for _ in range(random.randint(2, 4)):
-            captain = random.choice([u for u in everyone if nearby[u.id]] or everyone)
+        # Week 0 gives *every* rider a recent ride rather than picking 2-4 at
+        # random. Week- and month-scoped views (club leaderboards, challenge
+        # progress, the "this week" panel) are per-rider, so a random handful
+        # left whole clubs reading zero on demo day.
+        if week == 0:
+            captains = [u for u in everyone if nearby[u.id]]
+        else:
+            pool = [u for u in everyone if nearby[u.id]] or everyone
+            captains = [random.choice(pool) for _ in range(random.randint(2, 4))]
+
+        for captain in captains:
             if not nearby[captain.id]:
                 continue
             dest = random.choice(nearby[captain.id])
-            when = TODAY - timedelta(days=week * 7 + random.randint(0, 6))
+            # Week 0 is pinned inside both the current calendar *week* and
+            # the current calendar *month*, which are not the same window and
+            # neither is "the last 7 days". On a Tuesday, randint(0, 6) puts
+            # five of seven outcomes in last week; on the 1st of a month, any
+            # backward offset at all lands in the previous month. Either one
+            # leaves the scoped leaderboards and challenge progress empty on
+            # demo day, so clamp to whichever boundary is closer to today.
+            if week == 0:
+                floor = max(TODAY - timedelta(days=TODAY.weekday()),
+                            TODAY.replace(day=1))
+                when = TODAY - timedelta(days=random.randint(0, (TODAY - floor).days))
+            else:
+                when = TODAY - timedelta(days=week * 7 + random.randint(0, 6))
             title = random.choice(RIDE_TITLES).format(d=dest.name)
             if db.query(RidePlan).filter(RidePlan.title == title,
                                          RidePlan.planned_date == when).first():
@@ -284,7 +314,12 @@ def build_activity(db, riders: list[User]) -> dict:
 
             # Logs, ratings and posts for a subset, so not every ride looks identical.
             for rider in riders_on:
-                if random.random() > 0.65:
+                # Week 0 is the window every scoped view reads, so its captain
+                # always logs. Leaving it to the same 65% dice as the rest meant
+                # a rider could end the week with no log at all, which showed up
+                # as an entire club leaderboard reading zero.
+                captains_recent_ride = week == 0 and rider.id == captain.id
+                if not captains_recent_ride and random.random() > 0.65:
                     continue
                 one_way = haversine_km(rider.home_latitude, rider.home_longitude,
                                        dest.latitude, dest.longitude) if rider.home_latitude else 0
@@ -346,6 +381,261 @@ def build_activity(db, riders: list[User]) -> dict:
     return stats
 
 
+# ---------------------------------------------------------------- clubs -----
+# Clubs are city-anchored because that is how riding groups actually form: the
+# thing members have in common is the road they can all reach on a Saturday.
+# One deliberate exception (the Himalayan owners' club) is national, so the
+# "city" filter on /clubs has both cases to show.
+CLUBS = [
+    ("Bengaluru Sunrise Riders", "Bengaluru", "rohit@rydr.app",
+     "Out of the city before the traffic wakes up. Nandi, Skandagiri, "
+     "Kanakapura road. Kickstands up at 5:30, back home before noon."),
+    ("Pune Ghat Runners", "Pune", "aditya@rydr.app",
+     "Tamhini, Malshej, Varandha. If it has hairpins and fog we have probably "
+     "ridden it twice this month. Monsoon is peak season, not an excuse."),
+    ("Malabar Coast Riders", "Kochi", "meera@rydr.app",
+     "Backwaters, the coastal stretch of NH-66, and the Wayanad ghats when we "
+     "want elevation. Slow rides and long lunches — nobody is chasing a time."),
+    ("Chennai Coastal Cruisers", "Chennai", "priya@rydr.app",
+     "ECR at sunrise, Pondicherry on a long weekend. Beginner friendly: if it "
+     "is your first group ride, tell us and someone will ride sweep with you."),
+    ("Delhi Ridge Riders", "Delhi", "karan@rydr.app",
+     "Weekend escapes out of the NCR — Rishikesh, the Nainital road, and one "
+     "properly long haul to Spiti every summer for whoever can get the leave."),
+    ("Himalayan Owners Club — India", None, "sneha@rydr.app",
+     "Not a city chapter. Anyone riding a Himalayan, anywhere in the country. "
+     "Mostly here to argue about luggage setups and share service invoices."),
+]
+
+# Two badges per club: one for turning up, one that takes real distance. A club
+# with only a hard badge looks unwelcoming; one with only an easy badge looks
+# meaningless.
+CLUB_BADGES = {
+    "Bengaluru Sunrise Riders": [
+        ("first-sunrise", "First Sunrise", "Completed your first 5:30am club ride."),
+        ("nandi-regular", "Nandi Regular", "Five club rides up Nandi Hills."),
+    ],
+    "Pune Ghat Runners": [
+        ("monsoon-tested", "Monsoon Tested", "Rode a club ghat run in the rain."),
+        ("three-ghats", "Three Ghats", "Tamhini, Malshej and Varandha in one season."),
+    ],
+    "Malabar Coast Riders": [
+        ("coast-to-hill", "Coast to Hill", "Sea level to the Wayanad ghats in a single ride."),
+        ("long-lunch", "Long Lunch", "Ten club rides. The food stops count."),
+    ],
+    "Chennai Coastal Cruisers": [
+        ("ecr-dawn", "ECR at Dawn", "Your first sunrise run down the East Coast Road."),
+        ("rode-sweep", "Rode Sweep", "Rode at the back so a newer rider was never alone."),
+    ],
+    "Delhi Ridge Riders": [
+        ("out-of-ncr", "Out of the NCR", "First club ride past the state line."),
+        ("high-pass", "High Pass", "Cleared a pass above 4,000m on a club trip."),
+    ],
+    "Himalayan Owners Club — India": [
+        ("first-service", "First Service", "Survived the first service interval and stayed."),
+        ("fully-loaded", "Fully Loaded", "Completed a tour with full luggage fitted."),
+    ],
+}
+
+# Titles are split past/upcoming because /events defaults to upcoming_only=True.
+# A seed weighted to the past would leave the default view empty, which is the
+# exact failure this function exists to fix.
+UPCOMING_EVENTS = [
+    ("{d} sunrise run", "Regular monthly run. Meet at {mp}, brief at 5:20, roll at 5:30. "
+     "Fuel up the night before — we are not stopping in the first 40km."),
+    ("Breakfast ride to {d}", "Easy pace, one photo stop. Breakfast is the point, the ride "
+     "is the excuse. Pillions welcome."),
+    ("{d} — new riders' ride", "Built for anyone who has not done a group ride before. "
+     "Sweep rider at the back the whole way, no one gets dropped."),
+    ("Post-monsoon {d} recce", "Checking what the rain did to the surface before we take "
+     "the bigger group up. Expect gravel and at least one detour."),
+]
+
+PAST_EVENTS = [
+    ("{d} monsoon run", "Rained the whole way. Twelve started, eleven finished, one "
+     "electrical gremlin got a tow. Good day regardless."),
+    ("{d} — club anniversary ride", "Biggest turnout we have had. Photos in the group, "
+     "and thanks to everyone who rode sweep."),
+]
+
+# Where a city's group actually gathers before rolling out.
+MEETING_POINTS = {
+    "Bengaluru": ("Hebbal flyover, service road", 13.0358, 77.5970),
+    "Pune": ("Chandni Chowk, NH-48", 18.5074, 73.7898),
+    "Kochi": ("Lulu Mall parking, Edappally", 10.0274, 76.3080),
+    "Chennai": ("Thiruvanmiyur MRTS, ECR", 12.9830, 80.2594),
+    "Delhi": ("India Gate, C-Hexagon", 28.6129, 77.2295),
+}
+
+
+def seed_clubs_and_events(db, riders: list[User]) -> dict:
+    """Clubs, their members, badges and challenges, plus dated events.
+
+    Everything is looked up by natural key first, so a second run is a no-op.
+    Destinations are chosen by distance from the club's city rather than by
+    name, so this keeps working if the destination catalogue changes.
+    """
+    by_email = {r.email: r for r in riders}
+    all_users = db.query(User).all()
+    destinations = db.query(Destination).filter(
+        Destination.latitude.isnot(None), Destination.longitude.isnot(None)
+    ).all()
+    counts = {"clubs": 0, "memberships": 0, "club_badges": 0,
+              "challenges": 0, "events": 0, "rsvps": 0}
+
+    for club_index, (name, city, creator_email, description) in enumerate(CLUBS):
+        creator = by_email.get(creator_email) or (riders[0] if riders else None)
+        if creator is None:
+            continue
+
+        club = db.query(Club).filter(Club.name == name).first()
+        if club is None:
+            club = Club(name=name, city=city, description=description,
+                        created_by_user_id=creator.id)
+            db.add(club)
+            db.flush()
+            counts["clubs"] += 1
+
+        # The creator runs the club; everyone whose home city matches joins as a
+        # member. The national club takes a slice of everyone so it is not empty.
+        members = [creator]
+        if city is None:
+            members += [u for u in all_users if u.id != creator.id][:7]
+        else:
+            members += [u for u in all_users
+                        if u.id != creator.id and (u.home_city or "").lower() == city.lower()]
+            # A club of one reads as abandoned. Top up from the wider roster.
+            if len(members) < 4:
+                extra = [u for u in all_users if u.id != creator.id and u not in members]
+                members += extra[: 4 - len(members)]
+
+        for i, user in enumerate(members):
+            exists = db.query(ClubMembership).filter(
+                ClubMembership.club_id == club.id, ClubMembership.user_id == user.id
+            ).first()
+            if exists is None:
+                db.add(ClubMembership(
+                    club_id=club.id, user_id=user.id,
+                    role=ClubRole.admin if i == 0 else ClubRole.member,
+                ))
+                counts["memberships"] += 1
+
+        badge_rows = []
+        for slug, badge_name, badge_desc in CLUB_BADGES.get(name, []):
+            badge = db.query(ClubBadge).filter(
+                ClubBadge.club_id == club.id, ClubBadge.slug == slug
+            ).first()
+            if badge is None:
+                badge = ClubBadge(club_id=club.id, slug=slug, name=badge_name,
+                                  description=badge_desc)
+                db.add(badge)
+                db.flush()
+                counts["club_badges"] += 1
+            badge_rows.append(badge)
+
+        # Award the participation badge to about half the roster, so the club
+        # page shows earned badges rather than an untouched catalogue.
+        if badge_rows:
+            for user in members[: max(1, len(members) // 2)]:
+                held = db.query(UserClubBadge).filter(
+                    UserClubBadge.user_id == user.id,
+                    UserClubBadge.club_badge_id == badge_rows[0].id,
+                ).first()
+                if held is None:
+                    db.add(UserClubBadge(user_id=user.id, club_badge_id=badge_rows[0].id))
+
+        # A live challenge covering the current month. Progress is computed at
+        # read time from members' ride logs, which build_activity already wrote.
+        start = TODAY.replace(day=1)
+        end = (start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        title = f"{start.strftime('%B')} combined distance"
+        challenge = db.query(ClubChallenge).filter(
+            ClubChallenge.club_id == club.id, ClubChallenge.title == title
+        ).first()
+        if challenge is None:
+            db.add(ClubChallenge(
+                club_id=club.id, title=title,
+                goal_km=float(500 * max(2, len(members))),
+                start_date=start, end_date=end,
+                reward_club_badge_id=badge_rows[-1].id if badge_rows else None,
+            ))
+            counts["challenges"] += 1
+
+        # Events need somewhere to go. Anchor on the club's city when it has
+        # one, otherwise on the creator's home, then take the nearest few
+        # destinations so a Kochi club is not meeting at Nandi Hills.
+        if city and city in MEETING_POINTS:
+            mp_name, origin_lat, origin_lng = MEETING_POINTS[city]
+        else:
+            mp_name = "Group ride — start point shared in the club chat"
+            origin_lat = creator.home_latitude
+            origin_lng = creator.home_longitude
+
+        if origin_lat is None or origin_lng is None or not destinations:
+            db.commit()
+            continue
+
+        # Clubs in the same city share a nearest-destination list, which had
+        # three of them all running a "Bannerghatta sunrise run". Rotating the
+        # window by club index keeps each club's calendar distinct while still
+        # only ever picking somewhere they can actually reach.
+        ranked = sorted(
+            destinations,
+            key=lambda d: haversine_km(origin_lat, origin_lng, d.latitude, d.longitude),
+        )[:10]
+        shift = club_index % max(1, len(ranked) - 3)
+        nearby = (ranked[shift:] + ranked[:shift])[:4]
+
+        plan = [(t, d, True) for t, d in zip(UPCOMING_EVENTS, nearby)]
+        plan += [(t, d, False) for t, d in zip(PAST_EVENTS, nearby[1:])]
+
+        for offset, ((title_tpl, body_tpl), dest, is_future) in enumerate(plan):
+            ev_title = title_tpl.format(d=dest.name)
+            ev_body = body_tpl.format(d=dest.name, mp=mp_name)
+            existing = db.query(Event).filter(
+                Event.club_id == club.id, Event.title == ev_title
+            ).first()
+            if existing is not None:
+                continue
+
+            if is_future:
+                when = datetime.combine(
+                    TODAY + timedelta(days=6 + offset * 9), time(5, 30)
+                ).replace(tzinfo=timezone.utc)
+            else:
+                when = datetime.combine(
+                    TODAY - timedelta(days=14 + offset * 21), time(6, 0)
+                ).replace(tzinfo=timezone.utc)
+
+            event = Event(
+                club_id=club.id, destination_id=dest.id, title=ev_title,
+                description=ev_body, event_date=when, meeting_point=mp_name,
+                meeting_latitude=origin_lat, meeting_longitude=origin_lng,
+                created_by_user_id=creator.id,
+            )
+            db.add(event)
+            db.flush()
+            counts["events"] += 1
+
+            # Most of the club says yes, a couple say maybe. An event with a
+            # single RSVP from its own organiser looks broken.
+            going = members[: min(len(members), max(3, round(len(members) * 0.7)))]
+            interested = members[len(going): len(going) + 2]
+            for user in going:
+                db.add(EventRSVP(event_id=event.id, user_id=user.id,
+                                 status=RSVPStatus.going))
+                counts["rsvps"] += 1
+            for user in interested:
+                db.add(EventRSVP(event_id=event.id, user_id=user.id,
+                                 status=RSVPStatus.interested))
+                counts["rsvps"] += 1
+
+        db.commit()
+
+    db.commit()
+    return counts
+
+
 def refresh_rollups(db) -> None:
     """Recompute destination rating aggregates and award badges."""
     from sqlalchemy import func, update
@@ -402,18 +692,43 @@ def purge_previous(db) -> int:
     return killed, orphans
 
 
+def purge_clubs(db) -> int:
+    """Drop the clubs this script creates, matched by exact name.
+
+    Cascades take memberships, badges, challenges, events and RSVPs with them,
+    so there is nothing else to sweep. Clubs made through the app survive.
+    """
+    killed = 0
+    for name, *_ in CLUBS:
+        club = db.query(Club).filter(Club.name == name).first()
+        if club is not None:
+            db.delete(club)
+            killed += 1
+    db.commit()
+    # Runs made before the cascade above was corrected left club-less events
+    # behind, which no later purge would match. Sweep them once.
+    orphans = db.query(Event).filter(Event.club_id.is_(None)).delete(
+        synchronize_session=False)
+    db.commit()
+    return killed, orphans
+
+
 def main() -> None:
     db = SessionLocal()
     try:
         if "--fresh" in sys.argv:
             rides_gone, posts_gone = purge_previous(db)
-            print(f"  purged: {rides_gone} rides, {posts_gone} orphaned posts")
+            clubs_gone, ev_orphans = purge_clubs(db)
+            print(f"  purged: {rides_gone} rides, {posts_gone} orphaned posts, "
+                  f"{clubs_gone} clubs, {ev_orphans} orphaned events")
         added = backfill_destinations(db)
         print(f"  destinations backfilled : {added}")
         riders = get_or_create_riders(db)
         print(f"  demo riders ensured     : {len(riders)}")
         stats = build_activity(db, riders)
         for k, v in stats.items():
+            print(f"  {k:24}: {v}")
+        for k, v in seed_clubs_and_events(db, riders).items():
             print(f"  {k:24}: {v}")
         refresh_rollups(db)
         print(f"  badges awarded total    : {db.query(UserBadge).count()}")

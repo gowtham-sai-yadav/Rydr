@@ -10,13 +10,7 @@ if config.config_file_name is not None:
 # Import the models package so every ORM class is registered with Base.metadata.
 from app.config import settings  # noqa: E402
 from app.database import Base  # noqa: E402
-from app.config import settings  # noqa: E402
 import app.models  # noqa: E402,F401
-
-# alembic.ini's sqlalchemy.url is a local-dev fallback only. Always defer to
-# settings.DATABASE_URL (env var DATABASE_URL, or backend/.env) so migrations
-# target the same database the app itself connects to, in Docker or bare metal.
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 target_metadata = Base.metadata
 
@@ -31,7 +25,19 @@ target_metadata = Base.metadata
 # at localhost. The ini value remains as the fallback for anyone running
 # alembic with no environment configured.
 _url = settings.DATABASE_URL or config.get_main_option("sqlalchemy.url")
-config.set_main_option("sqlalchemy.url", _url)
+
+# Alembic's config is a configparser, and configparser reads "%" as the start
+# of an interpolation. A percent-encoded character in the password -- %40 for
+# the "@" in an email-shaped password, say -- is therefore parsed as malformed
+# interpolation syntax and raises ValueError before a single migration runs.
+# The app itself connects fine, which makes this look like a database problem
+# rather than a config-parsing one.
+#
+# Doubling the sign escapes it. run_migrations_online() reads the value back
+# through config.get_section(), where configparser resolves "%%" to "%", so
+# SQLAlchemy still receives the original URL. run_migrations_offline() uses
+# _url directly and must keep the unescaped form.
+config.set_main_option("sqlalchemy.url", _url.replace("%", "%%"))
 
 
 def run_migrations_offline() -> None:
