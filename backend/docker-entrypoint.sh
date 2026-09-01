@@ -17,22 +17,38 @@ set -euo pipefail
 
 echo "[entrypoint] waiting for the database..."
 for attempt in $(seq 1 30); do
-  if python -c "
-import sys
-from sqlalchemy import create_engine, text
+  if python - <<'PY' 2>/tmp/db_probe_err; then
 import os
-try:
-    e = create_engine(os.environ['DATABASE_URL'], pool_pre_ping=True)
-    with e.connect() as c:
-        c.execute(text('SELECT 1'))
-except Exception:
-    sys.exit(1)
-" 2>/dev/null; then
+import sys
+
+from sqlalchemy import create_engine, text
+
+# connect_timeout bounds each attempt. Without it an unroutable address
+# hangs on the OS connect timeout, so a loop advertising a 60s budget can
+# take minutes -- which is how a database misconfiguration first presented
+# as the entrypoint simply going silent.
+engine = create_engine(
+    os.environ["DATABASE_URL"],
+    pool_pre_ping=True,
+    connect_args={"connect_timeout": 5},
+)
+with engine.connect() as conn:
+    conn.execute(text("SELECT 1"))
+PY
     echo "[entrypoint] database is up (attempt ${attempt})"
     break
   fi
   if [ "${attempt}" -eq 30 ]; then
+    # Report why, not just that. The reason was previously discarded, which
+    # left "did not become reachable" as the only evidence -- true, and
+    # useless: unreachable host, refused port, bad password and wrong
+    # database name all look identical from here.
+    #
+    # Sanitised: SQLAlchemy puts the connection URL in some messages, and
+    # this goes to a log aggregator.
     echo "[entrypoint] database did not become reachable in 60s" >&2
+    echo "[entrypoint] last error was:" >&2
+    sed -E 's#(://[^:]+:)[^@]*@#\1****@#g' /tmp/db_probe_err | tail -n 15 >&2
     exit 1
   fi
   sleep 2
