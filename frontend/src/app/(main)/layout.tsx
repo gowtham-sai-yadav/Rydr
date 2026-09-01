@@ -53,16 +53,16 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
       <AlertDialog open={showSignout} onOpenChange={setShowSignout}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogTitle>Cut the engine?</AlertDialogTitle>
             <AlertDialogDescription>
-              You&apos;ll need to sign in again to see your rides, chats and
-              notifications.
+              You&apos;ll need to fire it up again to see your rides, chats
+              and notifications.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Stay signed in</AlertDialogCancel>
+            <AlertDialogCancel>Keep riding</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={logout}>
-              Sign out
+              Cut engine
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

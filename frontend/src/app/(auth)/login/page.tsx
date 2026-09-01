@@ -2,7 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { Button, Input, Alert } from "@/components/ui";
+import { Button, Input, Alert, Spinner } from "@/components/ui";
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -83,7 +83,14 @@ export default function LoginPage() {
           </div>
 
           <Button type="submit" size="lg" className="w-full" disabled={loading}>
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? (
+              <>
+                <Spinner size="sm" className="border-canvas/40 border-t-canvas" />
+                Firing up…
+              </>
+            ) : (
+              "Start engine"
+            )}
           </Button>
         </form>
 
