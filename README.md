@@ -136,14 +136,15 @@ Runs Postgres, the FastAPI backend, and the Next.js frontend as containers. Usef
 
 ### Sign in with seeded demo users
 
-Six demo users ship with the seed. Use any of them, password is `password123`:
+The seed creates 24 demo users, all with the password `password123`. Any of
+them works; these six are a convenient starting point:
 
 | Name | Email |
 |---|---|
 | Alex Rider | `alex@ryder.com` |
 | Sam Cruz | `sam@ryder.com` |
 | Jordan Miles | `jordan@ryder.com` |
-| Casey Storm | `casey@ryder.com` |
+| Ashok Yemineni | `ashok@ryder.com` |
 | Riley Vance | `riley@ryder.com` |
 | Morgan Blake | `morgan@ryder.com` |
 
