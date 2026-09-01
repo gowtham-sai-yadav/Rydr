@@ -31,6 +31,19 @@ Mobile exists in two forms and neither has been compiled on a machine with the A
 - Group rides: creation, public ride feed, ride detail view
 - Request-to-join and captain approval workflow, with automatic waitlisting when a ride is full
 - Real-time group chat over WebSockets, with HTTP history for initial load
+- Direct messages: 1:1 threads, unlocked by following someone (an accepted follow, for private accounts)
+
+### Clubs and events
+- Clubs: persistent joinable groups anchored to a city, a bike, or a riding style, distinct from one-off group rides
+- Club-scoped leaderboards, custom club badges, and monthly combined-distance challenges
+- Events: organized rides and meetups with a date, a meeting point, and open RSVP (going / interested), either club-scoped or open to anyone
+
+### Multi-day trips
+- Group a sequence of your own ride logs into one tour, with combined distance and day-count statistics
+
+### Safety and coverage
+- Community hazard reports (potholes, gravel, police checks, animal crossings) pinned to a location and shown on the discovery and live-ride maps; reports decay on their own from a per-type window rather than needing a cron job
+- GPS heatmaps of ground covered, per rider and globally, with each rider's own privacy-zone fuzzing applied
 
 ### Gamification
 - Badges and achievements, event-triggered on rides, reviews, and follows
@@ -49,11 +62,11 @@ Mobile exists in two forms and neither has been compiled on a machine with the A
 |---|---|
 | Frontend | Next.js 16 (App Router), React 19, TypeScript, Tailwind v4 |
 | Backend | FastAPI, SQLAlchemy 2.0, Alembic, Pydantic v2 |
-| Database | PostgreSQL 15 (via Docker for dev) |
+| Database | PostgreSQL — 15 via Docker for dev, 17 on Supabase in production |
 | Auth | JWT (python-jose), bcrypt (passlib) |
 | Real-time | FastAPI WebSockets (chat) |
 | Media | Cloudinary (signed uploads) |
-| Maps | Leaflet + OpenStreetMap tiles, OSRM routing, Nominatim geocoding; a Mapbox adapter activates when `MAPBOX_TOKEN` is set |
+| Maps | Leaflet renders the maps. Tiles, routing and geocoding come from OpenStreetMap / OSRM / Nominatim by default, or from Mapbox when `MAPBOX_TOKEN` is set — which it is in production. Leaflet is the renderer either way; Mapbox GL JS is not used |
 | Images | Pillow (server-rendered shareable cards) |
 
 ---
@@ -280,6 +293,40 @@ alembic current
 
 ---
 
+## Deployment
+
+| Piece | Host | URL |
+|---|---|---|
+| Web app | Vercel | https://rydr-web.vercel.app |
+| API | Render (Docker) | https://rydr-api-eq6i.onrender.com |
+| Database | Supabase (PostgreSQL 17, `us-west-1`) | session pooler, port 5432 |
+
+Three hosts rather than one, for reasons rather than taste:
+
+- **The API cannot go on Vercel.** Two routers serve WebSockets and Vercel's
+  functions are short-lived, so live chat would drop. It runs as a container on
+  Render instead.
+- **The database is not Render's.** Render deletes free Postgres instances 30
+  days after creation. Supabase's free tier does not expire.
+- **The web app is not on Render.** Vercel builds Next.js better and serves it
+  from a CDN.
+
+Two constraints are easy to get wrong and cost an afternoon each:
+
+- Use Supabase's **session pooler** connection string (`...pooler.supabase.com`,
+  port `5432`). The direct connection is IPv6-only and Render has no IPv6
+  egress; the transaction pooler on `6543` disables prepared statements, which
+  breaks Alembic.
+- `MAPBOX_TOKEN` must be a **public** (`pk.*`) token with **no URL
+  restrictions**. It reaches the browser inside the tile URL, so a secret token
+  would leak; and URL restrictions are enforced by `Referer`, which the
+  server-side routing, geocoding and static-image calls do not send.
+
+Full runbook, including the seeding flags and the CORS step:
+[`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
+
+---
+
 ## Documentation
 
 | Document | Purpose |
@@ -287,6 +334,7 @@ alembic current
 | [`docs/plan/`](./docs/plan) | Per-milestone implementation plans (destination discovery, ride planning, chat, follow system, badges, and more) |
 | [`docs/review/`](./docs/review) | Post-implementation audits per milestone |
 | [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | System architecture overview |
+| [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) | Deployment runbook: hosts, environment variables, seeding, and the ordering that matters |
 | [`docs/plan/phase4-completion.md`](./docs/plan/phase4-completion.md) | What Phase 4 shipped, the regression results, and the known limitations |
 | [`docs/plan/phase4-android-release.md`](./docs/plan/phase4-android-release.md) | Android build, signing, Firebase and Play Console checklist |
 | [`PHASE3_PLAN.md`](./PHASE3_PLAN.md) | Phase 3 scope, milestones and design decisions |
