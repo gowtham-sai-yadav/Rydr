@@ -51,13 +51,25 @@ services:
         value: "10080"
       - key: LOG_LEVEL
         value: INFO
-      # Seed catalogue + demo activity on first boot. Turn off once the
-      # database holds anything real.
+      # Both default to "false" and are meant to be flipped in the dashboard
+      # for a single deploy, not left on.
+      #
+      # They carry a `value:` rather than `sync: false` deliberately: a
+      # Blueprint sync rewrites every env var it declares a value for, so a
+      # dashboard change to one of these survives only until the next sync.
+      # Defaulting to "false" makes that overwrite harmless -- the sync can
+      # only ever turn seeding off, never silently back on. An earlier
+      # "true" here meant a teammate's merge re-ran the seeder against a
+      # database that was already populated, which is additive: the demo
+      # picked up a second batch of rides and posts nobody asked for.
+      #
+      # SEED_ON_START: run the seeders at container start. Needed once,
+      # against an empty database.
       - key: SEED_ON_START
-        value: "true"
-      # Set to "true" for one deploy to rebuild the demo activity from
-      # scratch, then set it back. Left on, every deploy wipes and rebuilds
-      # the generated rides, posts, clubs and events.
+        value: "false"
+      # SEED_FRESH: makes that run destructive -- clears what a previous run
+      # of seed_demo.py created and rebuilds it, instead of adding to it.
+      # Only meaningful when SEED_ON_START is also on.
       - key: SEED_FRESH
         value: "false"
       # Empty keeps OpenStreetMap. Set a token to move tiles, routing and
