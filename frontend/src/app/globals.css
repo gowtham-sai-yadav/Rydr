@@ -36,14 +36,14 @@
   --color-hairline-strong: rgba(255, 255, 255, 0.12);
   --color-divider-soft: rgba(255, 255, 255, 0.03);
 
-  /* atmospheric accents */
-  --color-accent-orange: #ff6b18;
-  --color-accent-orange-glow: rgba(255, 107, 24, 0.15);
-  --color-accent-yellow: #f59e0b;
-
-  /* gold, the dominant accent */
+  /* gold, the dominant accent — the ONE bright color on the page */
   --color-accent-gold: #f59e0b;
+  --color-accent-gold-strong: #fbbf24;
   --color-accent-gold-glow: rgba(245, 158, 11, 0.22);
+
+  /* atmospheric accents — orange is genuinely orange, not gold in disguise */
+  --color-accent-orange: #ff801f;
+  --color-accent-orange-glow: rgba(255, 128, 31, 0.18);
 
   /* green, small secondary/positive indicators */
   --color-accent-green: #10b981;
@@ -68,6 +68,32 @@
   --font-sans: var(--font-inter), system-ui, sans-serif;
   --font-display: var(--font-inter-tight), var(--font-inter), system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* -------------------------------------------------------------------------
+   * Motion tokens — one shared vocabulary for every transition.
+   *
+   * Duration: fast (button hover), medium (dropdown / tooltip open), slow
+   * (modal / drawer / page reveal). Keep the ladder wide so intent is
+   * legible: 120ms is a nudge, 200ms is a decision, 320ms is a stage.
+   *
+   * Easing: standard for opens, out for closes, snap for tap-response.
+   * Snap is a stiff spring baked into a cubic-bezier so we don't need
+   * a spring runtime for common cases.
+   * ------------------------------------------------------------------------- */
+  --motion-duration-fast: 120ms;
+  --motion-duration-medium: 200ms;
+  --motion-duration-slow: 320ms;
+  --motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-snap: cubic-bezier(0.3, 1.2, 0.4, 1);
+
+  /* Semantic radii — buttons/inputs share `radius-button`, cards share
+     `radius-card`. Change the abstract token once and it fans out. */
+  --radius-button: var(--radius-md);
+  --radius-input: var(--radius-md);
+  --radius-card: var(--radius-lg);
+  --radius-modal: var(--radius-xl);
+  --radius-pill: 9999px;
 }
 
 @layer base {
@@ -401,6 +427,115 @@
   }
   .hairline-soft {
     border-color: var(--color-hairline);
+  }
+
+  /* -------------------------- Metric — the signature dialect --------------
+   * A pairing: a mono-numeric value with a small-caps unit sitting beside
+   * it, tight tracking, aligned like a real dashboard readout. Applied to
+   * every place Rydr shows a number that has a unit — distance, cost,
+   * ratings, participant counts, weekly-league km.
+   *
+   * The pattern is deliberately typographic, not decorative — no colored
+   * gauges, no icons. The unit sits at 0.55em so the value dominates and
+   * the unit reads as annotation. */
+  .metric-value {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink);
+    line-height: 1;
+  }
+  .metric-unit {
+    font-family: var(--font-sans);
+    font-size: 0.55em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--color-mute);
+    margin-left: 0.32em;
+    vertical-align: 0.15em;
+  }
+
+  /* -------------------------- Radix data-state animations -----------------
+   * Every Radix primitive we render sets data-state="open"|"closed". These
+   * classes hook the transitions to the same tokens the rest of the app
+   * uses so a dropdown opens the same way a dialog does. Do not sprinkle
+   * bespoke transition-* on individual pages. */
+  .anim-fade-scale[data-state="open"] {
+    animation: rydr-fade-scale-in var(--motion-duration-medium) var(--motion-ease-out);
+  }
+  .anim-fade-scale[data-state="closed"] {
+    animation: rydr-fade-scale-out var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+  .anim-fade[data-state="open"] {
+    animation: rydr-fade-in var(--motion-duration-medium) var(--motion-ease-out);
+  }
+  .anim-fade[data-state="closed"] {
+    animation: rydr-fade-out var(--motion-duration-fast) var(--motion-ease-standard);
+  }
+  .anim-slide-up[data-state="open"] {
+    animation: rydr-slide-up-in var(--motion-duration-slow) var(--motion-ease-out);
+  }
+  .anim-slide-up[data-state="closed"] {
+    animation: rydr-slide-up-out var(--motion-duration-medium) var(--motion-ease-standard);
+  }
+}
+
+@keyframes rydr-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rydr-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes rydr-fade-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes rydr-fade-scale-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.98); }
+}
+@keyframes rydr-slide-up-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes rydr-slide-up-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(8px); }
+}
+@keyframes rydr-skeleton-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* BorderBeam — rotating conic gradient in the border box. Requires the
+   custom property to be registered so it interpolates as an angle rather
+   than an unparsable string. Kept in globals.css so any surface can hook
+   the animation without re-declaring it. */
+@property --rydr-beam-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes rydr-beam-rotate {
+  to { --rydr-beam-angle: 360deg; }
+}
+@media (prefers-reduced-motion: reduce) {
+  [style*="rydr-beam-rotate"] {
+    animation: none !important;
+  }
+}
+
+/* Respect the OS-level reduced-motion setting. Instant open/close, no
+   translate or scale. Every primitive inherits this automatically. */
+@media (prefers-reduced-motion: reduce) {
+  .anim-fade,
+  .anim-fade-scale,
+  .anim-slide-up {
+    animation-duration: 1ms !important;
   }
 }
 

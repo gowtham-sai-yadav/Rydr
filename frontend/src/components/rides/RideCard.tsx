@@ -51,15 +51,21 @@ export default function RideCard({ ride }: { ride: RidePlanSummary }) {
           )}
           <h3 className="heading-sm text-ink line-clamp-1">{ride.title}</h3>
           <div className="flex items-center justify-between text-[13px] text-charcoal">
-            <div className="flex items-center gap-2 mono">
-              <span>{dateLabel}</span>
+            <div className="flex items-center gap-2">
+              <span className="metric-value text-[13px]">{dateLabel}</span>
               <span className="text-stone">·</span>
-              <span>{ride.planned_start_time.slice(0, 5)}</span>
+              <span className="metric-value text-[13px]">
+                {ride.planned_start_time.slice(0, 5)}
+              </span>
             </div>
-            <span className="text-charcoal">
-              {ride.max_riders === null
-                ? `${ride.participant_count} riders`
-                : `${ride.participant_count}/${ride.max_riders} riders`}
+            <span className="flex items-baseline gap-0.5">
+              <span className="metric-value text-sm text-ink">
+                {ride.participant_count}
+                {ride.max_riders !== null && (
+                  <span className="text-mute">/{ride.max_riders}</span>
+                )}
+              </span>
+              <span className="metric-unit">riders</span>
             </span>
           </div>
           {ride.captain && (

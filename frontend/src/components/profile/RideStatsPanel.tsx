@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { MineRideOut } from "@/lib/api.types";
+import { Metric, Spinner } from "@/components/ui";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_WEEK = 7 * MS_PER_DAY;
@@ -41,7 +42,7 @@ export function RideStatsPanel() {
   if (rides === null) {
     return (
       <div className="flex justify-center py-6">
-        <div className="animate-spin rounded-full h-6 w-6 border-2 border-ink/20 border-t-ink" />
+        <Spinner />
       </div>
     );
   }
@@ -64,18 +65,31 @@ export function RideStatsPanel() {
   }
 
   return (
-    <div className="grid grid-cols-3 gap-4">
-      <div className="text-center">
-        <p className="text-3xl font-bold text-accent-orange">{ridesThisWeek}</p>
-        <p className="text-xs text-mute uppercase mt-1">This week</p>
+    <div className="grid grid-cols-3 gap-6">
+      <div>
+        <Metric
+          label="This week"
+          value={ridesThisWeek}
+          unit="rides"
+          size="lg"
+          emphasis
+        />
       </div>
-      <div className="text-center">
-        <p className="text-3xl font-bold text-accent-orange">{ridesThisMonth}</p>
-        <p className="text-xs text-mute uppercase mt-1">This month</p>
+      <div>
+        <Metric
+          label="This month"
+          value={ridesThisMonth}
+          unit="rides"
+          size="lg"
+        />
       </div>
-      <div className="text-center">
-        <p className="text-3xl font-bold text-accent-orange">{streak}</p>
-        <p className="text-xs text-mute uppercase mt-1">Week streak</p>
+      <div>
+        <Metric
+          label="Streak"
+          value={streak}
+          unit={streak === 1 ? "week" : "weeks"}
+          size="lg"
+        />
       </div>
     </div>
   );

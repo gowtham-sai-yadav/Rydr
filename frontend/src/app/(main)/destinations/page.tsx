@@ -158,8 +158,8 @@ export default function DestinationsPage() {
         <div className="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/40 to-transparent" />
         <div className="absolute bottom-6 left-6 right-6 flex flex-col sm:flex-row items-center sm:items-end justify-between gap-4 z-10">
           <div className="text-center sm:text-left space-y-1">
-            <h1 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-ink uppercase">Scout Horizons</h1>
-            <p className="text-xs text-mute font-semibold tracking-wider uppercase mt-1">Discover winding trails and rider hangouts</p>
+            <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-ink">Discover</h1>
+            <p className="text-xs text-mute mt-1.5">Find your next ride — filter by vibe, distance, budget, or your bike.</p>
           </div>
           {/* flex-wrap so a narrow phone wraps the controls onto their own
               row instead of pushing the CTA off-screen. */}
@@ -169,7 +169,7 @@ export default function DestinationsPage() {
             <div
               role="tablist"
               aria-label="View destinations as"
-              className="flex gap-1 bg-surface-deep/80 border border-hairline-strong rounded-xl p-1 backdrop-blur-md"
+              className="flex gap-1 bg-surface-deep/80 border border-hairline-strong rounded-[var(--radius-card)] p-1 backdrop-blur-md"
             >
               {(["grid", "map"] as ViewMode[]).map((mode) => (
                 <button
@@ -177,11 +177,13 @@ export default function DestinationsPage() {
                   role="tab"
                   aria-selected={view === mode}
                   onClick={() => setView(mode)}
-                  className={`px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider capitalize transition-all duration-200 ${
-                    view === mode ? "bg-accent-gold text-canvas shadow-[0_0_12px_var(--color-accent-gold-glow)]" : "text-mute hover:text-ink"
+                  className={`px-3 h-8 rounded-[var(--radius-button)] text-xs font-semibold uppercase tracking-wider transition-colors duration-[120ms] ${
+                    view === mode
+                      ? "bg-accent-gold text-canvas"
+                      : "text-mute hover:text-ink"
                   }`}
                 >
-                  {mode}
+                  {mode === "grid" ? "Grid" : "Map"}
                 </button>
               ))}
             </div>
@@ -408,7 +410,7 @@ export default function DestinationsPage() {
         <div className="text-center py-20 text-mute border border-dashed border-hairline-strong rounded-2xl bg-surface-card/10">
           <p className="font-semibold text-sm">No scouted routes match your filters.</p>
           <Link href={routes.newDestination} className="text-accent-gold hover:underline font-bold text-xs uppercase tracking-wider mt-3 inline-block">
-            + Scout New Horizon
+            + Add a destination
           </Link>
         </div>
       ) : (
@@ -429,8 +431,9 @@ export default function DestinationsPage() {
                     </svg>}
                 />
                 {d.distance_km != null && (
-                  <span className="absolute top-3 right-3 bg-canvas/80 backdrop-blur-md text-ink text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border border-hairline-strong">
-                    {d.distance_km} km
+                  <span className="absolute top-3 right-3 bg-canvas/80 backdrop-blur-md text-ink px-2.5 py-1 rounded-full border border-hairline-strong flex items-baseline gap-0.5">
+                    <span className="metric-value text-xs">{d.distance_km}</span>
+                    <span className="metric-unit">km</span>
                   </span>
                 )}
                 <div className="absolute bottom-3 left-3 bg-canvas/80 backdrop-blur-md text-accent-blue text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded-full border border-hairline-strong capitalize">
@@ -442,15 +445,34 @@ export default function DestinationsPage() {
                   <h3 className="text-ink font-semibold text-sm tracking-tight group-hover:text-accent-gold transition-colors duration-200 line-clamp-1">{d.name}</h3>
                   {d.region && <p className="text-mute text-[10px] font-semibold tracking-wider uppercase mt-1">{d.region}</p>}
                 </div>
-                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-hairline border-dashed">
-                  <span className="text-accent-gold text-xs font-semibold tracking-wide flex items-center gap-1 select-none">
-                    <svg className="w-3.5 h-3.5 fill-accent-gold text-accent-gold" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-                    {d.avg_rating.toFixed(1)}
+                <div className="flex items-center gap-3 mt-4 pt-3 border-t border-hairline border-dashed">
+                  <span className="flex items-center gap-1.5 select-none">
+                    <svg
+                      className="w-3.5 h-3.5 fill-accent-gold text-accent-gold"
+                      viewBox="0 0 20 20"
+                    >
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                    <span className="metric-value text-base text-accent-gold">
+                      {d.avg_rating.toFixed(1)}
+                    </span>
                   </span>
-                  <span className="text-[10px] font-medium text-stone uppercase">({d.rating_count} reviews)</span>
-                  <div className="ml-auto w-7 h-7 rounded-full bg-surface-deep/80 border border-hairline-strong flex items-center justify-center group-hover:border-accent-gold/40 group-hover:bg-accent-gold/10 transition-all duration-300">
-                    <svg className="w-3.5 h-3.5 text-accent-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                  <span className="text-[10px] font-medium text-stone uppercase tracking-wider">
+                    {d.rating_count} review{d.rating_count === 1 ? "" : "s"}
+                  </span>
+                  <div className="ml-auto w-7 h-7 rounded-full bg-surface-deep/80 border border-hairline-strong flex items-center justify-center group-hover:border-accent-gold/40 group-hover:bg-accent-gold/10 transition-colors duration-[120ms]">
+                    <svg
+                      className="w-3.5 h-3.5 text-accent-gold"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2.5}
+                        d="M9 5l7 7-7 7"
+                      />
                     </svg>
                   </div>
                 </div>

@@ -14,6 +14,14 @@ import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
 import type { PostOut } from "@/lib/api.types";
 import PostCard from "@/components/feed/PostCard";
+import {
+  Alert,
+  Button,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  Textarea,
+} from "@/components/ui";
 
 type Scope = "all" | "following";
 const PAGE_SIZE = 20;
@@ -82,31 +90,16 @@ export default function FeedPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-5 pb-12 glow-orange">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-ink">Feed</h1>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h1 className="font-display text-2xl font-bold text-ink tracking-tight">Feed</h1>
         <div className="flex items-center gap-3">
           {user && (
-            <div
-              role="tablist"
-              aria-label="Feed scope"
-              className="flex rounded-lg bg-surface-card border border-hairline p-0.5"
-            >
-              {(["all", "following"] as Scope[]).map((s) => (
-                <button
-                  key={s}
-                  role="tab"
-                  aria-selected={scope === s}
-                  onClick={() => setScope(s)}
-                  className={`px-3 py-1.5 rounded-md text-[13px] font-medium capitalize transition-colors ${
-                    scope === s
-                      ? "bg-surface-elevated text-ink"
-                      : "text-charcoal hover:text-ink"
-                  }`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
+            <Tabs value={scope} onValueChange={(v) => setScope(v as Scope)}>
+              <TabsList>
+                <TabsTrigger value="all">All</TabsTrigger>
+                <TabsTrigger value="following">Following</TabsTrigger>
+              </TabsList>
+            </Tabs>
           )}
           <Link href="/leaderboard" className="link text-sm font-medium md:hidden">
             Leaderboard →
@@ -115,35 +108,28 @@ export default function FeedPage() {
       </div>
 
       {user && (
-        <div className="bg-surface-card rounded-xl p-4 space-y-3">
-          <textarea
+        <div className="bg-surface-card border border-hairline rounded-[var(--radius-card)] p-4 space-y-3">
+          <Textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="Where did you ride? What was the road like?"
             rows={3}
             maxLength={5000}
-            className="w-full bg-surface-elevated border border-hairline rounded-lg px-3 py-2 text-[14px] text-ink placeholder:text-stone resize-none focus:outline-none focus:ring-2 focus:ring-ink/30"
           />
           <div className="flex items-center justify-between">
-            <span className="text-[12px] text-stone">
-              {draft.length}/5000
-            </span>
-            <button
+            <span className="text-xs text-stone">{draft.length}/5000</span>
+            <Button
+              size="sm"
               onClick={submit}
               disabled={posting || !draft.trim()}
-              className="bg-ink text-canvas text-[13px] font-medium px-4 py-1.5 rounded-lg disabled:opacity-40"
             >
               {posting ? "Posting…" : "Post"}
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
-      {error && (
-        <p className="text-[13px] text-accent-red bg-surface-card rounded-lg p-3">
-          {error}
-        </p>
-      )}
+      {error && <Alert variant="destructive">{error}</Alert>}
 
       {loading && posts.length === 0 && (
         <div className="space-y-3" role="status" aria-label="Loading feed">
@@ -197,13 +183,14 @@ export default function FeedPage() {
       </AnimatePresence>
 
       {hasMore && (
-        <button
+        <Button
+          variant="secondary"
           onClick={() => void load(page + 1, scope)}
           disabled={loading}
-          className="w-full bg-surface-card hover:bg-surface-elevated text-[13px] text-ink font-medium py-3 rounded-xl disabled:opacity-40 transition-colors"
+          className="w-full h-11"
         >
           {loading ? "Loading…" : `Load more (${total - posts.length} left)`}
-        </button>
+        </Button>
       )}
     </div>
   );

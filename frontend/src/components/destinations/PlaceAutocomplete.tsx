@@ -1,6 +1,8 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
+import { cn } from "@/lib/cn";
 
 interface NominatimResult {
   place_id: number;
@@ -49,8 +51,33 @@ export function PlaceAutocomplete({ query, knownNames }: PlaceAutocompleteProps)
   const [results, setResults] = useState<PlaceSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [rect, setRect] = useState<DOMRect | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLElement | null>(null);
+
+  // react-dom's createPortal + window APIs are browser-only. Marking mounted
+  // avoids a hydration mismatch on the first paint.
+  useEffect(() => setMounted(true), []);
+
+  // The anchor is the RELATIVE wrapper that holds both the search <input>
+  // and this component in the parent tree. On mount we walk up one level to
+  // find it, then track its rect on scroll / resize so the portaled panel
+  // always sits directly under the search input.
+  useLayoutEffect(() => {
+    anchorRef.current = containerRef.current?.parentElement ?? null;
+    const update = () => {
+      if (anchorRef.current) setRect(anchorRef.current.getBoundingClientRect());
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
 
   useEffect(() => {
     const q = query.trim();
@@ -97,23 +124,48 @@ export function PlaceAutocomplete({ query, knownNames }: PlaceAutocompleteProps)
 
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const target = e.target as HTMLElement;
+      const anchor = containerRef.current;
+      // The panel is portaled outside the anchor, so we tag it with
+      // data-rydr-place-panel and treat clicks inside it as "in".
+      if (target.closest?.("[data-rydr-place-panel]")) return;
+      if (anchor && !anchor.contains(target)) setOpen(false);
     };
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  if (!open) return null;
+  // A zero-height marker so we can find our anchor (the wrapping "relative"
+  // element in the parent tree). The actual panel is portaled to the body so
+  // it escapes any `backdrop-blur` stacking context set by parent cards —
+  // that was the source of the "dropdown paints behind the next card" bug.
+  const anchor = <span ref={(el) => {
+    // Keep the ref shape a `div` so React doesn't yell about mismatched types.
+    if (el) containerRef.current = el.parentElement as HTMLDivElement | null;
+  }} className="hidden" />;
 
-  return (
+  if (!open) return anchor;
+
+  const panel = rect ? (
     <div
-      ref={containerRef}
-      className="absolute left-0 right-0 mt-2 z-40 card-bordered bg-canvas/95 backdrop-blur-xl max-h-80 overflow-y-auto shadow-2xl"
+      data-rydr-place-panel
+      style={{
+        position: "fixed",
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 60,
+      }}
+      className={cn(
+        "anim-fade-scale",
+        "rounded-[var(--radius-card)] overflow-hidden max-h-80 overflow-y-auto",
+        "bg-surface-deep border border-hairline-strong shadow-2xl shadow-black/60",
+      )}
     >
       {loading && (
-        <p className="px-4 py-3 text-xs text-mute uppercase tracking-wider font-semibold">Searching India…</p>
+        <p className="px-4 py-3 text-xs text-mute uppercase tracking-wider font-semibold">
+          Searching India…
+        </p>
       )}
       {!loading && results.length === 0 && (
         <p className="px-4 py-3 text-xs text-mute">No places found.</p>
@@ -124,14 +176,15 @@ export function PlaceAutocomplete({ query, knownNames }: PlaceAutocompleteProps)
           <button
             key={r.id}
             type="button"
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => {
               setOpen(false);
-              if (known) return; // grid below already filters live on `query`
+              if (known) return;
               router.push(
                 `/destinations/new?name=${encodeURIComponent(r.label)}&region=${encodeURIComponent(r.region)}&latitude=${r.lat}&longitude=${r.lng}`,
               );
             }}
-            className="w-full text-left px-4 py-3 border-b border-hairline last:border-0 hover:bg-surface-elevated transition-colors flex items-center justify-between gap-3"
+            className="w-full text-left px-4 py-3 border-b border-hairline last:border-0 hover:bg-white/[0.04] transition-colors flex items-center justify-between gap-3"
           >
             <div className="min-w-0">
               <p className="text-ink text-sm font-medium truncate">{r.label}</p>
@@ -152,5 +205,12 @@ export function PlaceAutocomplete({ query, knownNames }: PlaceAutocompleteProps)
         );
       })}
     </div>
+  ) : null;
+
+  return (
+    <>
+      {anchor}
+      {mounted && panel && createPortal(panel, document.body)}
+    </>
   );
 }

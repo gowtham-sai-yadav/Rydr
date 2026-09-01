@@ -1,6 +1,24 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+/**
+ * DestinationAutocomplete — type-to-search destination picker.
+ *
+ * Why the dropdown is portaled
+ * ----------------------------
+ * The picker lives inside a form card that paints with `backdrop-blur`,
+ * which creates its own stacking context. An absolutely-positioned dropdown
+ * inside that context can't rise above sibling cards further down the page,
+ * so it gets painted through the next card and mixed with its backdrop.
+ * Portaling the dropdown into `document.body` escapes the parent's
+ * stacking context; positioning is recomputed from the input's rect so it
+ * still sits directly under the field visually.
+ *
+ * Everything else is unchanged: input value + selection state + keyboard
+ * navigation + snap-back on click-outside.
+ */
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { DestinationSummary } from "@/lib/api.types";
+import { cn } from "@/lib/cn";
 
 interface DestinationAutocompleteProps {
   destinations: DestinationSummary[];
@@ -9,11 +27,6 @@ interface DestinationAutocompleteProps {
   onChange: (destinationId: string) => void;
 }
 
-/** Type-to-search destination picker, replacing a giant <select> of every
- * destination in the catalog. Selecting a suggestion carries its known
- * latitude/longitude along automatically via destination_id — there's
- * nothing for the rider to type or paste, unlike the "add a new
- * destination" form, which is for places that AREN'T in the catalog yet. */
 export function DestinationAutocomplete({
   destinations,
   loading,
@@ -24,7 +37,13 @@ export function DestinationAutocomplete({
   const [query, setQuery] = useState(selected ? selected.name : "");
   const [open, setOpen] = useState(false);
   const [highlighted, setHighlighted] = useState(0);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const [rect, setRect] = useState<DOMRect | null>(null);
+  const [mounted, setMounted] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Portal + browser-only APIs — mark hydration-safe.
+  useEffect(() => setMounted(true), []);
 
   // Keep the visible text in sync if the selection changes from outside
   // (e.g. arriving via a ?destination= URL param).
@@ -32,6 +51,22 @@ export function DestinationAutocomplete({
     if (selected) setQuery(selected.name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
+
+  // Track the input's rect so the portaled dropdown can position under it.
+  // Recompute on open, on window scroll and on window resize.
+  useLayoutEffect(() => {
+    if (!open || !inputRef.current) return;
+    const update = () => {
+      if (inputRef.current) setRect(inputRef.current.getBoundingClientRect());
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+    };
+  }, [open]);
 
   const matches =
     query.trim().length === 0
@@ -46,10 +81,13 @@ export function DestinationAutocomplete({
 
   useEffect(() => {
     const onClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const t = e.target as Node;
+      const insideInput = inputRef.current?.contains(t);
+      const insideList = listRef.current?.contains(t);
+      if (!insideInput && !insideList) {
         setOpen(false);
-        // Snap back to the last real selection's label if they typed and
-        // clicked away without picking anything.
+        // Snap back to the last real selection if the user typed and clicked
+        // away without picking anything.
         setQuery(selected ? selected.name : "");
       }
     };
@@ -80,48 +118,96 @@ export function DestinationAutocomplete({
     }
   };
 
+  const inputClass = cn(
+    "w-full bg-surface-card text-ink placeholder:text-stone text-sm",
+    "border border-hairline-strong rounded-[var(--radius-input)]",
+    "h-10 px-3",
+    "transition-[border-color,box-shadow] duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)]",
+    "hover:border-accent-gold/40",
+    "focus:outline-none focus:border-accent-gold focus:shadow-[0_0_0_3px_var(--color-accent-gold-glow)]",
+    "disabled:opacity-60",
+  );
+
   return (
-    <div ref={containerRef} className="relative">
+    <div className="relative">
       <input
+        ref={inputRef}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
           setHighlighted(0);
           setOpen(true);
-          if (value) onChange(""); // typing invalidates the previous pick until a new one is made
+          if (value) onChange("");
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={handleKeyDown}
         disabled={loading}
         placeholder={loading ? "Loading destinations…" : "Start typing a destination…"}
         autoComplete="off"
-        className="w-full bg-surface-deep/80 border border-hairline-strong focus:border-accent-gold rounded-lg px-4 py-2.5 text-ink text-sm focus:outline-none transition-all duration-200 disabled:opacity-60"
+        role="combobox"
+        aria-expanded={open}
+        aria-autocomplete="list"
+        className={inputClass}
       />
 
-      {open && !loading && (
-        <div className="absolute left-0 right-0 mt-1.5 z-30 card-bordered bg-canvas/95 backdrop-blur-xl max-h-72 overflow-y-auto shadow-2xl">
-          {matches.length === 0 ? (
-            <p className="px-4 py-3 text-xs text-mute">
-              No match. <a href="/destinations/new" className="text-accent-gold hover:underline">Add it as a new destination →</a>
-            </p>
-          ) : (
-            matches.map((d, i) => (
-              <button
-                key={d.id}
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pick(d)}
-                className={`w-full text-left px-4 py-2.5 text-sm border-b border-hairline last:border-0 transition-colors ${
-                  i === highlighted ? "bg-surface-elevated text-ink" : "text-body hover:bg-surface-elevated/60"
-                }`}
-              >
-                <span className="text-ink font-medium">{d.name}</span>
-                {d.region && <span className="text-stone text-xs"> · {d.region}</span>}
-              </button>
-            ))
-          )}
-        </div>
-      )}
+      {mounted && open && !loading && rect &&
+        createPortal(
+          <div
+            ref={listRef}
+            style={{
+              position: "fixed",
+              top: rect.bottom + 6,
+              left: rect.left,
+              width: rect.width,
+              zIndex: 60,
+            }}
+            className={cn(
+              "anim-fade-scale",
+              "rounded-[var(--radius-card)] overflow-hidden",
+              // Solid surface — no translucency so nothing bleeds through
+              // from the pages underneath. Border + soft shadow for depth.
+              "bg-surface-deep border border-hairline-strong shadow-2xl shadow-black/60",
+              "max-h-72 overflow-y-auto",
+            )}
+            role="listbox"
+          >
+            {matches.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-mute">
+                No match.{" "}
+                <a
+                  href="/destinations/new"
+                  className="text-accent-gold hover:underline"
+                >
+                  Add it as a new destination →
+                </a>
+              </p>
+            ) : (
+              matches.map((d, i) => (
+                <button
+                  key={d.id}
+                  type="button"
+                  role="option"
+                  aria-selected={i === highlighted}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pick(d)}
+                  onMouseEnter={() => setHighlighted(i)}
+                  className={cn(
+                    "w-full text-left px-4 py-2.5 text-sm border-b border-hairline last:border-0 transition-colors duration-[120ms]",
+                    i === highlighted
+                      ? "bg-white/[0.06] text-ink"
+                      : "text-body hover:bg-white/[0.03]",
+                  )}
+                >
+                  <span className="text-ink font-medium">{d.name}</span>
+                  {d.region && (
+                    <span className="text-stone text-xs"> · {d.region}</span>
+                  )}
+                </button>
+              ))
+            )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

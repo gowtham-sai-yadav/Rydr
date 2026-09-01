@@ -17,6 +17,14 @@ import type {
   ReportedContentType,
 } from "@/lib/api.types";
 import { routes } from "@/lib/routes";
+import {
+  Alert,
+  Spinner,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui";
+import { cn } from "@/lib/cn";
 
 const STATUSES: { value: ReportStatus | "all"; label: string }[] = [
   { value: "open", label: "Open" },
@@ -132,40 +140,27 @@ export default function AdminReportsPage() {
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-12">
       <div className="flex items-baseline justify-between gap-3">
-        <h1 className="text-2xl font-bold text-ink">Moderation</h1>
-        <span className="text-[13px] text-mute">
-          {openCount} open
+        <h1 className="font-display text-2xl font-bold text-ink tracking-tight">
+          Moderation
+        </h1>
+        <span className="text-sm text-mute">
+          <span className="mono font-semibold text-ink">{openCount}</span> open
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {STATUSES.map((s) => (
-          <button
-            key={s.value}
-            onClick={() => setFilter(s.value)}
-            aria-pressed={filter === s.value}
-            className={`px-3 py-1.5 rounded-full text-[13px] font-medium transition-colors ${
-              filter === s.value
-                ? "bg-surface-elevated text-ink"
-                : "bg-surface-card text-charcoal hover:text-ink"
-            }`}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={filter} onValueChange={(v) => setFilter(v as ReportStatus | "all")}>
+        <TabsList className={cn("overflow-x-auto max-w-full")}>
+          {STATUSES.map((s) => (
+            <TabsTrigger key={s.value} value={s.value}>
+              {s.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
-      {error && (
-        <p className="text-[13px] text-accent-red bg-surface-card rounded-lg p-3">
-          {error}
-        </p>
-      )}
+      {error && <Alert variant="destructive">{error}</Alert>}
 
-      {loading && (
-        <p className="text-[13px] text-mute bg-surface-card rounded-xl p-6" role="status">
-          Loading…
-        </p>
-      )}
+      {loading && <Spinner size="lg" block />}
 
       {!loading && reports.length === 0 && (
         <div className="bg-surface-card rounded-xl p-8 text-center">
